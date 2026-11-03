@@ -1,0 +1,73 @@
+name: Release Platform
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Versión SemVer (ej. 0.2.0-rc.1)"
+        required: true
+  push:
+    tags:
+      - "platform-v*"
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  validate:
+    name: Validación completa
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: hiqnet
+          POSTGRES_PASSWORD: hiqnet_dev
+          POSTGRES_DB: hiqnet
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U hiqnet -d hiqnet"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: .
+      - run: cargo fmt --all -- --check
+      - run: cargo clippy --workspace --all-targets -- -D warnings
+      - run: cargo test --workspace
+        env:
+          DATABASE_URL: postgres://hiqnet:hiqnet_dev@localhost:5432/hiqnet
+
+  docker:
+    name: Imagen Docker versionada
+    needs: validate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - name: Construir imagen (sin push automático)
+        run: |
+          docker build -t hiqnet-platform:${{ github.ref_name }} .
+          docker inspect --format='{{.Id}}' hiqnet-platform:${{ github.ref_name }}
+
+  release:
+    name: Publicar GitHub Release
+    needs: [validate, docker]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: HiQNet Platform ${{ github.ref_name }}
+          prerelease: ${{ contains(github.ref_name, '-') }}
+          generate_release_notes: true
+EOF
