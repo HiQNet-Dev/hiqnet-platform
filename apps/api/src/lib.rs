@@ -115,8 +115,10 @@ async fn register_installation(
 
 async fn get_installation(
     State(state): State<AppState>,
+    headers: HeaderMap,
     Path(id): Path<Uuid>,
 ) -> Result<Json<InstallationView>, (StatusCode, Json<ErrorResponse>)> {
+    admin_guard(&headers, &state.admin_token).map_err(err)?;
     let view = state
         .service
         .get_installation(InstallationId::from_uuid(id))
@@ -166,8 +168,10 @@ async fn issue_license(
 
 async fn list_licenses(
     State(state): State<AppState>,
+    headers: HeaderMap,
     Path(id): Path<Uuid>,
 ) -> Result<Json<Vec<platform_core::license::IssuedLicense>>, (StatusCode, Json<ErrorResponse>)> {
+    admin_guard(&headers, &state.admin_token).map_err(err)?;
     let licenses = state
         .service
         .list_licenses(InstallationId::from_uuid(id))

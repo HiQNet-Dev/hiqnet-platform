@@ -1,0 +1,62 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  rust:
+    name: Rust (fmt, clippy, tests)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: hiqnet
+          POSTGRES_PASSWORD: hiqnet_dev
+          POSTGRES_DB: hiqnet
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U hiqnet -d hiqnet"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: .
+      - name: Formato
+        run: cargo fmt --all -- --check
+      - name: Clippy
+        run: cargo clippy --workspace --all-targets -- -D warnings
+      - name: Pruebas
+        run: cargo test --workspace
+        env:
+          DATABASE_URL: postgres://hiqnet:hiqnet_dev@localhost:5432/hiqnet
+      - name: Validar OpenAPI
+        run: python3 -c "import json; d=json.load(open('openapi/openapi.json')); assert d['openapi'].startswith('3.1'); assert '/health' in d['paths']; print('openapi ok')"
+
+  supply-chain:
+    name: Archivos prohibidos
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verificar archivos prohibidos
+        run: |
+          if git ls-files | grep -Ei '\.(db|sqlite3?|dump)$|^\.env$' ; then
+            echo "Archivos prohibidos detectados"; exit 1
+          fi
+          echo "OK"
