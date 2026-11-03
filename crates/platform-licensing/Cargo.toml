@@ -1,0 +1,13 @@
+[package]
+name = "platform-licensing"
+description = "Emisión de autorizaciones comerciales firmadas (HiQNet Platform)."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+platform-application.workspace = true
+base64.workspace = true
+ed25519-dalek.workspace = true

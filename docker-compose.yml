@@ -1,0 +1,45 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    container_name: hiqnet-platform-postgres
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-hiqnet}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-hiqnet_dev}
+      POSTGRES_DB: ${POSTGRES_DB:-hiqnet}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-hiqnet} -d ${POSTGRES_DB:-hiqnet}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: hiqnet-platform-api
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER:-hiqnet}:${POSTGRES_PASSWORD:-hiqnet_dev}@postgres:5432/${POSTGRES_DB:-hiqnet}
+      PORT: "8080"
+      RUST_LOG: ${RUST_LOG:-info}
+      HIQNET_PLATFORM_ADMIN_TOKEN: ${HIQNET_PLATFORM_ADMIN_TOKEN:-}
+      HIQNET_PLATFORM_SIGNING_KEY_B64: ${HIQNET_PLATFORM_SIGNING_KEY_B64:-}
+      HIQNET_PLATFORM_ALLOW_DEV_ISSUANCE: ${HIQNET_PLATFORM_ALLOW_DEV_ISSUANCE:-false}
+    ports:
+      - "${API_PORT:-8080}:8080"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8080/health >/dev/null 2>&1 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+volumes:
+  postgres-data:

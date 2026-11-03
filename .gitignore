@@ -1,0 +1,26 @@
+# --- Secretos y bases reales ---
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+secrets/
+signing/
+
+# --- Builds ---
+target/
+dist/
+node_modules/
+coverage/
+
+# --- Entorno local ---
+.worktrees/
+.serena/
+.zed/
+.dev-data/
+*.log
+.DS_Store
+Thumbs.db
+postgres-data/

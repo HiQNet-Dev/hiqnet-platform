@@ -1,0 +1,80 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "HiQNet Platform API",
+    "version": "0.1.0",
+    "description": "Control plane de HiQNet: planes, instalaciones y emisión de autorizaciones firmadas para POS locales. Las capacidades de billing real, sincronización y portal administrativo siguen pendientes."
+  },
+  "paths": {
+    "/health": {
+      "get": {
+        "summary": "Estado del servicio",
+        "responses": {
+          "200": { "description": "Servicio disponible" }
+        }
+      }
+    },
+    "/api/v1/plans": {
+      "get": {
+        "summary": "Catálogo de planes comerciales",
+        "responses": {
+          "200": { "description": "Lista de planes" }
+        }
+      }
+    },
+    "/api/v1/installations": {
+      "post": {
+        "summary": "Registrar una instalación del POS",
+        "security": [{ "bearerAuth": [] }],
+        "responses": {
+          "201": { "description": "Instalación registrada" },
+          "401": { "description": "No autorizado" }
+        }
+      }
+    },
+    "/api/v1/installations/{id}": {
+      "get": {
+        "summary": "Consultar una instalación",
+        "responses": {
+          "200": { "description": "Instalación" },
+          "404": { "description": "No encontrada" }
+        }
+      }
+    },
+    "/api/v1/installations/{id}/trial": {
+      "post": {
+        "summary": "Activar el Trial de 30 días",
+        "security": [{ "bearerAuth": [] }],
+        "responses": {
+          "200": { "description": "Trial activado" },
+          "409": { "description": "Trial ya activado" }
+        }
+      }
+    },
+    "/api/v1/installations/{id}/licenses": {
+      "post": {
+        "summary": "Emitir una autorización firmada (solo desarrollo)",
+        "security": [{ "bearerAuth": [] }],
+        "responses": {
+          "201": { "description": "Autorización emitida" },
+          "401": { "description": "No autorizado" },
+          "503": { "description": "Emisión deshabilitada" }
+        }
+      },
+      "get": {
+        "summary": "Listar autorizaciones emitidas",
+        "responses": {
+          "200": { "description": "Lista de autorizaciones" }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer"
+      }
+    }
+  }
+}
