@@ -274,4 +274,107 @@ impl AuthRepository for PgAuthRepository {
         .map_err(storage)?;
         Ok(())
     }
+
+    async fn change_password(
+        &self,
+        account_id: CommercialAccountId,
+        expected_hash: &str,
+        new_hash: &str,
+        session: &AuthenticatedSession,
+        token_hash: &[u8],
+        now: OffsetDateTime,
+    ) -> AuthResult<bool> {
+        let mut tx = self.pool.begin().await.map_err(storage)?;
+        // Comparación optimista: si otra operación cambió el hash, no se toca nada.
+        let updated: Option<Uuid> = sqlx::query_scalar(
+            "UPDATE commercial_credential
+             SET password_hash = $3, password_changed_at = $4,
+                 failed_attempts = 0, locked_until = NULL
+             WHERE account_id = $1 AND password_hash = $2
+               AND EXISTS (
+                   SELECT 1 FROM commercial_account a
+                   WHERE a.id = $1 AND a.status = 'active')
+             RETURNING account_id",
+        )
+        .bind(account_id.as_uuid())
+        .bind(expected_hash)
+        .bind(new_hash)
+        .bind(now)
+        .fetch_optional(&mut *tx)
+        .await
+        .map_err(storage)?;
+        if updated.is_none() {
+            tx.rollback().await.map_err(storage)?;
+            return Ok(false);
+        }
+
+        sqlx::query(
+            "UPDATE commercial_session SET revoked_at = $2
+             WHERE account_id = $1 AND revoked_at IS NULL",
+        )
+        .bind(account_id.as_uuid())
+        .bind(now)
+        .execute(&mut *tx)
+        .await
+        .map_err(storage)?;
+
+        sqlx::query(
+            "INSERT INTO commercial_session
+             (id, account_id, token_hash, created_at, expires_at, last_seen_at)
+             VALUES ($1, $2, $3, $4, $5, $4)",
+        )
+        .bind(session.session_id)
+        .bind(session.account_id.as_uuid())
+        .bind(token_hash)
+        .bind(session.created_at)
+        .bind(session.expires_at)
+        .execute(&mut *tx)
+        .await
+        .map_err(storage)?;
+
+        sqlx::query(
+            "INSERT INTO commercial_auth_event
+             (id, account_id, action, occurred_at, metadata)
+             VALUES ($1, $2, 'password_changed', $3, '{}'::jsonb)",
+        )
+        .bind(Uuid::new_v4())
+        .bind(account_id.as_uuid())
+        .bind(now)
+        .execute(&mut *tx)
+        .await
+        .map_err(storage)?;
+
+        tx.commit().await.map_err(storage)?;
+        Ok(true)
+    }
+
+    async fn revoke_all_sessions(
+        &self,
+        account_id: CommercialAccountId,
+        now: OffsetDateTime,
+    ) -> AuthResult<()> {
+        let mut tx = self.pool.begin().await.map_err(storage)?;
+        sqlx::query(
+            "UPDATE commercial_session SET revoked_at = $2
+             WHERE account_id = $1 AND revoked_at IS NULL",
+        )
+        .bind(account_id.as_uuid())
+        .bind(now)
+        .execute(&mut *tx)
+        .await
+        .map_err(storage)?;
+        sqlx::query(
+            "INSERT INTO commercial_auth_event
+             (id, account_id, action, occurred_at, metadata)
+             VALUES ($1, $2, 'session_revoked', $3, '{}'::jsonb)",
+        )
+        .bind(Uuid::new_v4())
+        .bind(account_id.as_uuid())
+        .bind(now)
+        .execute(&mut *tx)
+        .await
+        .map_err(storage)?;
+        tx.commit().await.map_err(storage)?;
+        Ok(())
+    }
 }
