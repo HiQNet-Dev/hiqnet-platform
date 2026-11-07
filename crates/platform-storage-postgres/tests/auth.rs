@@ -183,6 +183,40 @@ async fn expired_disabled_and_rotated_sessions_are_rejected() {
 }
 
 #[tokio::test]
+async fn expired_lock_starts_a_fresh_failure_cycle_without_sleeping() {
+    let pool = open(&isolated_url("TEST_DATABASE_URL")).await.unwrap();
+    let (account, _email) = account_with_password(&pool, "contraseña-correcta-larga").await;
+    let repo = PgAuthRepository::new(pool.clone());
+    let now = OffsetDateTime::now_utc();
+
+    for _ in 0..4 {
+        assert!(!repo.register_failure(account.id, now).await.unwrap());
+    }
+    assert!(!repo.is_locked(account.id, now).await.unwrap());
+    assert!(repo.register_failure(account.id, now).await.unwrap());
+    assert!(
+        repo.is_locked(account.id, now + Duration::minutes(1))
+            .await
+            .unwrap()
+    );
+
+    // Al vencer el bloqueo, el primer fallo inicia un ciclo nuevo (1 intento),
+    // no un bloqueo inmediato por arrastrar el contador anterior.
+    let after = now + Duration::minutes(16);
+    assert!(!repo.is_locked(account.id, after).await.unwrap());
+    assert!(!repo.register_failure(account.id, after).await.unwrap());
+    for _ in 0..3 {
+        assert!(!repo.register_failure(account.id, after).await.unwrap());
+    }
+    assert!(repo.register_failure(account.id, after).await.unwrap());
+    assert!(
+        repo.is_locked(account.id, after + Duration::seconds(1))
+            .await
+            .unwrap()
+    );
+}
+
+#[tokio::test]
 async fn tampered_token_and_missing_session_do_not_authenticate() {
     let pool = open(&isolated_url("TEST_DATABASE_URL")).await.unwrap();
     let auth = service(&pool);

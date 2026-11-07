@@ -119,22 +119,45 @@ impl AuthRepository for PgAuthRepository {
         now: OffsetDateTime,
     ) -> AuthResult<bool> {
         // Umbral y duración fijos y auditables: 5 fallos, 15 minutos.
-        let locked: Option<bool> = sqlx::query_scalar(
-            "UPDATE commercial_credential
-             SET failed_attempts = failed_attempts + 1,
-                 locked_until = CASE
-                     WHEN failed_attempts + 1 >= 5 THEN $2 + interval '15 minutes'
-                     ELSE locked_until
-                 END
-             WHERE account_id = $1
-             RETURNING failed_attempts >= 5",
+        // El bloqueo de la fila serializa intentos concurrentes y evita que un
+        // bloqueo vencido arrastre el contador del ciclo anterior.
+        let mut tx = self.pool.begin().await.map_err(storage)?;
+        let row = sqlx::query(
+            "SELECT failed_attempts, locked_until FROM commercial_credential
+             WHERE account_id = $1 FOR UPDATE",
         )
         .bind(account_id.as_uuid())
-        .bind(now)
-        .fetch_optional(&self.pool)
+        .fetch_optional(&mut *tx)
         .await
         .map_err(storage)?;
-        Ok(locked.unwrap_or(false))
+        let Some(row) = row else {
+            return Err(AuthError::InvalidCredentials);
+        };
+        let previous: i32 = row.get("failed_attempts");
+        let locked_until: Option<OffsetDateTime> = row.get("locked_until");
+        let expired = locked_until.is_some_and(|until| until <= now);
+        let attempts = if expired {
+            1
+        } else {
+            previous.saturating_add(1)
+        };
+        let next_lock = if attempts >= 5 {
+            Some(now + time::Duration::minutes(15))
+        } else {
+            None
+        };
+        sqlx::query(
+            "UPDATE commercial_credential SET failed_attempts = $2, locked_until = $3
+             WHERE account_id = $1",
+        )
+        .bind(account_id.as_uuid())
+        .bind(attempts)
+        .bind(next_lock)
+        .execute(&mut *tx)
+        .await
+        .map_err(storage)?;
+        tx.commit().await.map_err(storage)?;
+        Ok(attempts >= 5)
     }
 
     async fn clear_failures(&self, account_id: CommercialAccountId) -> AuthResult<()> {
