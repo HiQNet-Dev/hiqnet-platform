@@ -55,7 +55,13 @@ Todos con DTO Rust, OpenAPI 3.1, Swagger, errores normalizados y pruebas. Cookie
 
 ## Implementado en P02.2-A
 
-`migrations/0003_commercial_auth.sql` crea `commercial_credential` (PK/FK a cuenta, hash Argon2id, intentos y bloqueo), `commercial_session` (UUID, hash SHA-256 del token único, expiración, revocación, `last_seen_at`, metadatos nulos) y `commercial_auth_event` append-only. La API expone login, logout y `/me`; login rota sesiones y persiste sólo el hash. La cookie es HttpOnly/SameSite=Lax/Path=/api y Secure salvo DEV explícito. CSRF se cubre validando `Origin` en mutaciones y exigiendo un origen configurado; el rate limit por correo es en memoria (10/min) y el bloqueo de cuenta es 5 fallos/15 min. La verificación de contraseña corre en `spawn_blocking`. Parámetros Argon2id medidos en este equipo Windows con build de pruebas: m=19456 KiB, t=2, p=1; promedio local hash+verify ≈1,4 s en debug (`cargo test -p platform-application costo_argon2 -- --nocapture`), menor en release. Es un costo deliberado para dificultar ataques offline sin bloquear el runtime.
+`migrations/0003_commercial_auth.sql` crea `commercial_credential` (PK/FK a cuenta, hash Argon2id, intentos y bloqueo), `commercial_session` (UUID, hash SHA-256 del token único, expiración, revocación, `last_seen_at`, metadatos nulos) y `commercial_auth_event` append-only. La API expone login, logout y `/me`; login rota sesiones y persiste sólo el hash. La cookie es HttpOnly/SameSite=Lax/Path=/api y Secure salvo DEV explícito. CSRF se cubre validando `Origin` en mutaciones y exigiendo un origen configurado; el rate limit por correo es en memoria (10/min) y el bloqueo de cuenta es 5 fallos/15 min. La verificación de contraseña corre en `spawn_blocking`. Parámetros Argon2id: m=19456 KiB, t=2, p=1. La medición es informativa y reproducible, no un gate de CI: `cargo test -p platform-application benchmark_argon2id -- --ignored --nocapture` (iteraciones con `ARGON2_BENCH_ITERATIONS`). En este equipo Windows con build debug el promedio hash+verify medido fue ≈0,85 s (≈1,4 s bajo carga concurrente); release es menor. El costo es deliberado para dificultar ataques offline.
+
+Bloqueo: 5 fallos consecutivos bloquean 15 minutos. `register_failure` bloquea la fila con `FOR UPDATE`; si `locked_until` ya venció, reinicia el contador a 1 en la misma transacción, de modo que un fallo posterior no reabre el bloqueo inmediatamente. Durante el bloqueo `is_locked` rechaza todo intento, incluida la contraseña correcta; un login correcto posterior limpia contador y bloqueo.
+
+CSRF: en producción `Origin` es obligatorio y debe coincidir exactamente con `HIQNET_PLATFORM_ALLOWED_ORIGIN`; `null`, múltiples encabezados o valores no ASCII se rechazan. Sin origen permitido configurado se falla cerrado. Sólo `HIQNET_PLATFORM_ENV=development` admite ausencia de `Origin` para curl/Swagger. No se usa User-Agent ni otro encabezado controlable como bypass; SameSite=Lax es defensa adicional, no la única.
+
+Rate limiting y CPU: límite por correo (10/min) en memoria con cota de 4096 claves; las claves bloqueadas no se desalojan y, si no hay víctima no bloqueada, las claves nuevas se rechazan. Además un semáforo global (`HIQNET_PLATFORM_AUTH_CONCURRENCY`, 4 por defecto) limita verificaciones Argon2id simultáneas y responde 503 `auth_overloaded` sin encolar trabajo. Ambas medidas son por instancia; un despliegue multiinstancia requerirá rate limiting compartido (sin introducir Redis en esta fase).
 
 ## Diccionario 0003
 
@@ -87,7 +93,7 @@ Todos con DTO Rust, OpenAPI 3.1, Swagger, errores normalizados y pruebas. Cookie
 
 - MFA, phishing y gestión de dispositivos quedan fuera.
 - Recuperación y verificación de correo requieren servicio y diseño adicional.
-- El rate limit por IP requiere proxy confiable; el actual es por correo y por instancia.
+- El rate limit por IP requiere proxy confiable y almacenamiento compartido; el actual es por correo, por instancia y con protección global de concurrencia.
 - La revocación es inmediata porque cada solicitud consulta PostgreSQL; no hay caché de sesión.
 - No declarar autenticación lista para producción sin completar los puntos anteriores y P02.3.
 "
