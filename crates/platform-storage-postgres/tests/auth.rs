@@ -909,6 +909,161 @@ async fn rotation_uses_database_clock_after_waiting_for_lock() {
 }
 
 #[tokio::test]
+async fn contention_uses_clock_timestamp_after_waiting_for_account_lock() {
+    let pool = open(&isolated_url("TEST_DATABASE_URL")).await.unwrap();
+    let initial = "contraseña-inicial-1";
+    let (account, email) = account_with_password(&pool, initial).await;
+    let auth = service(&pool);
+    let now = OffsetDateTime::now_utc();
+    let existing = auth
+        .login(&email, initial, now, Duration::hours(1))
+        .await
+        .unwrap();
+    // Conexión A: mantiene el bloqueo de la cuenta.
+    let mut conn_a = pool.acquire().await.unwrap();
+    let pid_a: i32 = sqlx::query_scalar("SELECT pg_backend_pid()")
+        .fetch_one(&mut *conn_a)
+        .await
+        .unwrap();
+    sqlx::query("BEGIN").execute(&mut *conn_a).await.unwrap();
+    sqlx::query("SELECT id FROM commercial_account WHERE id = $1 FOR UPDATE")
+        .bind(account.id.as_uuid())
+        .execute(&mut *conn_a)
+        .await
+        .unwrap();
+
+    // Conexión B: inicia su transacción y queda esperando el bloqueo de A.
+    let (started_tx, started_rx) = tokio::sync::oneshot::channel::<i32>();
+    let pool_b = pool.clone();
+    let account_uuid = account.id.as_uuid();
+    let b_task = tokio::spawn(async move {
+        let mut tx = pool_b.begin().await.unwrap();
+        let pid_b: i32 = sqlx::query_scalar("SELECT pg_backend_pid()")
+            .fetch_one(&mut *tx)
+            .await
+            .unwrap();
+        let _ = started_tx.send(pid_b);
+        // Se bloquea aquí hasta que A confirme.
+        sqlx::query("SELECT id FROM commercial_account WHERE id = $1 FOR UPDATE")
+            .bind(account_uuid)
+            .execute(&mut *tx)
+            .await
+            .unwrap();
+        let tx_timestamp: OffsetDateTime = sqlx::query_scalar("SELECT transaction_timestamp()")
+            .fetch_one(&mut *tx)
+            .await
+            .unwrap();
+        let clock_timestamp: OffsetDateTime = sqlx::query_scalar("SELECT clock_timestamp()")
+            .fetch_one(&mut *tx)
+            .await
+            .unwrap();
+        let session_id = Uuid::new_v4();
+        sqlx::query(
+            "UPDATE commercial_session SET revoked_at = clock_timestamp()
+             WHERE account_id = $1 AND revoked_at IS NULL",
+        )
+        .bind(account_uuid)
+        .execute(&mut *tx)
+        .await
+        .unwrap();
+        sqlx::query(
+            "INSERT INTO commercial_session
+             (id, account_id, token_hash, created_at, expires_at, last_seen_at)
+             VALUES ($1, $2, $3, clock_timestamp(),
+                     clock_timestamp() + interval '1 hour', clock_timestamp())",
+        )
+        .bind(session_id)
+        .bind(account_uuid)
+        .bind(hash_token(&Uuid::new_v4().to_string()))
+        .execute(&mut *tx)
+        .await
+        .unwrap();
+        sqlx::query(
+            "INSERT INTO commercial_auth_event
+             (id, account_id, action, occurred_at, metadata)
+             VALUES ($1, $2, 'login_success', clock_timestamp(), '{}'::jsonb)",
+        )
+        .bind(Uuid::new_v4())
+        .bind(account_uuid)
+        .execute(&mut *tx)
+        .await
+        .unwrap();
+        tx.commit().await.unwrap();
+        (tx_timestamp, clock_timestamp, session_id)
+    });
+
+    let pid_b = started_rx.await.unwrap();
+    // Espera explícita a que B esté bloqueada por A (sin simular fechas).
+    let mut blocked = false;
+    for _ in 0..500 {
+        let blockers: Vec<i32> = sqlx::query_scalar("SELECT pg_blocking_pids($1)")
+            .bind(pid_b)
+            .fetch_one(&mut *conn_a)
+            .await
+            .unwrap();
+        if blockers.contains(&pid_a) {
+            blocked = true;
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(5)).await;
+    }
+    assert!(blocked, "B debe quedar bloqueada por A");
+
+    // A crea una sesión con el reloj real y confirma, liberando el lock.
+    let s2_created: OffsetDateTime = sqlx::query_scalar(
+        "INSERT INTO commercial_session
+         (id, account_id, token_hash, created_at, expires_at, last_seen_at)
+         VALUES ($1, $2, $3, clock_timestamp(),
+                 clock_timestamp() + interval '1 hour', clock_timestamp())
+         RETURNING created_at",
+    )
+    .bind(Uuid::new_v4())
+    .bind(account.id.as_uuid())
+    .bind(hash_token(&Uuid::new_v4().to_string()))
+    .fetch_one(&mut *conn_a)
+    .await
+    .unwrap();
+    sqlx::query("COMMIT").execute(&mut *conn_a).await.unwrap();
+
+    let (tx_timestamp, clock_timestamp, b_session) = b_task.await.unwrap();
+    // La transacción de B comenzó antes de que A creara su sesión; now() de B
+    // habría quedado por detrás y violado revoked_at >= created_at.
+    assert!(tx_timestamp < s2_created);
+    assert!(clock_timestamp >= s2_created);
+
+    let rows: Vec<(OffsetDateTime, Option<OffsetDateTime>)> = sqlx::query_as(
+        "SELECT created_at, revoked_at FROM commercial_session
+         WHERE account_id = $1 ORDER BY created_at",
+    )
+    .bind(account.id.as_uuid())
+    .fetch_all(&pool)
+    .await
+    .unwrap();
+    assert!(
+        rows.iter()
+            .all(|(created, revoked)| { revoked.is_none_or(|revoked| revoked >= *created) })
+    );
+    let active: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM commercial_session
+         WHERE account_id = $1 AND revoked_at IS NULL",
+    )
+    .bind(account.id.as_uuid())
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(active, 1, "la política de sesión única se conserva");
+    let active_id: Uuid = sqlx::query_scalar(
+        "SELECT id FROM commercial_session WHERE account_id = $1 AND revoked_at IS NULL",
+    )
+    .bind(account.id.as_uuid())
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(active_id, b_session);
+    assert!(auth.authenticate(&existing.token, now).await.is_err());
+}
+
+#[tokio::test]
 async fn migration_0003_preserves_existing_commercial_accounts() {
     let url = isolated_url("TEST_AUTH_UPGRADE_DATABASE_URL");
     let pool = sqlx::postgres::PgPoolOptions::new()

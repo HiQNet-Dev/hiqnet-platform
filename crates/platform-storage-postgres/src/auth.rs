@@ -212,12 +212,14 @@ impl AuthRepository for PgAuthRepository {
             tx.rollback().await.map_err(storage)?;
             return Ok(LoginOutcome::CredentialChanged);
         }
-        let db_now: OffsetDateTime = sqlx::query_scalar("SELECT now()")
+        // clock_timestamp() es el instante real tras adquirir el bloqueo;
+        // now()/transaction_timestamp() sería el inicio de la transacción.
+        let db_now: OffsetDateTime = sqlx::query_scalar("SELECT clock_timestamp()")
             .fetch_one(&mut *tx)
             .await
             .map_err(storage)?;
-        // Reloj efectivo: nunca anterior a now() de PostgreSQL. El valor
-        // inyectado permite pruebas deterministas sin sleeps.
+        // Reloj efectivo: nunca anterior al instante real. El valor inyectado
+        // permite pruebas deterministas sin sleeps.
         let effective_now = db_now.max(session.created_at);
         let locked_until: Option<OffsetDateTime> = row.get("locked_until");
         if locked_until.is_some_and(|until| until > effective_now) {
@@ -313,7 +315,7 @@ impl AuthRepository for PgAuthRepository {
     ) -> AuthResult<Option<CommercialAccountId>> {
         let account_id: Option<Uuid> = sqlx::query_scalar(
             "UPDATE commercial_session
-             SET revoked_at = GREATEST($2, now())
+             SET revoked_at = GREATEST($2, clock_timestamp())
              WHERE token_hash = $1 AND revoked_at IS NULL
              RETURNING account_id",
         )
@@ -373,9 +375,9 @@ impl AuthRepository for PgAuthRepository {
             return Ok(PasswordChangeOutcome::SessionInvalid);
         }
 
-        // Reloj de PostgreSQL tras adquirir el bloqueo: evita marcas de tiempo
-        // anteriores a sesiones creadas mientras se esperaba el lock.
-        let db_now: OffsetDateTime = sqlx::query_scalar("SELECT now()")
+        // Reloj real de PostgreSQL tras adquirir el bloqueo; clock_timestamp()
+        // evita transaction_timestamp() anterior a la espera del lock.
+        let db_now: OffsetDateTime = sqlx::query_scalar("SELECT clock_timestamp()")
             .fetch_one(&mut *tx)
             .await
             .map_err(storage)?;
@@ -482,7 +484,7 @@ impl AuthRepository for PgAuthRepository {
             tx.rollback().await.map_err(storage)?;
             return Err(AuthError::InvalidSession);
         }
-        let db_now: OffsetDateTime = sqlx::query_scalar("SELECT now()")
+        let db_now: OffsetDateTime = sqlx::query_scalar("SELECT clock_timestamp()")
             .fetch_one(&mut *tx)
             .await
             .map_err(storage)?;
