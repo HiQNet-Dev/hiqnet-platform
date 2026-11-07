@@ -38,6 +38,14 @@ fn service(pool: &PgPool) -> AuthService<PgAuthRepository> {
     AuthService::new(PgAuthRepository::new(pool.clone()))
 }
 
+async fn session_id(
+    auth: &AuthService<PgAuthRepository>,
+    token: &str,
+    now: OffsetDateTime,
+) -> uuid::Uuid {
+    auth.authenticate(token, now).await.unwrap().session_id
+}
+
 #[tokio::test]
 async fn login_creates_persistent_hashed_session_and_logout_revokes_it() {
     let pool = open(&isolated_url("TEST_DATABASE_URL")).await.unwrap();
@@ -237,11 +245,13 @@ async fn password_change_rotates_credentials_and_sessions_atomically() {
         .await
         .unwrap();
     assert!(auth.authenticate(&old.token, now).await.is_ok());
+    let old_session_id = session_id(&auth, &old.token, now).await;
 
     let new_password = "nueva-clave-segura-2026";
     let changed = auth
         .change_password(
             account.id,
+            old_session_id,
             initial,
             new_password,
             now + Duration::minutes(1),
@@ -317,10 +327,12 @@ async fn password_change_rejects_wrong_current_weak_new_and_disabled_account() {
         .login(&email, initial, now, Duration::hours(1))
         .await
         .unwrap();
+    let session_id = session_id(&auth, &session.token, now).await;
 
     assert_eq!(
         auth.change_password(
             account.id,
+            session_id,
             "incorrecta",
             "nueva-clave-segura-2026",
             now,
@@ -330,13 +342,27 @@ async fn password_change_rejects_wrong_current_weak_new_and_disabled_account() {
         Err(platform_core::auth::AuthError::InvalidCredentials)
     );
     assert_eq!(
-        auth.change_password(account.id, initial, "corta1", now, Duration::hours(1))
-            .await,
+        auth.change_password(
+            account.id,
+            session_id,
+            initial,
+            "corta1",
+            now,
+            Duration::hours(1)
+        )
+        .await,
         Err(platform_core::auth::AuthError::WeakPassword)
     );
     assert_eq!(
-        auth.change_password(account.id, initial, initial, now, Duration::hours(1))
-            .await,
+        auth.change_password(
+            account.id,
+            session_id,
+            initial,
+            initial,
+            now,
+            Duration::hours(1)
+        )
+        .await,
         Err(platform_core::auth::AuthError::WeakPassword)
     );
     // Ningún intento fallido revocó la sesión ni cambió el hash.
@@ -359,6 +385,7 @@ async fn password_change_rejects_wrong_current_weak_new_and_disabled_account() {
     assert_eq!(
         auth.change_password(
             account.id,
+            session_id,
             initial,
             "nueva-clave-segura-2026",
             now,
@@ -376,16 +403,18 @@ async fn concurrent_password_change_has_a_single_winner() {
     let (account, email) = account_with_password(&pool, initial).await;
     let auth = service(&pool);
     let now = OffsetDateTime::now_utc();
-    let _old = auth
+    let old = auth
         .login(&email, initial, now, Duration::hours(1))
         .await
         .unwrap();
+    let old_session_id = session_id(&auth, &old.token, now).await;
 
     let first = "concurrente-aaa-2026";
     let second = "concurrente-bbb-2026";
     let (one, two) = tokio::join!(
         auth.change_password(
             account.id,
+            old_session_id,
             initial,
             first,
             now + Duration::seconds(1),
@@ -393,6 +422,7 @@ async fn concurrent_password_change_has_a_single_winner() {
         ),
         auth.change_password(
             account.id,
+            old_session_id,
             initial,
             second,
             now + Duration::seconds(1),
@@ -401,13 +431,13 @@ async fn concurrent_password_change_has_a_single_winner() {
     );
     let winners = [&one, &two].iter().filter(|result| result.is_ok()).count();
     assert_eq!(winners, 1, "sólo un cambio concurrente debe ganar");
-    // El perdedor puede detectar el conflicto optimista o, si leyó el hash ya
-    // rotado, fallar la verificación de la contraseña actual.
+    // El perdedor detecta la sesión revocada por el ganador o un conflicto.
     let loser = if one.is_ok() { &two } else { &one };
     assert!(
         matches!(
             loser,
             Err(platform_core::auth::AuthError::Conflict)
+                | Err(platform_core::auth::AuthError::InvalidSession)
                 | Err(platform_core::auth::AuthError::InvalidCredentials)
         ),
         "el perdedor no debe obtener una sesión válida: {loser:?}"
@@ -435,6 +465,7 @@ async fn audit_failure_rolls_back_password_and_sessions() {
         .login(&email, initial, now, Duration::hours(1))
         .await
         .unwrap();
+    let session_id = session_id(&auth, &session.token, now).await;
 
     let trigger_sql = format!(
         "CREATE OR REPLACE FUNCTION test_fail_password_audit_fn() RETURNS trigger
@@ -460,6 +491,7 @@ async fn audit_failure_rolls_back_password_and_sessions() {
     let result = auth
         .change_password(
             account.id,
+            session_id,
             initial,
             "nueva-clave-segura-2026",
             now + Duration::minutes(1),
@@ -495,6 +527,201 @@ async fn audit_failure_rolls_back_password_and_sessions() {
     .await
     .unwrap();
     assert_eq!(events, 0);
+}
+
+#[tokio::test]
+async fn session_revoked_between_authentication_and_mutation_cannot_change_password() {
+    let pool = open(&isolated_url("TEST_DATABASE_URL")).await.unwrap();
+    let initial = "contraseña-inicial-1";
+    let (account, email) = account_with_password(&pool, initial).await;
+    let auth = service(&pool);
+    let now = OffsetDateTime::now_utc();
+    let session = auth
+        .login(&email, initial, now, Duration::hours(1))
+        .await
+        .unwrap();
+    // Estado que había extraído AuthContext antes de la revocación.
+    let stale_session_id = session_id(&auth, &session.token, now).await;
+
+    auth.revoke_all_sessions(account.id, now + Duration::seconds(1))
+        .await
+        .unwrap();
+    assert_eq!(
+        auth.change_password(
+            account.id,
+            stale_session_id,
+            initial,
+            "nueva-clave-segura-2026",
+            now + Duration::seconds(2),
+            Duration::hours(1),
+        )
+        .await,
+        Err(platform_core::auth::AuthError::InvalidSession)
+    );
+
+    let credential = PgAuthRepository::new(pool.clone())
+        .get_credential(account.id)
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(platform_application::security::verify_password_sync(
+        initial,
+        &credential.password_hash
+    ));
+    let active: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM commercial_session
+         WHERE account_id = $1 AND revoked_at IS NULL AND expires_at > $2",
+    )
+    .bind(account.id.as_uuid())
+    .bind(now + Duration::seconds(2))
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(active, 0, "una sesión revocada no debe crear otra");
+}
+
+#[tokio::test]
+async fn concurrent_password_change_and_revoke_keep_consistent_sessions() {
+    let pool = open(&isolated_url("TEST_DATABASE_URL")).await.unwrap();
+    let initial = "contraseña-inicial-1";
+    let (account, email) = account_with_password(&pool, initial).await;
+    let auth = service(&pool);
+    let now = OffsetDateTime::now_utc();
+    let session = auth
+        .login(&email, initial, now, Duration::hours(1))
+        .await
+        .unwrap();
+    let current_session_id = session_id(&auth, &session.token, now).await;
+
+    let (change, revoke) = tokio::join!(
+        auth.change_password(
+            account.id,
+            current_session_id,
+            initial,
+            "nueva-clave-segura-2026",
+            now + Duration::seconds(1),
+            Duration::hours(1),
+        ),
+        auth.revoke_all_sessions(account.id, now + Duration::seconds(1))
+    );
+    revoke.expect("la revocación total debe completarse");
+    assert!(
+        change.is_ok() || matches!(change, Err(platform_core::auth::AuthError::InvalidSession)),
+        "resultado inesperado: {change:?}"
+    );
+
+    let active: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM commercial_session
+         WHERE account_id = $1 AND revoked_at IS NULL AND expires_at > $2",
+    )
+    .bind(account.id.as_uuid())
+    .bind(now + Duration::seconds(2))
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert!(active <= 1, "la política de sesión única debe conservarse");
+    if let Ok(issued) = &change {
+        // Si la revocación se confirmó después, la nueva sesión también queda
+        // revocada; si el cambio fue último, sigue siendo la única válida.
+        let valid = auth
+            .authenticate(&issued.token, now + Duration::seconds(2))
+            .await
+            .is_ok();
+        assert_eq!(valid, active == 1);
+    }
+    let password_changed: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM commercial_auth_event WHERE account_id = $1 AND action = 'password_changed'",
+    )
+    .bind(account.id.as_uuid())
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert!(password_changed <= 1);
+}
+
+#[tokio::test]
+async fn concurrent_login_and_revoke_leave_at_most_one_valid_session() {
+    let pool = open(&isolated_url("TEST_DATABASE_URL")).await.unwrap();
+    let initial = "contraseña-inicial-1";
+    let (account, email) = account_with_password(&pool, initial).await;
+    let auth = service(&pool);
+    let now = OffsetDateTime::now_utc();
+
+    let (login, revoke) = tokio::join!(
+        auth.login(
+            &email,
+            initial,
+            now + Duration::seconds(1),
+            Duration::hours(1)
+        ),
+        auth.revoke_all_sessions(account.id, now + Duration::seconds(2))
+    );
+    let issued = login.expect("el login debe completarse");
+    revoke.expect("la revocación debe completarse");
+
+    let active: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM commercial_session
+         WHERE account_id = $1 AND revoked_at IS NULL AND expires_at > $2",
+    )
+    .bind(account.id.as_uuid())
+    .bind(now + Duration::seconds(3))
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert!(active <= 1, "no puede quedar más de una sesión activa");
+    let valid = auth
+        .authenticate(&issued.token, now + Duration::seconds(3))
+        .await
+        .is_ok();
+    assert_eq!(valid, active == 1);
+}
+
+#[tokio::test]
+async fn concurrent_logins_preserve_single_session_policy() {
+    let pool = open(&isolated_url("TEST_DATABASE_URL")).await.unwrap();
+    let initial = "contraseña-inicial-1";
+    let (account, email) = account_with_password(&pool, initial).await;
+    let auth = service(&pool);
+    let now = OffsetDateTime::now_utc();
+
+    let (one, two) = tokio::join!(
+        auth.login(
+            &email,
+            initial,
+            now + Duration::seconds(1),
+            Duration::hours(1)
+        ),
+        auth.login(
+            &email,
+            initial,
+            now + Duration::seconds(2),
+            Duration::hours(1)
+        )
+    );
+    let one = one.unwrap();
+    let two = two.unwrap();
+    let active: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM commercial_session
+         WHERE account_id = $1 AND revoked_at IS NULL AND expires_at > $2",
+    )
+    .bind(account.id.as_uuid())
+    .bind(now + Duration::seconds(3))
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(active, 1, "login concurrente debe dejar una sola sesión");
+    let one_valid = auth
+        .authenticate(&one.token, now + Duration::seconds(3))
+        .await
+        .is_ok();
+    let two_valid = auth
+        .authenticate(&two.token, now + Duration::seconds(3))
+        .await
+        .is_ok();
+    assert!(
+        one_valid ^ two_valid,
+        "sólo la última sesión debe ser válida"
+    );
 }
 
 #[tokio::test]

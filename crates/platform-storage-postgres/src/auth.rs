@@ -1,7 +1,7 @@
 //! Persistencia de credenciales, sesiones y eventos de autenticación.
 
 use async_trait::async_trait;
-use platform_application::auth::AuthRepository;
+use platform_application::auth::{AuthRepository, PasswordChangeOutcome};
 use platform_core::{
     auth::{AuthError, AuthResult, AuthenticatedSession, CommercialCredential, CommercialIdentity},
     ids::CommercialAccountId,
@@ -173,11 +173,36 @@ impl AuthRepository for PgAuthRepository {
         Ok(())
     }
 
-    async fn create_session(
+    async fn rotate_session(
         &self,
         session: &AuthenticatedSession,
         token_hash: &[u8],
-    ) -> AuthResult<()> {
+    ) -> AuthResult<bool> {
+        let mut tx = self.pool.begin().await.map_err(storage)?;
+        // Orden de bloqueo: siempre la fila de cuenta primero.
+        let active: Option<Uuid> = sqlx::query_scalar(
+            "SELECT id FROM commercial_account
+             WHERE id = $1 AND status = 'active' FOR UPDATE",
+        )
+        .bind(session.account_id.as_uuid())
+        .fetch_optional(&mut *tx)
+        .await
+        .map_err(storage)?;
+        if active.is_none() {
+            tx.rollback().await.map_err(storage)?;
+            return Ok(false);
+        }
+
+        sqlx::query(
+            "UPDATE commercial_session SET revoked_at = $2
+             WHERE account_id = $1 AND revoked_at IS NULL",
+        )
+        .bind(session.account_id.as_uuid())
+        .bind(session.created_at)
+        .execute(&mut *tx)
+        .await
+        .map_err(storage)?;
+
         sqlx::query(
             "INSERT INTO commercial_session
              (id, account_id, token_hash, created_at, expires_at, last_seen_at)
@@ -188,10 +213,24 @@ impl AuthRepository for PgAuthRepository {
         .bind(token_hash)
         .bind(session.created_at)
         .bind(session.expires_at)
-        .execute(&self.pool)
+        .execute(&mut *tx)
         .await
         .map_err(storage)?;
-        Ok(())
+
+        sqlx::query(
+            "INSERT INTO commercial_auth_event
+             (id, account_id, action, occurred_at, metadata)
+             VALUES ($1, $2, 'login_success', $3, '{}'::jsonb)",
+        )
+        .bind(Uuid::new_v4())
+        .bind(session.account_id.as_uuid())
+        .bind(session.created_at)
+        .execute(&mut *tx)
+        .await
+        .map_err(storage)?;
+
+        tx.commit().await.map_err(storage)?;
+        Ok(true)
     }
 
     async fn get_session(
@@ -236,23 +275,6 @@ impl AuthRepository for PgAuthRepository {
         Ok(account_id.map(CommercialAccountId::from_uuid))
     }
 
-    async fn revoke_account_sessions(
-        &self,
-        account_id: CommercialAccountId,
-        now: OffsetDateTime,
-    ) -> AuthResult<()> {
-        sqlx::query(
-            "UPDATE commercial_session SET revoked_at = $2
-             WHERE account_id = $1 AND revoked_at IS NULL",
-        )
-        .bind(account_id.as_uuid())
-        .bind(now)
-        .execute(&self.pool)
-        .await
-        .map_err(storage)?;
-        Ok(())
-    }
-
     async fn record_event(
         &self,
         account_id: Option<CommercialAccountId>,
@@ -277,23 +299,54 @@ impl AuthRepository for PgAuthRepository {
 
     async fn change_password(
         &self,
-        account_id: CommercialAccountId,
         expected_hash: &str,
         new_hash: &str,
+        previous_session_id: Uuid,
         session: &AuthenticatedSession,
         token_hash: &[u8],
         now: OffsetDateTime,
-    ) -> AuthResult<bool> {
+    ) -> AuthResult<PasswordChangeOutcome> {
+        let account_id = session.account_id;
         let mut tx = self.pool.begin().await.map_err(storage)?;
+        // Orden de bloqueo: cuenta -> sesión/credencial. Serializa login,
+        // cambio de contraseña y revocación total por cuenta.
+        let active: Option<Uuid> = sqlx::query_scalar(
+            "SELECT id FROM commercial_account
+             WHERE id = $1 AND status = 'active' FOR UPDATE",
+        )
+        .bind(account_id.as_uuid())
+        .fetch_optional(&mut *tx)
+        .await
+        .map_err(storage)?;
+        if active.is_none() {
+            tx.rollback().await.map_err(storage)?;
+            return Ok(PasswordChangeOutcome::SessionInvalid);
+        }
+
+        // Una revocación ya confirmada invalida la sesión extraída por HTTP.
+        let session_valid: bool = sqlx::query_scalar(
+            "SELECT EXISTS (
+                SELECT 1 FROM commercial_session
+                WHERE id = $1 AND account_id = $2
+                  AND revoked_at IS NULL AND expires_at > $3)",
+        )
+        .bind(previous_session_id)
+        .bind(account_id.as_uuid())
+        .bind(now)
+        .fetch_one(&mut *tx)
+        .await
+        .map_err(storage)?;
+        if !session_valid {
+            tx.rollback().await.map_err(storage)?;
+            return Ok(PasswordChangeOutcome::SessionInvalid);
+        }
+
         // Comparación optimista: si otra operación cambió el hash, no se toca nada.
         let updated: Option<Uuid> = sqlx::query_scalar(
             "UPDATE commercial_credential
              SET password_hash = $3, password_changed_at = $4,
                  failed_attempts = 0, locked_until = NULL
              WHERE account_id = $1 AND password_hash = $2
-               AND EXISTS (
-                   SELECT 1 FROM commercial_account a
-                   WHERE a.id = $1 AND a.status = 'active')
              RETURNING account_id",
         )
         .bind(account_id.as_uuid())
@@ -305,7 +358,7 @@ impl AuthRepository for PgAuthRepository {
         .map_err(storage)?;
         if updated.is_none() {
             tx.rollback().await.map_err(storage)?;
-            return Ok(false);
+            return Ok(PasswordChangeOutcome::CredentialChanged);
         }
 
         sqlx::query(
@@ -345,7 +398,7 @@ impl AuthRepository for PgAuthRepository {
         .map_err(storage)?;
 
         tx.commit().await.map_err(storage)?;
-        Ok(true)
+        Ok(PasswordChangeOutcome::Updated)
     }
 
     async fn revoke_all_sessions(
@@ -354,6 +407,17 @@ impl AuthRepository for PgAuthRepository {
         now: OffsetDateTime,
     ) -> AuthResult<()> {
         let mut tx = self.pool.begin().await.map_err(storage)?;
+        // Mismo orden de bloqueo que login y cambio de contraseña.
+        let exists: Option<Uuid> =
+            sqlx::query_scalar("SELECT id FROM commercial_account WHERE id = $1 FOR UPDATE")
+                .bind(account_id.as_uuid())
+                .fetch_optional(&mut *tx)
+                .await
+                .map_err(storage)?;
+        if exists.is_none() {
+            tx.rollback().await.map_err(storage)?;
+            return Err(AuthError::InvalidSession);
+        }
         sqlx::query(
             "UPDATE commercial_session SET revoked_at = $2
              WHERE account_id = $1 AND revoked_at IS NULL",

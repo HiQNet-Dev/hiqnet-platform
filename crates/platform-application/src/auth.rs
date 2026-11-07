@@ -18,6 +18,17 @@ use crate::security::{
     generate_session_token, hash_password, hash_token, verify_dummy, verify_password,
 };
 
+/// Resultado del cambio de contraseña dentro de la transacción.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PasswordChangeOutcome {
+    /// Credencial y sesión actualizadas.
+    Updated,
+    /// La sesión presentada ya no era válida al adquirir el bloqueo.
+    SessionInvalid,
+    /// Otra operación modificó el hash antes de este cambio.
+    CredentialChanged,
+}
+
 #[async_trait]
 pub trait AuthRepository: Send + Sync {
     async fn find_identity_by_email(&self, email: &str) -> AuthResult<Option<CommercialIdentity>>;
@@ -41,11 +52,13 @@ pub trait AuthRepository: Send + Sync {
         now: OffsetDateTime,
     ) -> AuthResult<bool>;
     async fn clear_failures(&self, account_id: CommercialAccountId) -> AuthResult<()>;
-    async fn create_session(
+    /// Rota la sesión de forma atómica: bloquea la cuenta, revoca las sesiones
+    /// previas, crea la nueva y audita `login_success`.
+    async fn rotate_session(
         &self,
         session: &AuthenticatedSession,
         token_hash: &[u8],
-    ) -> AuthResult<()>;
+    ) -> AuthResult<bool>;
     async fn get_session(
         &self,
         token_hash: &[u8],
@@ -56,11 +69,6 @@ pub trait AuthRepository: Send + Sync {
         token_hash: &[u8],
         now: OffsetDateTime,
     ) -> AuthResult<Option<CommercialAccountId>>;
-    async fn revoke_account_sessions(
-        &self,
-        account_id: CommercialAccountId,
-        now: OffsetDateTime,
-    ) -> AuthResult<()>;
     async fn record_event(
         &self,
         account_id: Option<CommercialAccountId>,
@@ -74,13 +82,13 @@ pub trait AuthRepository: Send + Sync {
     /// otra operación modificó la credencial.
     async fn change_password(
         &self,
-        account_id: CommercialAccountId,
         expected_hash: &str,
         new_hash: &str,
+        previous_session_id: uuid::Uuid,
         session: &AuthenticatedSession,
         token_hash: &[u8],
         now: OffsetDateTime,
-    ) -> AuthResult<bool>;
+    ) -> AuthResult<PasswordChangeOutcome>;
 
     /// Revoca todas las sesiones activas y audita el evento en una transacción.
     async fn revoke_all_sessions(
@@ -171,10 +179,6 @@ impl<R: AuthRepository> AuthService<R> {
         }
 
         self.repository.clear_failures(identity.account_id).await?;
-        // Rotación: cualquier sesión previa deja de ser válida al iniciar sesión.
-        self.repository
-            .revoke_account_sessions(identity.account_id, now)
-            .await?;
 
         let (token, token_hash) = generate_session_token();
         let session = AuthenticatedSession {
@@ -183,17 +187,14 @@ impl<R: AuthRepository> AuthService<R> {
             created_at: now,
             expires_at: now + ttl,
         };
-        self.repository
-            .create_session(&session, &token_hash)
-            .await?;
-        self.repository
-            .record_event(
-                Some(identity.account_id),
-                "login_success",
-                now,
-                serde_json::json!({}),
-            )
-            .await?;
+        // Rotación y auditoría atómicas, serializadas por cuenta.
+        if !self
+            .repository
+            .rotate_session(&session, &token_hash)
+            .await?
+        {
+            return Err(AuthError::InvalidCredentials);
+        }
         Ok(IssuedSession {
             token,
             expires_at: session.expires_at,
@@ -241,6 +242,7 @@ impl<R: AuthRepository> AuthService<R> {
     pub async fn change_password(
         &self,
         account_id: CommercialAccountId,
+        session_id: uuid::Uuid,
         current_password: &str,
         new_password: &str,
         now: OffsetDateTime,
@@ -292,24 +294,25 @@ impl<R: AuthRepository> AuthService<R> {
             created_at: now,
             expires_at: now + ttl,
         };
-        let changed = self
+        match self
             .repository
             .change_password(
-                account_id,
                 &credential.password_hash,
                 &new_hash,
+                session_id,
                 &session,
                 &token_hash,
                 now,
             )
-            .await?;
-        if !changed {
-            return Err(AuthError::Conflict);
+            .await?
+        {
+            PasswordChangeOutcome::Updated => Ok(IssuedSession {
+                token,
+                expires_at: session.expires_at,
+            }),
+            PasswordChangeOutcome::SessionInvalid => Err(AuthError::InvalidSession),
+            PasswordChangeOutcome::CredentialChanged => Err(AuthError::Conflict),
         }
-        Ok(IssuedSession {
-            token,
-            expires_at: session.expires_at,
-        })
     }
 
     /// Revoca todas las sesiones de la cuenta autenticada, incluida la actual.

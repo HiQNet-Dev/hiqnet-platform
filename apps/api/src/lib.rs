@@ -595,6 +595,7 @@ async fn change_password(
         .service
         .change_password(
             auth_context.session.account_id,
+            auth_context.session.session_id,
             &request.current_password,
             &request.new_password,
             time::OffsetDateTime::now_utc(),
@@ -1908,6 +1909,18 @@ mod tests {
         let (status, _, _) =
             send_auth(&router, "/api/v1/auth/sessions/revoke", None, origin, None).await;
         assert_eq!(status, StatusCode::UNAUTHORIZED);
+
+        // Una cookie revocada no puede completar un cambio de contraseña.
+        let (status, _, body) = send_auth(
+            &router,
+            "/api/v1/auth/password/change",
+            Some(&cookie),
+            origin,
+            Some(json!({"current_password": password, "new_password": "nueva-clave-segura-2026"})),
+        )
+        .await;
+        assert_eq!(status, StatusCode::UNAUTHORIZED);
+        assert_eq!(body["code"], "unauthorized");
     }
 
     #[tokio::test]
