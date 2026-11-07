@@ -47,6 +47,17 @@ jobs:
         run: cargo test --workspace
         env:
           TEST_DATABASE_URL: postgres://hiqnet:hiqnet_dev@localhost:5432/hiqnet_test
+      - name: Backup y restore sintético en otra base
+        env:
+          PGPASSWORD: hiqnet_dev
+        run: |
+          set -euo pipefail
+          psql -h localhost -U hiqnet -d hiqnet_test -v ON_ERROR_STOP=1 -c \
+            "INSERT INTO installation (id, organization_id, device_label, status, registered_at) VALUES ('00000000-0000-4000-8000-000000000001', '00000000-0000-4000-8000-000000000002', 'synthetic-ci', 'active', now())"
+          pg_dump -h localhost -U hiqnet -d hiqnet_test -Fc -f /tmp/hiqnet-ci.dump
+          psql -h localhost -U hiqnet -d postgres -v ON_ERROR_STOP=1 -c 'CREATE DATABASE hiqnet_restore'
+          pg_restore --exit-on-error -h localhost -U hiqnet -d hiqnet_restore /tmp/hiqnet-ci.dump
+          test "$(psql -h localhost -U hiqnet -d hiqnet_restore -Atc "SELECT count(*) FROM installation WHERE device_label = 'synthetic-ci'")" = 1
       - name: Validar OpenAPI
         run: python3 -c "import json; d=json.load(open('openapi/openapi.json')); assert d['openapi'].startswith('3.1'); assert '/health' in d['paths'] and '/ready' in d['paths']; print('openapi ok')"
       - name: Validar SemVer sin publicar

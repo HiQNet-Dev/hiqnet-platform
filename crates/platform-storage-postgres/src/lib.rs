@@ -51,15 +51,52 @@ mod tests {
         assert_eq!(tables, 2);
 
         let mut tx = pool.begin().await.unwrap();
+        let installation_id = uuid::Uuid::new_v4();
+        let organization_id = uuid::Uuid::new_v4();
         sqlx::query(
             "INSERT INTO installation (id, organization_id, device_label, status, registered_at) \
              VALUES ($1, $2, 'fixture-p00', 'active', now())",
         )
-        .bind(uuid::Uuid::new_v4())
-        .bind(uuid::Uuid::new_v4())
+        .bind(installation_id)
+        .bind(organization_id)
         .execute(&mut *tx)
         .await
         .unwrap();
+        let grant_id = uuid::Uuid::new_v4();
+        sqlx::query(
+            "INSERT INTO issued_license (grant_id, installation_id, organization_id, plan, \
+             features_json, issued_at, valid_until, grant_json, signature_b64) \
+             VALUES ($1, $2, $3, 'trial', '{}'::jsonb, now(), now() + interval '1 day', '{}', 'synthetic')",
+        )
+        .bind(grant_id)
+        .bind(installation_id)
+        .bind(organization_id)
+        .execute(&mut *tx)
+        .await
+        .unwrap();
+        let plan: String =
+            sqlx::query_scalar("SELECT plan FROM issued_license WHERE grant_id = $1")
+                .bind(grant_id)
+                .fetch_one(&mut *tx)
+                .await
+                .unwrap();
+        assert_eq!(plan, "trial");
+        sqlx::query("UPDATE installation SET status = 'suspended' WHERE id = $1")
+            .bind(installation_id)
+            .execute(&mut *tx)
+            .await
+            .unwrap();
+        let status: String = sqlx::query_scalar("SELECT status FROM installation WHERE id = $1")
+            .bind(installation_id)
+            .fetch_one(&mut *tx)
+            .await
+            .unwrap();
+        assert_eq!(status, "suspended");
+        sqlx::query("DELETE FROM issued_license WHERE grant_id = $1")
+            .bind(grant_id)
+            .execute(&mut *tx)
+            .await
+            .unwrap();
         tx.rollback().await.unwrap();
         let remaining: i64 = sqlx::query_scalar(
             "SELECT count(*) FROM installation WHERE device_label = 'fixture-p00'",
