@@ -10,12 +10,33 @@ use time::OffsetDateTime;
 pub enum AuthError {
     #[error("credenciales inválidas")]
     InvalidCredentials,
+    #[error("la nueva contraseña no cumple la política")]
+    WeakPassword,
+    #[error("la credencial cambió durante la operación")]
+    Conflict,
     #[error("demasiados intentos; inténtalo más tarde")]
     RateLimited,
     #[error("sesión inexistente, expirada o revocada")]
     InvalidSession,
     #[error("no fue posible completar la operación de almacenamiento")]
     Storage,
+}
+
+/// Política mínima de contraseñas: 12–128 caracteres, al menos una letra y un
+/// dígito, sin caracteres de control. No exige clases de símbolos adicionales.
+pub const MIN_PASSWORD_CHARS: usize = 12;
+pub const MAX_PASSWORD_CHARS: usize = 128;
+
+pub fn validate_password(password: &str) -> AuthResult<()> {
+    let length = password.chars().count();
+    if !(MIN_PASSWORD_CHARS..=MAX_PASSWORD_CHARS).contains(&length)
+        || password.chars().any(char::is_control)
+        || !password.chars().any(char::is_alphabetic)
+        || !password.chars().any(|value| value.is_ascii_digit())
+    {
+        return Err(AuthError::WeakPassword);
+    }
+    Ok(())
 }
 
 pub type AuthResult<T> = Result<T, AuthError>;
@@ -61,4 +82,27 @@ pub struct AuthenticatedSession {
 pub struct IssuedSession {
     pub token: String,
     pub expires_at: OffsetDateTime,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn politica_de_contrasenas_rechaza_debiles() {
+        assert_eq!(validate_password("corta1"), Err(AuthError::WeakPassword));
+        assert_eq!(
+            validate_password("sololetraslargas"),
+            Err(AuthError::WeakPassword)
+        );
+        assert_eq!(
+            validate_password("1234567890123"),
+            Err(AuthError::WeakPassword)
+        );
+        assert_eq!(
+            validate_password("con\ttabulador123"),
+            Err(AuthError::WeakPassword)
+        );
+        assert_eq!(validate_password("frase segura 123"), Ok(()));
+    }
 }

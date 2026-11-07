@@ -28,6 +28,8 @@ Rutas de identidad comercial (P02.2-A), independientes del token DEV anterior:
 | POST | `/api/v1/auth/login` | Credenciales en el cuerpo | 204 + cookie `hiqnet_session` | 401 credenciales/cuenta; 403 origen; 429 rate limit; 503 BD o `auth_overloaded` |
 | POST | `/api/v1/auth/logout` | Cookie de sesión | 204 y cookie borrada | 403 origen; idempotente si no hay sesión |
 | GET | `/api/v1/auth/me` | Cookie de sesión | 200 identidad | 401 sesión ausente/expirada/revocada; 503 BD |
+| POST | `/api/v1/auth/password/change` | Cookie de sesión | 204 + nueva cookie | 400 política; 401 actual incorrecta/sesión; 403 origen; 409 concurrencia; 429 rate limit; 503 BD |
+| POST | `/api/v1/auth/sessions/revoke` | Cookie de sesión | 204 y cookie borrada | 401 sesión; 403 origen; 503 BD |
 
 La sesión comercial no es el token DEV ni una identidad POS. El `account_id` de `/me` proviene **solo** de la cookie verificada en PostgreSQL; ningún body, query o encabezado puede elegirlo. Cada login rota sesiones previas y persiste únicamente el hash SHA-256 del token. La cookie es `HttpOnly`, `SameSite=Lax`, `Path=/api` y `Secure` salvo en `HIQNET_PLATFORM_ENV=development` con `HIQNET_PLATFORM_COOKIE_SECURE=false` explícito; el arranque rechaza desactivar `Secure` fuera de development. **En producción toda mutación exige `Origin` exacto** igual a `HIQNET_PLATFORM_ALLOWED_ORIGIN`; `null`, valores múltiples, malformados o ausentes se rechazan. Sólo development admite ausencia de `Origin` para curl/Swagger; sin origen configurado se falla cerrado. La contraseña se protege con Argon2id (m=19456 KiB, t=2, p=1, salt aleatorio) y nunca se registra; `HIQNET_PLATFORM_AUTH_CONCURRENCY` (4 por defecto) acota verificaciones simultáneas y responde 503 `auth_overloaded` bajo saturación.
 
@@ -87,6 +89,23 @@ curl -i -b cookies.txt -X POST http://127.0.0.1:8080/api/v1/auth/logout \
   -H 'Origin: http://127.0.0.1:8080'
 # 204 y cookie con Max-Age=0
 ```
+
+### Cambio de contraseña y revocación de sesiones
+
+La nueva contraseña debe tener 12–128 caracteres, al menos una letra y un dígito, sin caracteres de control y ser distinta de la actual. El cambio exige la contraseña actual y una sesión válida; en una sola transacción actualiza el hash y `password_changed_at`, revoca todas las sesiones anteriores, audita `password_changed` y emite una cookie nueva. Si otra operación cambió la credencial, responde 409 y no deja cambios parciales.
+
+```sh
+curl -i -b cookies.txt -X POST http://127.0.0.1:8080/api/v1/auth/password/change \
+  -H 'Content-Type: application/json' \
+  -H 'Origin: http://127.0.0.1:8080' \
+  -d '{"current_password":"<ACTUAL>","new_password":"<NUEVA_12_128>"}'
+# 204 y nueva cookie; la cookie anterior deja de servir
+curl -i -b cookies.txt -X POST http://127.0.0.1:8080/api/v1/auth/sessions/revoke \
+  -H 'Origin: http://127.0.0.1:8080'
+# 204, todas las sesiones revocadas y cookie con Max-Age=0
+```
+
+Ambos endpoints aplican la misma política CSRF de producción y los límites de autenticación. No existe recuperación por correo ni registro público.
 
 Swagger puede inspeccionar los esquemas; para probar con cookie usa curl o el navegador tras el login. Los ejemplos incluyen `Origin` porque en producción es obligatorio; en development puede omitirse para clientes locales, pero nunca en producción. Una sesión expira según `HIQNET_PLATFORM_SESSION_TTL_HOURS` (1–168, 8 por defecto), se revoca al hacer logout o al iniciar otro login, y deja de servir si la cuenta se deshabilita. El bloqueo por contraseña se activa a los 5 fallos durante 15 minutos; al vencer, el siguiente fallo inicia un ciclo nuevo sin reabrir el bloqueo. Además hay un límite en memoria de 10 intentos por minuto y correo, cota de 4096 claves y un semáforo de verificaciones Argon2id (`HIQNET_PLATFORM_AUTH_CONCURRENCY`); bajo saturación responde 503 `auth_overloaded`. No se confía en `X-Forwarded-For`: el límite por IP y el reparto multiinstancia requieren proxy confiable y almacenamiento compartido, pendientes. La medición de Argon2id es informativa: `cargo test -p platform-application benchmark_argon2id -- --ignored --nocapture`.
 

@@ -36,6 +36,7 @@ Justificación: el proyecto es un control plane técnico con despliegue local y 
 
 ## Riesgos pendientes
 
+- P02.2-B implementa cambio de contraseña transaccional y revocación total de sesiones reutilizando el modelo de 0003, sin migración nueva.
 - Protección contra phishing, MFA y gestión de dispositivos quedan fuera de P02.2.
 - La recuperación de cuenta debe diseñarse con tokens de un solo uso y expiración corta.
 - La protección contra enumeración y fuerza bruta depende de límites por IP/cuenta y mensajes neutrales.

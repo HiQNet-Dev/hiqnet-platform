@@ -6,7 +6,7 @@ Documento de seguimiento de la estrategia definida en [ADR-0002](adr-0002-authen
 
 Autenticación propia con Argon2id y sesiones persistidas en PostgreSQL; OIDC queda como opción futura, no como dependencia inicial. Principios: contraseñas sólo como hash resistente a ataques offline, tokens de sesión opacos y nunca recuperables desde persistencia, revocación real, mensajes neutrales, actor derivado exclusivamente de la sesión verificada y separación estricta respecto de usuarios locales del POS.
 
-## Implementado en P02.2-A
+## Implementado en P02.2-A y P02.2-B
 
 - `migrations/0003_commercial_auth.sql` crea `commercial_credential`, `commercial_session` y `commercial_auth_event`. No modifica 0001 ni 0002 ni usa cascadas destructivas.
 - API: `POST /api/v1/auth/login`, `POST /api/v1/auth/logout` y `GET /api/v1/auth/me`, con DTO, OpenAPI 3.1 y Swagger.
@@ -19,13 +19,21 @@ Autenticación propia con Argon2id y sesiones persistidas en PostgreSQL; OIDC qu
 - El extractor de sesión responde 401 ante sesión inválida y 503 neutral ante indisponibilidad de PostgreSQL, sin filtrar detalles internos.
 - Bootstrap DEV sin registro público: exige `HIQNET_PLATFORM_ENV=development` y `HIQNET_PLATFORM_DEV_BOOTSTRAP=true`, y lee la contraseña por entrada estándar.
 
+P02.2-B añade `POST /api/v1/auth/password/change` y `POST /api/v1/auth/sessions/revoke`, sin migración nueva: reutiliza `commercial_credential`, `commercial_session` y `commercial_auth_event`. El cambio de contraseña exige sesión y contraseña actual, aplica la política (12–128 caracteres, al menos una letra y un dígito, sin controles, distinta de la actual), verifica Argon2id, y en **una única transacción** actualiza hash y `password_changed_at`, revoca todas las sesiones, registra `password_changed` y crea la nueva sesión. La comparación optimista del hash impide que dos cambios concurrentes ganen; el perdedor recibe 409. La revocación total invalida todas las sesiones (incluida la actual), audita `session_revoked` y borra la cookie. Ambos endpoints exigen Origin válido y comparten el limitador y el semáforo Argon2id.
+
+Concurrencia de sesiones: login, cambio de contraseña y revocación total bloquean primero la fila `commercial_account` (`FOR UPDATE`) y siguen el orden cuenta → credencial/sesiones, sin bloqueos globales ni esperas frágiles. El cambio valida `session_id`, vigencia y revocación **dentro de la transacción**; una sesión revocada entre `AuthContext` y el caso de uso no puede crear otra sesión.
+
+El login revalida **dentro del bloqueo** que el hash Argon2id verificado siga siendo el vigente, que la cuenta esté activa y que `locked_until` no esté vigente. Si la contraseña cambió, la cuenta se deshabilitó o se activó un bloqueo entre la verificación y la rotación, responde `401` neutral sin crear sesión ni auditar `login_success`. La rotación (revocar + crear + auditoría) es atómica y Argon2id permanece fuera de la transacción.
+
+Las marcas de tiempo de sesiones, revocaciones y auditoría usan `clock_timestamp()` de PostgreSQL tras adquirir el bloqueo (`GREATEST(clock_timestamp(), valor_inyectado)`), no `now()`/`transaction_timestamp()`, que representa el inicio de la transacción y puede ser anterior a una sesión creada durante la espera del lock. Una prueba con dos conexiones mantiene el bloqueo en A, inicia B, confirma desde A una sesión con reloj real y verifica que B, al desbloquearse, obtiene `revoked_at >= created_at` sin violar constraints. Una revocación confirmada no puede deshacerse por solicitudes previas; si el cambio se confirma después, la revocación posterior también invalida la nueva sesión. La política de sesión única se conserva y las pruebas coordinan revocación/cambio, login/revocación, dos cambios, dos logins, credencial obsoleta, cuenta deshabilitada, bloqueo y timestamps obsoletos contra PostgreSQL real.
+
 La medición de Argon2id es informativa y reproducible, no un gate de CI: `cargo test -p platform-application benchmark_argon2id -- --ignored --nocapture` (iteraciones con `ARGON2_BENCH_ITERATIONS`). En este equipo Windows con build debug el promedio hash+verify medido fue ≈0,85 s (≈1,4 s bajo carga concurrente); release es menor.
 
 ## Pendiente para P02.2-B y posteriores
 
 - Verificación de correo y activación de cuentas productivas.
-- Cambio y recuperación de contraseña con tokens de un solo uso y expiración corta.
-- Endpoints de gestión de sesiones y listado de organizaciones del actor.
+- Recuperación de contraseña por correo con tokens de un solo uso y expiración corta.
+- Listado de organizaciones del actor y sesiones simultáneas por dispositivo.
 - MFA, gestión de dispositivos y endurecimiento frente a phishing.
 - Rate limiting por IP con proxy explícitamente confiable y limitador compartido entre instancias (sin Redis en esta fase).
 - Portal React y API multitenant amplia de P02.3.

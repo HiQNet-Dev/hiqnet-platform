@@ -45,11 +45,13 @@ jobs:
         run: |
           PGPASSWORD=hiqnet_dev psql -h localhost -U hiqnet -d postgres -c 'CREATE DATABASE hiqnet_test'
           PGPASSWORD=hiqnet_dev psql -h localhost -U hiqnet -d postgres -c 'CREATE DATABASE hiqnet_upgrade_test'
+          PGPASSWORD=hiqnet_dev psql -h localhost -U hiqnet -d postgres -c 'CREATE DATABASE hiqnet_auth_upgrade_test'
       - name: Pruebas del workspace y migraciones en BD aislada
         run: cargo test --workspace
         env:
           TEST_DATABASE_URL: postgres://hiqnet:hiqnet_dev@localhost:5432/hiqnet_test
           TEST_UPGRADE_DATABASE_URL: postgres://hiqnet:hiqnet_dev@localhost:5432/hiqnet_upgrade_test
+          TEST_AUTH_UPGRADE_DATABASE_URL: postgres://hiqnet:hiqnet_dev@localhost:5432/hiqnet_auth_upgrade_test
       - name: Backup y restore sintético en otra base
         env:
           PGPASSWORD: hiqnet_dev
