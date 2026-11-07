@@ -406,7 +406,7 @@ fn limiter_key(email: &str) -> String {
         (status = 401, description = "Credenciales inválidas, cuenta deshabilitada o bloqueada", body = ErrorResponse),
         (status = 403, description = "Origen no permitido", body = ErrorResponse),
         (status = 429, description = "Demasiados intentos", body = ErrorResponse),
-        (status = 503, description = "Almacenamiento no disponible", body = ErrorResponse)))]
+        (status = 503, description = "Almacenamiento no disponible o verificación saturada (auth_overloaded)", body = ErrorResponse)))]
 async fn login(
     axum::Extension(auth_state): axum::Extension<AuthState>,
     headers: HeaderMap,
@@ -425,6 +425,19 @@ async fn login(
             platform_application::auth::AuthError::RateLimited,
         ));
     }
+    // Cota global de verificaciones Argon2id: responde rápido bajo saturación
+    // en lugar de acumular trabajo CPU en la cola del runtime.
+    let _permit = auth_state
+        .argon2_slots
+        .clone()
+        .try_acquire_owned()
+        .map_err(|_| {
+            auth::error(
+                StatusCode::SERVICE_UNAVAILABLE,
+                "auth_overloaded",
+                "servicio de autenticación ocupado; reintenta más tarde",
+            )
+        })?;
     let issued = match auth_state
         .service
         .login(
@@ -571,6 +584,11 @@ pub async fn run() -> anyhow::Result<()> {
         .and_then(|value| value.parse().ok())
         .unwrap_or(8)
         .clamp(1, 168);
+    let auth_concurrency: usize = std::env::var("HIQNET_PLATFORM_AUTH_CONCURRENCY")
+        .ok()
+        .and_then(|value| value.parse().ok())
+        .unwrap_or(4)
+        .clamp(1, 32);
     let auth_service = Arc::new(platform_application::AuthService::new(
         platform_storage_postgres::PgAuthRepository::new(pool.clone()),
     ));
@@ -586,11 +604,13 @@ pub async fn run() -> anyhow::Result<()> {
         service: auth_service,
         cookie_secure,
         allowed_origin,
+        development,
         session_ttl: time::Duration::hours(session_hours),
         limiter: Arc::new(auth::LoginLimiter::new(
             10,
             std::time::Duration::from_secs(60),
         )),
+        argon2_slots: Arc::new(tokio::sync::Semaphore::new(auth_concurrency)),
     };
 
     // La documentación sólo se expone cuando el entorno la habilita explícitamente.
@@ -649,11 +669,13 @@ mod tests {
             )),
             cookie_secure: false,
             allowed_origin: Some("http://127.0.0.1:8080".into()),
+            development: true,
             session_ttl: time::Duration::hours(1),
             limiter: Arc::new(auth::LoginLimiter::new(
                 10,
                 std::time::Duration::from_secs(60),
             )),
+            argon2_slots: Arc::new(tokio::sync::Semaphore::new(4)),
         }
     }
 
@@ -1427,6 +1449,109 @@ mod tests {
         )
         .await;
         assert_eq!(status, StatusCode::FORBIDDEN);
+    }
+
+    #[tokio::test]
+    async fn production_login_requires_exact_origin_and_rejects_null_or_malformed() {
+        let pool = open(&isolated_test_url()).await.unwrap();
+        let mut auth_state = test_auth_state(pool.clone());
+        auth_state.development = false;
+        let router = build_router(state(pool.clone()), false, auth_state);
+        let body = || json!({"email":"nadie@example.test","password":"x"});
+
+        let (status, _, _) =
+            send_auth(&router, "/api/v1/auth/login", None, None, Some(body())).await;
+        assert_eq!(status, StatusCode::FORBIDDEN, "sin Origin en producción");
+
+        for origin in ["null", "https://evil.example", "http://127.0.0.1:8080/"] {
+            let (status, _, _) = send_auth(
+                &router,
+                "/api/v1/auth/login",
+                None,
+                Some(origin),
+                Some(body()),
+            )
+            .await;
+            assert_eq!(status, StatusCode::FORBIDDEN, "origen {origin}");
+        }
+
+        let duplicate = router
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method(Method::POST)
+                    .uri("/api/v1/auth/login")
+                    .header(header::CONTENT_TYPE, "application/json")
+                    .header(header::ORIGIN, "http://127.0.0.1:8080")
+                    .header(header::ORIGIN, "http://127.0.0.1:8080")
+                    .body(Body::from(body().to_string()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(duplicate.status(), StatusCode::FORBIDDEN);
+
+        let malformed = router
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method(Method::POST)
+                    .uri("/api/v1/auth/login")
+                    .header(header::CONTENT_TYPE, "application/json")
+                    .header(
+                        header::ORIGIN,
+                        axum::http::HeaderValue::from_bytes(b"\xFF").unwrap(),
+                    )
+                    .body(Body::from(body().to_string()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(malformed.status(), StatusCode::FORBIDDEN);
+
+        // Origen exacto: llega a la verificación y responde credenciales inválidas.
+        let (status, _, response) = send_auth(
+            &router,
+            "/api/v1/auth/login",
+            None,
+            Some("http://127.0.0.1:8080"),
+            Some(body()),
+        )
+        .await;
+        assert_eq!(status, StatusCode::UNAUTHORIZED);
+        assert_eq!(response["code"], "invalid_credentials");
+    }
+
+    #[tokio::test]
+    async fn argon2_saturation_returns_controlled_503_and_recovers() {
+        let pool = open(&isolated_test_url()).await.unwrap();
+        let mut auth_state = test_auth_state(pool.clone());
+        auth_state.argon2_slots = Arc::new(tokio::sync::Semaphore::new(1));
+        let held = auth_state.argon2_slots.clone().try_acquire_owned().unwrap();
+        let router = build_router(state(pool.clone()), false, auth_state);
+        let body = json!({"email":"nadie@example.test","password":"x"});
+        let (status, _, response) = send_auth(
+            &router,
+            "/api/v1/auth/login",
+            None,
+            Some("http://127.0.0.1:8080"),
+            Some(body.clone()),
+        )
+        .await;
+        assert_eq!(status, StatusCode::SERVICE_UNAVAILABLE);
+        assert_eq!(response["code"], "auth_overloaded");
+
+        drop(held);
+        let (status, _, response) = send_auth(
+            &router,
+            "/api/v1/auth/login",
+            None,
+            Some("http://127.0.0.1:8080"),
+            Some(body),
+        )
+        .await;
+        assert_eq!(status, StatusCode::UNAUTHORIZED);
+        assert_eq!(response["code"], "invalid_credentials");
     }
 
     #[tokio::test]

@@ -59,7 +59,7 @@
             }
           },
           "503": {
-            "description": "Almacenamiento no disponible",
+            "description": "Almacenamiento no disponible o verificación saturada (auth_overloaded)",
             "content": {
               "application/json": {
                 "schema": {
