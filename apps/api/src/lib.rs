@@ -15,8 +15,9 @@ use platform_application::{
     RegisterInstallationRequest, SharedRepository, SharedSigner,
 };
 use platform_core::ids::InstallationId;
-use platform_storage_postgres::{open, pool_repository};
+use platform_storage_postgres::{is_ready, open, pool_repository};
 use serde::Serialize;
+use sqlx::PgPool;
 use std::sync::Arc;
 use uuid::Uuid;
 
@@ -25,13 +26,13 @@ pub struct AppState {
     pub service: Arc<PlatformService>,
     pub admin_token: Option<String>,
     pub licensing_enabled: bool,
+    pub db_pool: PgPool,
 }
 
 #[derive(Serialize)]
 struct HealthResponse {
     status: &'static str,
     version: &'static str,
-    database: &'static str,
 }
 
 #[derive(Serialize)]
@@ -44,7 +45,7 @@ fn err(error: AppError) -> (StatusCode, Json<ErrorResponse>) {
     let status = match error {
         AppError::NotFound => StatusCode::NOT_FOUND,
         AppError::Unauthorized | AppError::AdminDisabled => StatusCode::UNAUTHORIZED,
-        AppError::LicensingDisabled => StatusCode::SERVICE_UNAVAILABLE,
+        AppError::LicensingDisabled | AppError::Storage => StatusCode::SERVICE_UNAVAILABLE,
         AppError::Conflict => StatusCode::CONFLICT,
         _ => StatusCode::BAD_REQUEST,
     };
@@ -75,6 +76,7 @@ fn admin_guard(headers: &HeaderMap, token: &Option<String>) -> Result<(), AppErr
 pub fn build_router(state: AppState) -> Router {
     Router::new()
         .route("/health", get(health))
+        .route("/ready", get(ready))
         .route("/api/v1/plans", get(list_plans))
         .route("/api/v1/installations", post(register_installation))
         .route("/api/v1/installations/{id}", get(get_installation))
@@ -84,13 +86,27 @@ pub fn build_router(state: AppState) -> Router {
         .with_state(state)
 }
 
-async fn health(State(state): State<AppState>) -> impl IntoResponse {
-    let _ = &state.service;
+/// Comprueba únicamente que el proceso HTTP responde; no implica disponibilidad de PostgreSQL.
+async fn health() -> impl IntoResponse {
     Json(HealthResponse {
         status: "ok",
         version: env!("CARGO_PKG_VERSION"),
-        database: "up",
     })
+}
+
+/// Ejecuta un roundtrip real a PostgreSQL para determinar si la API puede atender tráfico.
+async fn ready(State(state): State<AppState>) -> impl IntoResponse {
+    if is_ready(&state.db_pool).await {
+        (
+            StatusCode::OK,
+            Json(serde_json::json!({ "status": "ok", "database": "up" })),
+        )
+    } else {
+        (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(serde_json::json!({ "status": "unavailable", "database": "down" })),
+        )
+    }
 }
 
 async fn list_plans(
@@ -183,6 +199,7 @@ async fn list_licenses(
 pub fn documented_paths() -> Vec<&'static str> {
     vec![
         "/health",
+        "/ready",
         "/api/v1/plans",
         "/api/v1/installations",
         "/api/v1/installations/{id}",
@@ -200,12 +217,13 @@ pub async fn run() -> anyhow::Result<()> {
         .json()
         .init();
 
-    let database_url = std::env::var("DATABASE_URL")
-        .unwrap_or_else(|_| "postgres://hiqnet:hiqnet_dev@localhost:5432/hiqnet".to_owned());
+    let database_url = std::env::var("DATABASE_URL")?;
     let pool = open(&database_url).await?;
-    let repository: SharedRepository = Arc::new(pool_repository(pool));
+    let repository: SharedRepository = Arc::new(pool_repository(pool.clone()));
 
-    let signing_key = std::env::var("HIQNET_PLATFORM_SIGNING_KEY_B64").ok();
+    let signing_key = std::env::var("HIQNET_PLATFORM_SIGNING_KEY_B64")
+        .ok()
+        .filter(|value| !value.is_empty());
     let signer = signing_key
         .as_deref()
         .map(platform_licensing::Ed25519Signer::from_seed_base64)
@@ -218,13 +236,16 @@ pub async fn run() -> anyhow::Result<()> {
             .map(|value| value == "true")
             .unwrap_or(false);
 
-    let admin_token = std::env::var("HIQNET_PLATFORM_ADMIN_TOKEN").ok();
+    let admin_token = std::env::var("HIQNET_PLATFORM_ADMIN_TOKEN")
+        .ok()
+        .filter(|value| !value.is_empty());
 
     let service = Arc::new(PlatformService::new(repository, signer));
     let state = AppState {
         service,
         admin_token,
         licensing_enabled,
+        db_pool: pool,
     };
 
     let app = build_router(state);
@@ -236,4 +257,64 @@ pub async fn run() -> anyhow::Result<()> {
     tracing::info!(port, "HiQNet Platform API listening");
     axum::serve(listener, app).await?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::time::Duration;
+
+    fn state(pool: PgPool) -> AppState {
+        AppState {
+            service: Arc::new(PlatformService::new(
+                Arc::new(pool_repository(pool.clone())),
+                None,
+            )),
+            admin_token: None,
+            licensing_enabled: false,
+            db_pool: pool,
+        }
+    }
+
+    #[tokio::test]
+    async fn liveness_does_not_claim_database_health_when_database_is_down() {
+        let pool = sqlx::postgres::PgPoolOptions::new()
+            .acquire_timeout(Duration::from_millis(300))
+            .connect_lazy("postgres://invalid:invalid@127.0.0.1:1/invalid")
+            .unwrap();
+        assert_eq!(health().await.into_response().status(), StatusCode::OK);
+        assert_eq!(
+            ready(State(state(pool))).await.into_response().status(),
+            StatusCode::SERVICE_UNAVAILABLE
+        );
+    }
+
+    #[tokio::test]
+    async fn readiness_uses_real_postgres() {
+        let url = std::env::var("TEST_DATABASE_URL")
+            .expect("TEST_DATABASE_URL debe apuntar a una base aislada de pruebas");
+        let pool = open(&url).await.unwrap();
+        assert_eq!(
+            ready(State(state(pool))).await.into_response().status(),
+            StatusCode::OK
+        );
+    }
+
+    #[test]
+    fn storage_errors_are_not_client_errors() {
+        assert_eq!(err(AppError::Storage).0, StatusCode::SERVICE_UNAVAILABLE);
+    }
+
+    #[test]
+    fn no_admin_token_rejects_even_empty_bearer_header() {
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            axum::http::header::AUTHORIZATION,
+            "Bearer ".parse().unwrap(),
+        );
+        assert!(matches!(
+            admin_guard(&headers, &None),
+            Err(AppError::AdminDisabled)
+        ));
+    }
 }

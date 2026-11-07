@@ -4,19 +4,35 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: "Versión SemVer (ej. 0.2.0-rc.1)"
+        description: "Versión SemVer para simulación (ej. 0.2.0-rc.1); no publica"
         required: true
   push:
     tags:
       - "platform-v*"
 
 permissions:
-  contents: write
-  packages: write
+  contents: read
 
 jobs:
   validate:
-    name: Validación completa
+    name: Validar referencia y versión
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.version.outputs.tag }}
+      prerelease: ${{ steps.version.outputs.prerelease }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validar SemVer y versión del workspace
+        id: version
+        env:
+          RELEASE_EVENT: ${{ github.event_name }}
+          RELEASE_REF: ${{ github.ref }}
+          RELEASE_VERSION: ${{ inputs.version }}
+        run: python3 scripts/validate_release.py >> "$GITHUB_OUTPUT"
+
+  rust:
+    name: Validación Rust
+    needs: validate
     runs-on: ubuntu-latest
     services:
       postgres:
@@ -34,40 +50,40 @@ jobs:
           --health-retries 10
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          components: rustfmt, clippy
+      - name: Usar toolchain fijada en rust-toolchain.toml
+        run: rustup show active-toolchain
       - uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: .
       - run: cargo fmt --all -- --check
       - run: cargo clippy --workspace --all-targets -- -D warnings
+      - name: Crear base efímera de pruebas
+        run: PGPASSWORD=hiqnet_dev psql -h localhost -U hiqnet -d postgres -c 'CREATE DATABASE hiqnet_test'
       - run: cargo test --workspace
         env:
-          DATABASE_URL: postgres://hiqnet:hiqnet_dev@localhost:5432/hiqnet
+          TEST_DATABASE_URL: postgres://hiqnet:hiqnet_dev@localhost:5432/hiqnet_test
 
   docker:
-    name: Imagen Docker versionada
-    needs: validate
+    name: Construir imagen (sin push)
+    needs: [validate, rust]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: docker/setup-buildx-action@v3
-      - name: Construir imagen (sin push automático)
-        run: |
-          docker build -t hiqnet-platform:${{ github.ref_name }} .
-          docker inspect --format='{{.Id}}' hiqnet-platform:${{ github.ref_name }}
+      - run: docker build -t "hiqnet-platform:${RELEASE_TAG}" .
+        env:
+          RELEASE_TAG: ${{ needs.validate.outputs.tag }}
 
   release:
-    name: Publicar GitHub Release
-    needs: [validate, docker]
+    name: Publicar solo al recibir un tag válido
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/platform-v')
+    needs: [validate, rust, docker]
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
       - uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ github.ref_name }}
-          name: HiQNet Platform ${{ github.ref_name }}
-          prerelease: ${{ contains(github.ref_name, '-') }}
+          tag_name: ${{ needs.validate.outputs.tag }}
+          name: HiQNet Platform ${{ needs.validate.outputs.tag }}
+          prerelease: ${{ needs.validate.outputs.prerelease == 'true' }}
           generate_release_notes: true
-EOF
