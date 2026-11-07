@@ -32,9 +32,8 @@ jobs:
           --health-retries 10
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          components: rustfmt, clippy
+      - name: Usar toolchain fijada en rust-toolchain.toml
+        run: rustup show active-toolchain
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: .
@@ -42,21 +41,21 @@ jobs:
         run: cargo fmt --all -- --check
       - name: Clippy
         run: cargo clippy --workspace --all-targets -- -D warnings
-      - name: Pruebas
+      - name: Crear base efímera de pruebas
+        run: PGPASSWORD=hiqnet_dev psql -h localhost -U hiqnet -d postgres -c 'CREATE DATABASE hiqnet_test'
+      - name: Pruebas del workspace y migraciones en BD aislada
         run: cargo test --workspace
         env:
-          DATABASE_URL: postgres://hiqnet:hiqnet_dev@localhost:5432/hiqnet
+          TEST_DATABASE_URL: postgres://hiqnet:hiqnet_dev@localhost:5432/hiqnet_test
       - name: Validar OpenAPI
-        run: python3 -c "import json; d=json.load(open('openapi/openapi.json')); assert d['openapi'].startswith('3.1'); assert '/health' in d['paths']; print('openapi ok')"
+        run: python3 -c "import json; d=json.load(open('openapi/openapi.json')); assert d['openapi'].startswith('3.1'); assert '/health' in d['paths'] and '/ready' in d['paths']; print('openapi ok')"
+      - name: Validar SemVer sin publicar
+        run: python3 -m unittest discover -s scripts -p 'test_*.py'
 
   supply-chain:
     name: Archivos prohibidos
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Verificar archivos prohibidos
-        run: |
-          if git ls-files | grep -Ei '\.(db|sqlite3?|dump)$|^\.env$' ; then
-            echo "Archivos prohibidos detectados"; exit 1
-          fi
-          echo "OK"
+      - name: Verificar archivos prohibidos y claves privadas
+        run: python3 scripts/check_repository.py

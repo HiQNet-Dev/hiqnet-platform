@@ -14,6 +14,15 @@
         }
       }
     },
+    "/ready": {
+      "get": {
+        "summary": "Disponibilidad de PostgreSQL (SELECT 1)",
+        "responses": {
+          "200": { "description": "Conexión a PostgreSQL operativa" },
+          "503": { "description": "PostgreSQL no disponible" }
+        }
+      }
+    },
     "/api/v1/plans": {
       "get": {
         "summary": "Catálogo de planes comerciales",
