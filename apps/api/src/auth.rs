@@ -159,6 +159,17 @@ impl LoginLimiter {
 
     pub fn record(&self, key: &str) {
         if let Ok(mut attempts) = self.attempts.lock() {
+            // Cota de memoria: limpia claves caducadas y, si persiste la presión,
+            // reinicia el limitador antes que crecer sin límite.
+            if attempts.len() >= 4096 {
+                attempts.retain(|_, entries| {
+                    Self::prune(entries, self.window);
+                    !entries.is_empty()
+                });
+                if attempts.len() >= 4096 {
+                    attempts.clear();
+                }
+            }
             let entries = attempts.entry(key.to_owned()).or_default();
             Self::prune(entries, self.window);
             entries.push(Instant::now());

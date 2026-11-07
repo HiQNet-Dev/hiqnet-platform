@@ -55,11 +55,15 @@ pub async fn verify_password(password: String, hash: String) -> bool {
 /// Verificación contra un hash señuelo para igualar tiempos ante cuentas inexistentes.
 pub async fn verify_dummy(password: String) {
     static DUMMY: OnceLock<String> = OnceLock::new();
-    let hash = DUMMY
-        .get_or_init(|| {
-            hash_password_sync("hash-señuelo-sin-uso-real").unwrap_or_else(|_| String::new())
-        })
-        .clone();
+    let hash = tokio::task::spawn_blocking(|| {
+        DUMMY
+            .get_or_init(|| {
+                hash_password_sync("hash-señuelo-sin-uso-real").unwrap_or_else(|_| String::new())
+            })
+            .clone()
+    })
+    .await
+    .unwrap_or_default();
     let _ = verify_password(password, hash).await;
 }
 
