@@ -21,6 +21,16 @@ Rutas existentes (sin query parameters):
 | GET | `/api/v1/installations/{id}/licenses` | Bearer DEV | 200 | UUID inexistente: `[]`; 400 UUID inválido; 503 BD |
 | POST | `/api/v1/installations/{id}/licenses` | Bearer DEV | 201 | 400 plan/vigencia inválidos; 404 no existe; 503 emisión DEV deshabilitada o BD |
 
+Rutas de identidad comercial (P02.2-A), independientes del token DEV anterior:
+
+| Método | Ruta | Autenticación | Éxito | Casos frecuentes |
+| --- | --- | --- | --- | --- |
+| POST | `/api/v1/auth/login` | Credenciales en el cuerpo | 204 + cookie `hiqnet_session` | 401 credenciales/cuenta; 403 origen; 429 rate limit; 503 BD o `auth_overloaded` |
+| POST | `/api/v1/auth/logout` | Cookie de sesión | 204 y cookie borrada | 403 origen; idempotente si no hay sesión |
+| GET | `/api/v1/auth/me` | Cookie de sesión | 200 identidad | 401 sesión ausente/expirada/revocada; 503 BD |
+
+La sesión comercial no es el token DEV ni una identidad POS. El `account_id` de `/me` proviene **solo** de la cookie verificada en PostgreSQL; ningún body, query o encabezado puede elegirlo. Cada login rota sesiones previas y persiste únicamente el hash SHA-256 del token. La cookie es `HttpOnly`, `SameSite=Lax`, `Path=/api` y `Secure` salvo en `HIQNET_PLATFORM_ENV=development` con `HIQNET_PLATFORM_COOKIE_SECURE=false` explícito; el arranque rechaza desactivar `Secure` fuera de development. **En producción toda mutación exige `Origin` exacto** igual a `HIQNET_PLATFORM_ALLOWED_ORIGIN`; `null`, valores múltiples, malformados o ausentes se rechazan. Sólo development admite ausencia de `Origin` para curl/Swagger; sin origen configurado se falla cerrado. La contraseña se protege con Argon2id (m=19456 KiB, t=2, p=1, salt aleatorio) y nunca se registra; `HIQNET_PLATFORM_AUTH_CONCURRENCY` (4 por defecto) acota verificaciones simultáneas y responde 503 `auth_overloaded` bajo saturación.
+
 En todas las rutas protegidas, token ausente, incorrecto o no configurado devuelve 401. Para `POST` se exige `Content-Type: application/json`. Errores de negocio, entrada y almacenamiento devuelven JSON `{"code":"not_found","message":"no se encontró el recurso solicitado"}` (con códigos y mensajes según caso); detalles SQL, claves y trazas no se incluyen. `/ready` devuelve su propio esquema de estado. Las fechas de DTO HTTP usan RFC 3339; `grant_json` y `features_json` son cadenas que contienen JSON serializado. Los identificadores UUID no representan autenticación. No se configura CORS permisivo; no presupongas acceso desde cualquier origen de navegador.
 
 ## Ejemplos DEV
@@ -52,6 +62,33 @@ curl -i http://127.0.0.1:8080/api/v1/installations/123e4567-e89b-42d3-a456-42661
 ```
 
 No repitas el mismo UUID de ejemplo si ya lo registraste: la creación con ID existente en **la misma organización** es idempotente y puede devolver la instalación previa; si el UUID pertenece a otra organización responde 409. Trial sólo puede activarse una vez. Para emitir licencias DEV, además del token se requieren `HIQNET_PLATFORM_ALLOW_DEV_ISSUANCE=true` y una semilla Ed25519 local válida (`HIQNET_PLATFORM_SIGNING_KEY_B64`); por defecto está deshabilitado. Nunca uses una semilla de ejemplo para emitir fuera de pruebas.
+
+## Cuenta sintética y sesión comercial DEV
+
+No existe registro público. Crea una cuenta **sólo local** con el comando de bootstrap; exige `HIQNET_PLATFORM_ENV=development` y `HIQNET_PLATFORM_DEV_BOOTSTRAP=true`, y lee la contraseña por entrada estándar (nunca por argumentos):
+
+```sh
+HIQNET_PLATFORM_ENV=development HIQNET_PLATFORM_DEV_BOOTSTRAP=true \
+  cargo run -p hiqnet-platform-api --bin dev-bootstrap-account -- cuenta@example.test "Cuenta DEV"
+# introduce una contraseña local de al menos 12 caracteres cuando se solicite
+```
+
+En PowerShell, define ambas variables con `$env:` y ejecuta el binario; no pegues la contraseña en el historial. Después:
+
+```sh
+curl -i -c cookies.txt -X POST http://127.0.0.1:8080/api/v1/auth/login \
+  -H 'Content-Type: application/json' \
+  -H 'Origin: http://127.0.0.1:8080' \
+  -d '{"email":"cuenta@example.test","password":"<CONTRASEÑA_DEV_LOCAL>"}'
+# 204 y Set-Cookie: hiqnet_session=...; HttpOnly; Path=/api; SameSite=Lax
+curl -i -b cookies.txt http://127.0.0.1:8080/api/v1/auth/me
+# 200 {"account_id":"...","email":"cuenta@example.test"}
+curl -i -b cookies.txt -X POST http://127.0.0.1:8080/api/v1/auth/logout \
+  -H 'Origin: http://127.0.0.1:8080'
+# 204 y cookie con Max-Age=0
+```
+
+Swagger puede inspeccionar los esquemas; para probar con cookie usa curl o el navegador tras el login. Los ejemplos incluyen `Origin` porque en producción es obligatorio; en development puede omitirse para clientes locales, pero nunca en producción. Una sesión expira según `HIQNET_PLATFORM_SESSION_TTL_HOURS` (1–168, 8 por defecto), se revoca al hacer logout o al iniciar otro login, y deja de servir si la cuenta se deshabilita. El bloqueo por contraseña se activa a los 5 fallos durante 15 minutos; al vencer, el siguiente fallo inicia un ciclo nuevo sin reabrir el bloqueo. Además hay un límite en memoria de 10 intentos por minuto y correo, cota de 4096 claves y un semáforo de verificaciones Argon2id (`HIQNET_PLATFORM_AUTH_CONCURRENCY`); bajo saturación responde 503 `auth_overloaded`. No se confía en `X-Forwarded-For`: el límite por IP y el reparto multiinstancia requieren proxy confiable y almacenamiento compartido, pendientes. La medición de Argon2id es informativa: `cargo test -p platform-application benchmark_argon2id -- --ignored --nocapture`.
 
 ## Pruebas y evolución del contrato
 

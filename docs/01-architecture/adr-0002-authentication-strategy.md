@@ -1,6 +1,6 @@
 # ADR-0002: Estrategia de autenticación comercial para P02.2
 
-**Estado:** propuesto para revisión antes de implementación. **Alcance:** diseño; aún no código ni migraciones.
+**Estado:** ACCEPTED e implementado para P02.2-A. **Implementación:** `feat/platform-commercial-auth-p022a`; detalles en [diseño P02.2](p022-authentication-design.md).
 
 ## Contexto
 
@@ -31,7 +31,7 @@ Justificación: el proyecto es un control plane técnico con despliegue local y 
 - Contraseñas solo como hashes Argon2id. Los parámetros deben ser documentados y ajustados al hardware disponible; no se almacenan contraseñas ni tokens en logs.
 - Sesiones en PostgreSQL con hash de token, expiración, revocación y rotación. Cookies `HttpOnly`, `Secure`, `SameSite=Lax` o `Strict` según el flujo.
 - El actor se deriva únicamente de la sesión verificada; nunca de IDs enviados por cliente.
-- Endpoints de autenticación versionados, con rate limiting, respuestas normalizadas y auditoría de intentos.
+- Endpoints de autenticación versionados, con rate limiting, respuestas normalizadas y auditoría de intentos. En producción las mutaciones exigen `Origin` exacto; sólo development admite clientes sin `Origin`. La concurrencia Argon2id está acotada globalmente por instancia y responde 503 bajo saturación.
 - No se considera autenticación productiva hasta tener recuperación, verificación y pruebas completas.
 
 ## Riesgos pendientes
