@@ -4,7 +4,7 @@ use axum::{
     extract::FromRequestParts,
     http::{HeaderMap, StatusCode, header, request::Parts},
 };
-use platform_application::auth::AuthService;
+use platform_application::auth::{AuthError, AuthService};
 use platform_core::auth::AuthenticatedSession;
 use platform_storage_postgres::PgAuthRepository;
 use std::{
@@ -58,12 +58,19 @@ where
             .service
             .authenticate(&token, time::OffsetDateTime::now_utc())
             .await
-            .map_err(|_| {
-                error(
+            .map_err(|failure| match failure {
+                AuthError::InvalidSession => error(
                     StatusCode::UNAUTHORIZED,
                     "unauthorized",
                     "sesión inválida o expirada",
-                )
+                ),
+                // Fallo de almacenamiento: no se presenta como sesión inválida
+                // ni se exponen detalles internos.
+                _ => error(
+                    StatusCode::SERVICE_UNAVAILABLE,
+                    "storage_error",
+                    "no fue posible verificar la sesión",
+                ),
             })?;
         Ok(Self { session })
     }

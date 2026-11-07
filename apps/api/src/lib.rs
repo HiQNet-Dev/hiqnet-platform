@@ -1555,6 +1555,52 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn auth_context_distinguishes_invalid_session_from_storage_outage() {
+        let unavailable = sqlx::postgres::PgPoolOptions::new()
+            .acquire_timeout(Duration::from_millis(300))
+            .connect_lazy("postgres://invalid:invalid@127.0.0.1:1/invalid")
+            .unwrap();
+        let router = build_router(
+            state(unavailable.clone()),
+            false,
+            test_auth_state(unavailable),
+        );
+        let outage = router
+            .oneshot(
+                Request::builder()
+                    .uri("/api/v1/auth/me")
+                    .header(header::COOKIE, "hiqnet_session=token-sintetico")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(outage.status(), StatusCode::SERVICE_UNAVAILABLE);
+        let bytes = to_bytes(outage.into_body(), 1024 * 1024).await.unwrap();
+        let body: Value = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(body["code"], "storage_error");
+        assert!(!body.to_string().contains("postgres://"));
+        assert!(!body.to_string().contains("SELECT"));
+
+        let pool = open(&isolated_test_url()).await.unwrap();
+        let router = build_router(state(pool.clone()), false, test_auth_state(pool));
+        let invalid = router
+            .oneshot(
+                Request::builder()
+                    .uri("/api/v1/auth/me")
+                    .header(header::COOKIE, "hiqnet_session=token-sintetico")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(invalid.status(), StatusCode::UNAUTHORIZED);
+        let bytes = to_bytes(invalid.into_body(), 1024 * 1024).await.unwrap();
+        let body: Value = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(body["code"], "unauthorized");
+    }
+
+    #[tokio::test]
     async fn login_rate_limit_blocks_repeated_attempts() {
         let pool = open(&isolated_test_url()).await.unwrap();
         let email = format!("rate-{}@example.test", Uuid::new_v4());
