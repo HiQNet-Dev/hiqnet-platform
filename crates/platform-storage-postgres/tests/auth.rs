@@ -1,9 +1,12 @@
 use platform_application::{
-    auth::{AuthRepository as _, AuthService},
+    auth::{AuthRepository as _, AuthService, LoginOutcome},
     commercial::CommercialService,
-    security::{hash_password, hash_token},
+    security::{generate_session_token, hash_password, hash_token},
 };
-use platform_core::{auth::CommercialCredential, commercial::CommercialAccount};
+use platform_core::{
+    auth::{AuthenticatedSession, CommercialCredential},
+    commercial::CommercialAccount,
+};
 use platform_storage_postgres::{PgAuthRepository, PgCommercialRepository, open};
 use sqlx::PgPool;
 use time::{Duration, OffsetDateTime};
@@ -722,6 +725,187 @@ async fn concurrent_logins_preserve_single_session_policy() {
         one_valid ^ two_valid,
         "sólo la última sesión debe ser válida"
     );
+}
+
+#[tokio::test]
+async fn login_verified_before_password_change_cannot_create_session() {
+    let pool = open(&isolated_url("TEST_DATABASE_URL")).await.unwrap();
+    let initial = "contraseña-inicial-1";
+    let new_password = "nueva-clave-segura-2026";
+    let (account, email) = account_with_password(&pool, initial).await;
+    let auth = service(&pool);
+    let now = OffsetDateTime::now_utc();
+
+    // Hash que un login habría verificado con Argon2id antes del cambio.
+    let repository = PgAuthRepository::new(pool.clone());
+    let verified_hash = repository
+        .get_credential(account.id)
+        .await
+        .unwrap()
+        .unwrap()
+        .password_hash;
+
+    let session = auth
+        .login(&email, initial, now, Duration::hours(1))
+        .await
+        .unwrap();
+    let current_session_id = session_id(&auth, &session.token, now).await;
+    auth.change_password(
+        account.id,
+        current_session_id,
+        initial,
+        new_password,
+        now + Duration::seconds(1),
+        Duration::hours(1),
+    )
+    .await
+    .unwrap();
+
+    let success_before: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM commercial_auth_event WHERE account_id = $1 AND action = 'login_success'",
+    )
+    .bind(account.id.as_uuid())
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+
+    let (token, token_hash) = generate_session_token();
+    let candidate = AuthenticatedSession {
+        session_id: Uuid::new_v4(),
+        account_id: account.id,
+        created_at: now + Duration::seconds(2),
+        expires_at: now + Duration::seconds(2) + Duration::hours(1),
+    };
+    let outcome = repository
+        .rotate_session(&verified_hash, &candidate, &token_hash)
+        .await
+        .unwrap();
+    assert_eq!(outcome, LoginOutcome::CredentialChanged);
+    assert!(
+        auth.authenticate(&token, now + Duration::seconds(2))
+            .await
+            .is_err(),
+        "no debe existir sesión creada con el hash anterior"
+    );
+    let success_after: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM commercial_auth_event WHERE account_id = $1 AND action = 'login_success'",
+    )
+    .bind(account.id.as_uuid())
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(success_before, success_after, "sin login_success parcial");
+
+    assert!(
+        auth.login(
+            &email,
+            new_password,
+            now + Duration::seconds(3),
+            Duration::hours(1)
+        )
+        .await
+        .is_ok()
+    );
+}
+
+#[tokio::test]
+async fn login_revalidates_disabled_account_and_lock_inside_transaction() {
+    let pool = open(&isolated_url("TEST_DATABASE_URL")).await.unwrap();
+    let initial = "contraseña-inicial-1";
+    let (account, email) = account_with_password(&pool, initial).await;
+    let auth = service(&pool);
+    let repository = PgAuthRepository::new(pool.clone());
+    let now = OffsetDateTime::now_utc();
+    let verified_hash = repository
+        .get_credential(account.id)
+        .await
+        .unwrap()
+        .unwrap()
+        .password_hash;
+
+    sqlx::query("UPDATE commercial_credential SET locked_until = $2 WHERE account_id = $1")
+        .bind(account.id.as_uuid())
+        .bind(now + Duration::minutes(10))
+        .execute(&pool)
+        .await
+        .unwrap();
+    let (_, token_hash) = generate_session_token();
+    let candidate = AuthenticatedSession {
+        session_id: Uuid::new_v4(),
+        account_id: account.id,
+        created_at: now,
+        expires_at: now + Duration::hours(1),
+    };
+    assert_eq!(
+        repository
+            .rotate_session(&verified_hash, &candidate, &token_hash)
+            .await
+            .unwrap(),
+        LoginOutcome::Locked
+    );
+
+    sqlx::query("UPDATE commercial_credential SET locked_until = NULL WHERE account_id = $1")
+        .bind(account.id.as_uuid())
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query("UPDATE commercial_account SET status = 'disabled' WHERE id = $1")
+        .bind(account.id.as_uuid())
+        .execute(&pool)
+        .await
+        .unwrap();
+    let (_, token_hash) = generate_session_token();
+    assert_eq!(
+        repository
+            .rotate_session(&verified_hash, &candidate, &token_hash)
+            .await
+            .unwrap(),
+        LoginOutcome::AccountUnavailable
+    );
+    assert!(
+        auth.login(&email, initial, now, Duration::hours(1))
+            .await
+            .is_err()
+    );
+}
+
+#[tokio::test]
+async fn rotation_uses_database_clock_after_waiting_for_lock() {
+    let pool = open(&isolated_url("TEST_DATABASE_URL")).await.unwrap();
+    let initial = "contraseña-inicial-1";
+    let (account, email) = account_with_password(&pool, initial).await;
+    let auth = service(&pool);
+    let now = OffsetDateTime::now_utc();
+    let first = auth
+        .login(&email, initial, now, Duration::hours(1))
+        .await
+        .unwrap();
+    let repository = PgAuthRepository::new(pool.clone());
+    let hash = repository
+        .get_credential(account.id)
+        .await
+        .unwrap()
+        .unwrap()
+        .password_hash;
+
+    // Simula un timestamp capturado antes de esperar el bloqueo: es anterior a
+    // la creación de la sesión vigente. El repositorio debe usar now() de
+    // PostgreSQL para revocar y crear, no este valor obsoleto.
+    let stale_created = now - Duration::hours(1);
+    let (token, token_hash) = generate_session_token();
+    let candidate = AuthenticatedSession {
+        session_id: Uuid::new_v4(),
+        account_id: account.id,
+        created_at: stale_created,
+        expires_at: stale_created + Duration::hours(2),
+    };
+    let outcome = repository
+        .rotate_session(&hash, &candidate, &token_hash)
+        .await
+        .unwrap();
+    assert!(matches!(outcome, LoginOutcome::Rotated { .. }));
+    assert!(auth.authenticate(&first.token, now).await.is_err());
+    assert!(auth.authenticate(&token, now).await.is_ok());
 }
 
 #[tokio::test]

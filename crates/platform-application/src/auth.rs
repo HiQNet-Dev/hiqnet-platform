@@ -21,12 +21,25 @@ use crate::security::{
 /// Resultado del cambio de contraseña dentro de la transacción.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PasswordChangeOutcome {
-    /// Credencial y sesión actualizadas.
-    Updated,
+    /// Credencial y sesión actualizadas; expiración real de la nueva sesión.
+    Updated { expires_at: OffsetDateTime },
     /// La sesión presentada ya no era válida al adquirir el bloqueo.
     SessionInvalid,
     /// Otra operación modificó el hash antes de este cambio.
     CredentialChanged,
+}
+
+/// Resultado de la rotación de login tras revalidar credencial y bloqueo.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LoginOutcome {
+    /// Sesión emitida; expiración calculada con el reloj de PostgreSQL.
+    Rotated { expires_at: OffsetDateTime },
+    /// El hash verificado ya no es el vigente.
+    CredentialChanged,
+    /// Cuenta inexistente o deshabilitada al adquirir el bloqueo.
+    AccountUnavailable,
+    /// Bloqueo temporal activo al adquirir el bloqueo.
+    Locked,
 }
 
 #[async_trait]
@@ -52,13 +65,15 @@ pub trait AuthRepository: Send + Sync {
         now: OffsetDateTime,
     ) -> AuthResult<bool>;
     async fn clear_failures(&self, account_id: CommercialAccountId) -> AuthResult<()>;
-    /// Rota la sesión de forma atómica: bloquea la cuenta, revoca las sesiones
-    /// previas, crea la nueva y audita `login_success`.
+    /// Rota la sesión de forma atómica. Dentro del bloqueo revalida que el hash
+    /// verificado siga vigente, que la cuenta esté activa y sin bloqueo; sólo
+    /// entonces revoca, crea la sesión y audita `login_success`.
     async fn rotate_session(
         &self,
+        expected_hash: &str,
         session: &AuthenticatedSession,
         token_hash: &[u8],
-    ) -> AuthResult<bool>;
+    ) -> AuthResult<LoginOutcome>;
     async fn get_session(
         &self,
         token_hash: &[u8],
@@ -161,7 +176,7 @@ impl<R: AuthRepository> AuthService<R> {
             return Err(AuthError::InvalidCredentials);
         }
 
-        if !verify_password(password.to_owned(), credential.password_hash).await {
+        if !verify_password(password.to_owned(), credential.password_hash.clone()).await {
             let locked = self
                 .repository
                 .register_failure(identity.account_id, now)
@@ -178,8 +193,6 @@ impl<R: AuthRepository> AuthService<R> {
             return Err(AuthError::InvalidCredentials);
         }
 
-        self.repository.clear_failures(identity.account_id).await?;
-
         let (token, token_hash) = generate_session_token();
         let session = AuthenticatedSession {
             session_id: uuid::Uuid::new_v4(),
@@ -187,18 +200,32 @@ impl<R: AuthRepository> AuthService<R> {
             created_at: now,
             expires_at: now + ttl,
         };
-        // Rotación y auditoría atómicas, serializadas por cuenta.
-        if !self
+        // Rotación y auditoría atómicas. El repositorio revalida que el hash
+        // verificado siga vigente, la cuenta activa y el bloqueo.
+        match self
             .repository
-            .rotate_session(&session, &token_hash)
+            .rotate_session(&credential.password_hash, &session, &token_hash)
             .await?
         {
-            return Err(AuthError::InvalidCredentials);
+            LoginOutcome::Rotated { expires_at } => Ok(IssuedSession { token, expires_at }),
+            outcome => {
+                let reason = match outcome {
+                    LoginOutcome::CredentialChanged => "credential_changed",
+                    LoginOutcome::AccountUnavailable => "account_unavailable",
+                    LoginOutcome::Locked => "locked",
+                    LoginOutcome::Rotated { .. } => "unexpected",
+                };
+                self.repository
+                    .record_event(
+                        Some(identity.account_id),
+                        "login_failure",
+                        now,
+                        serde_json::json!({"reason": reason}),
+                    )
+                    .await?;
+                Err(AuthError::InvalidCredentials)
+            }
         }
-        Ok(IssuedSession {
-            token,
-            expires_at: session.expires_at,
-        })
     }
 
     /// Revoca la sesión del token presentado. Idempotente y sin filtrar existencia.
@@ -306,10 +333,9 @@ impl<R: AuthRepository> AuthService<R> {
             )
             .await?
         {
-            PasswordChangeOutcome::Updated => Ok(IssuedSession {
-                token,
-                expires_at: session.expires_at,
-            }),
+            PasswordChangeOutcome::Updated { expires_at } => {
+                Ok(IssuedSession { token, expires_at })
+            }
             PasswordChangeOutcome::SessionInvalid => Err(AuthError::InvalidSession),
             PasswordChangeOutcome::CredentialChanged => Err(AuthError::Conflict),
         }
