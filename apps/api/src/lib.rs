@@ -119,6 +119,8 @@ fn api_routes() -> (Router<AppState>, OpenApiDocument) {
         .routes(routes!(login))
         .routes(routes!(logout))
         .routes(routes!(me))
+        .routes(routes!(change_password))
+        .routes(routes!(revoke_sessions))
         .split_for_parts();
     document.info = Info::new("HiQNet Platform API", env!("CARGO_PKG_VERSION"));
     document.info.description = Some("Plano de control técnico; sin identidad comercial, facturación ni sincronización productivas. El token administrativo es temporal y exclusivo de desarrollo.".into());
@@ -373,6 +375,16 @@ fn auth_error(error: platform_application::auth::AuthError) -> HttpError {
             "invalid_credentials",
             "credenciales inválidas",
         ),
+        AuthError::WeakPassword => auth::error(
+            StatusCode::BAD_REQUEST,
+            "weak_password",
+            "la nueva contraseña no cumple la política",
+        ),
+        AuthError::Conflict => auth::error(
+            StatusCode::CONFLICT,
+            "password_change_conflict",
+            "la credencial cambió durante la operación; inicia sesión de nuevo",
+        ),
         AuthError::RateLimited => auth::error(
             StatusCode::TOO_MANY_REQUESTS,
             "rate_limited",
@@ -527,6 +539,130 @@ async fn me(
         account_id: identity.account_id.as_uuid(),
         email: identity.email,
     }))
+}
+
+#[derive(serde::Deserialize, utoipa::ToSchema)]
+pub struct ChangePasswordRequest {
+    #[schema(example = "contraseña-actual-larga")]
+    pub current_password: String,
+    #[schema(example = "nueva-contraseña-2026")]
+    pub new_password: String,
+}
+
+/// Cambia la contraseña de la cuenta autenticada y rota todas sus sesiones.
+#[utoipa::path(post, path = "/api/v1/auth/password/change", operation_id = "changePassword", tag = "Autenticación",
+    request_body(content = ChangePasswordRequest, description = "Contraseña actual y nueva; la nueva debe tener 12–128 caracteres, al menos una letra y un dígito"),
+    security(("commercialSession" = [])),
+    responses(
+        (status = 204, description = "Contraseña cambiada; sesiones anteriores revocadas y nueva cookie emitida"),
+        (status = 400, description = "Contraseña nueva débil o igual a la actual", body = ErrorResponse),
+        (status = 401, description = "Sesión inválida o contraseña actual incorrecta", body = ErrorResponse),
+        (status = 403, description = "Origen no permitido", body = ErrorResponse),
+        (status = 409, description = "Cambio concurrente detectado", body = ErrorResponse),
+        (status = 429, description = "Demasiados intentos", body = ErrorResponse),
+        (status = 503, description = "Almacenamiento o verificación no disponibles", body = ErrorResponse)))]
+async fn change_password(
+    axum::Extension(auth_state): axum::Extension<AuthState>,
+    auth_context: AuthContext,
+    headers: HeaderMap,
+    Json(request): Json<ChangePasswordRequest>,
+) -> Result<impl IntoResponse, HttpError> {
+    if !auth::origin_allowed(&headers, &auth_state) {
+        return Err(auth::error(
+            StatusCode::FORBIDDEN,
+            "origin_not_allowed",
+            "origen no permitido",
+        ));
+    }
+    let key = format!("password-change:{}", auth_context.session.account_id);
+    if auth_state.limiter.is_limited(&key) {
+        return Err(auth_error(
+            platform_application::auth::AuthError::RateLimited,
+        ));
+    }
+    let _permit = auth_state
+        .argon2_slots
+        .clone()
+        .try_acquire_owned()
+        .map_err(|_| {
+            auth::error(
+                StatusCode::SERVICE_UNAVAILABLE,
+                "auth_overloaded",
+                "servicio de autenticación ocupado; reintenta más tarde",
+            )
+        })?;
+    let issued = match auth_state
+        .service
+        .change_password(
+            auth_context.session.account_id,
+            &request.current_password,
+            &request.new_password,
+            time::OffsetDateTime::now_utc(),
+            auth_state.session_ttl,
+        )
+        .await
+    {
+        Ok(issued) => issued,
+        Err(error) => {
+            if matches!(
+                error,
+                platform_application::auth::AuthError::InvalidCredentials
+            ) {
+                auth_state.limiter.record(&key);
+            }
+            return Err(auth_error(error));
+        }
+    };
+    auth_state.limiter.reset(&key);
+    let cookie = auth::session_cookie(
+        &auth_state,
+        &issued.token,
+        std::time::Duration::from_secs(auth_state.session_ttl.whole_seconds().max(0) as u64),
+    );
+    let mut response = StatusCode::NO_CONTENT.into_response();
+    response.headers_mut().insert(
+        axum::http::header::SET_COOKIE,
+        axum::http::HeaderValue::from_str(&cookie)
+            .map_err(|_| auth_error(platform_application::auth::AuthError::Storage))?,
+    );
+    Ok(response)
+}
+
+/// Revoca todas las sesiones de la cuenta autenticada, incluida la actual.
+#[utoipa::path(post, path = "/api/v1/auth/sessions/revoke", operation_id = "revokeSessions", tag = "Autenticación",
+    security(("commercialSession" = [])),
+    responses(
+        (status = 204, description = "Todas las sesiones revocadas y cookie eliminada"),
+        (status = 401, description = "Sesión inválida o cuenta deshabilitada", body = ErrorResponse),
+        (status = 403, description = "Origen no permitido", body = ErrorResponse),
+        (status = 503, description = "Almacenamiento no disponible", body = ErrorResponse)))]
+async fn revoke_sessions(
+    axum::Extension(auth_state): axum::Extension<AuthState>,
+    auth_context: AuthContext,
+    headers: HeaderMap,
+) -> Result<impl IntoResponse, HttpError> {
+    if !auth::origin_allowed(&headers, &auth_state) {
+        return Err(auth::error(
+            StatusCode::FORBIDDEN,
+            "origin_not_allowed",
+            "origen no permitido",
+        ));
+    }
+    auth_state
+        .service
+        .revoke_all_sessions(
+            auth_context.session.account_id,
+            time::OffsetDateTime::now_utc(),
+        )
+        .await
+        .map_err(auth_error)?;
+    let mut response = StatusCode::NO_CONTENT.into_response();
+    response.headers_mut().insert(
+        axum::http::header::SET_COOKIE,
+        axum::http::HeaderValue::from_str(&auth::clear_cookie(&auth_state))
+            .map_err(|_| auth_error(platform_application::auth::AuthError::Storage))?,
+    );
+    Ok(response)
 }
 
 pub async fn run() -> anyhow::Result<()> {
@@ -770,6 +906,8 @@ mod tests {
             ("/api/v1/auth/login", "post"),
             ("/api/v1/auth/logout", "post"),
             ("/api/v1/auth/me", "get"),
+            ("/api/v1/auth/password/change", "post"),
+            ("/api/v1/auth/sessions/revoke", "post"),
         ];
         let actual: Vec<(&str, &str)> = current["paths"]
             .as_object()
@@ -798,7 +936,13 @@ mod tests {
                 assert_eq!(operation["security"], json!([{"devAdminToken": []}]));
             } else if path == "/api/v1/auth/login" {
                 assert!(operation.get("security").is_none());
-            } else if path == "/api/v1/auth/logout" || path == "/api/v1/auth/me" {
+            } else if matches!(
+                path,
+                "/api/v1/auth/logout"
+                    | "/api/v1/auth/me"
+                    | "/api/v1/auth/password/change"
+                    | "/api/v1/auth/sessions/revoke"
+            ) {
                 assert_eq!(operation["security"], json!([{"commercialSession": []}]));
             } else {
                 assert!(operation.get("security").is_none());
@@ -1598,6 +1742,218 @@ mod tests {
         let bytes = to_bytes(invalid.into_body(), 1024 * 1024).await.unwrap();
         let body: Value = serde_json::from_slice(&bytes).unwrap();
         assert_eq!(body["code"], "unauthorized");
+    }
+
+    #[tokio::test]
+    async fn password_change_rotates_cookie_and_revokes_previous_session() {
+        let pool = open(&isolated_test_url()).await.unwrap();
+        let email = format!("pwc-{}@example.test", Uuid::new_v4());
+        let initial = "contraseña-inicial-1";
+        let new_password = "nueva-clave-segura-2026";
+        seed_credential(&pool, &email, initial).await;
+        let router = build_router(state(pool.clone()), false, test_auth_state(pool.clone()));
+        let origin = Some("http://127.0.0.1:8080");
+
+        let (status, headers, _) = send_auth(
+            &router,
+            "/api/v1/auth/login",
+            None,
+            origin,
+            Some(json!({"email": email, "password": initial})),
+        )
+        .await;
+        assert_eq!(status, StatusCode::NO_CONTENT);
+        let old_cookie = session_from(&headers);
+
+        let (status, _, body) = send_auth(
+            &router,
+            "/api/v1/auth/password/change",
+            Some(&old_cookie),
+            origin,
+            Some(json!({"current_password": "incorrecta", "new_password": new_password})),
+        )
+        .await;
+        assert_eq!(status, StatusCode::UNAUTHORIZED);
+        assert_eq!(body["code"], "invalid_credentials");
+
+        let (status, _, body) = send_auth(
+            &router,
+            "/api/v1/auth/password/change",
+            Some(&old_cookie),
+            origin,
+            Some(json!({"current_password": initial, "new_password": "corta1"})),
+        )
+        .await;
+        assert_eq!(status, StatusCode::BAD_REQUEST);
+        assert_eq!(body["code"], "weak_password");
+
+        let (status, headers, _) = send_auth(
+            &router,
+            "/api/v1/auth/password/change",
+            Some(&old_cookie),
+            origin,
+            Some(json!({"current_password": initial, "new_password": new_password})),
+        )
+        .await;
+        assert_eq!(status, StatusCode::NO_CONTENT);
+        let new_cookie = session_from(&headers);
+        assert_ne!(old_cookie, new_cookie);
+
+        let old_me = router
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri("/api/v1/auth/me")
+                    .header(header::COOKIE, &old_cookie)
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(old_me.status(), StatusCode::UNAUTHORIZED);
+        let new_me = router
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri("/api/v1/auth/me")
+                    .header(header::COOKIE, &new_cookie)
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(new_me.status(), StatusCode::OK);
+
+        let (status, _, _) = send_auth(
+            &router,
+            "/api/v1/auth/login",
+            None,
+            origin,
+            Some(json!({"email": email, "password": initial})),
+        )
+        .await;
+        assert_eq!(status, StatusCode::UNAUTHORIZED, "hash anterior invalidado");
+        let (status, _, _) = send_auth(
+            &router,
+            "/api/v1/auth/login",
+            None,
+            origin,
+            Some(json!({"email": email, "password": new_password})),
+        )
+        .await;
+        assert_eq!(status, StatusCode::NO_CONTENT);
+    }
+
+    #[tokio::test]
+    async fn session_revoke_requires_origin_and_invalidates_current_cookie() {
+        let pool = open(&isolated_test_url()).await.unwrap();
+        let email = format!("revoke-{}@example.test", Uuid::new_v4());
+        let password = "contraseña-inicial-1";
+        seed_credential(&pool, &email, password).await;
+        let router = build_router(state(pool.clone()), false, test_auth_state(pool.clone()));
+        let origin = Some("http://127.0.0.1:8080");
+
+        let (status, headers, _) = send_auth(
+            &router,
+            "/api/v1/auth/login",
+            None,
+            origin,
+            Some(json!({"email": email, "password": password})),
+        )
+        .await;
+        assert_eq!(status, StatusCode::NO_CONTENT);
+        let cookie = session_from(&headers);
+
+        let (status, _, _) = send_auth(
+            &router,
+            "/api/v1/auth/sessions/revoke",
+            Some(&cookie),
+            Some("https://evil.example"),
+            None,
+        )
+        .await;
+        assert_eq!(status, StatusCode::FORBIDDEN);
+
+        let (status, headers, _) = send_auth(
+            &router,
+            "/api/v1/auth/sessions/revoke",
+            Some(&cookie),
+            origin,
+            None,
+        )
+        .await;
+        assert_eq!(status, StatusCode::NO_CONTENT);
+        assert!(
+            headers
+                .get(header::SET_COOKIE)
+                .unwrap()
+                .to_str()
+                .unwrap()
+                .contains("Max-Age=0")
+        );
+
+        let after = router
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri("/api/v1/auth/me")
+                    .header(header::COOKIE, &cookie)
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(after.status(), StatusCode::UNAUTHORIZED);
+
+        let (status, _, _) =
+            send_auth(&router, "/api/v1/auth/sessions/revoke", None, origin, None).await;
+        assert_eq!(status, StatusCode::UNAUTHORIZED);
+    }
+
+    #[tokio::test]
+    async fn password_change_is_rate_limited() {
+        let pool = open(&isolated_test_url()).await.unwrap();
+        let email = format!("pwrate-{}@example.test", Uuid::new_v4());
+        let password = "contraseña-inicial-1";
+        seed_credential(&pool, &email, password).await;
+        let mut auth_state = test_auth_state(pool.clone());
+        auth_state.limiter = Arc::new(auth::LoginLimiter::new(
+            1,
+            std::time::Duration::from_secs(60),
+        ));
+        let router = build_router(state(pool.clone()), false, auth_state);
+        let origin = Some("http://127.0.0.1:8080");
+        let (status, headers, _) = send_auth(
+            &router,
+            "/api/v1/auth/login",
+            None,
+            origin,
+            Some(json!({"email": email, "password": password})),
+        )
+        .await;
+        assert_eq!(status, StatusCode::NO_CONTENT);
+        let cookie = session_from(&headers);
+        let body =
+            json!({"current_password": "incorrecta", "new_password": "nueva-clave-segura-2026"});
+        let (status, _, _) = send_auth(
+            &router,
+            "/api/v1/auth/password/change",
+            Some(&cookie),
+            origin,
+            Some(body.clone()),
+        )
+        .await;
+        assert_eq!(status, StatusCode::UNAUTHORIZED);
+        let (status, _, response) = send_auth(
+            &router,
+            "/api/v1/auth/password/change",
+            Some(&cookie),
+            origin,
+            Some(body),
+        )
+        .await;
+        assert_eq!(status, StatusCode::TOO_MANY_REQUESTS);
+        assert_eq!(response["code"], "rate_limited");
     }
 
     #[tokio::test]

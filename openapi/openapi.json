@@ -146,6 +146,145 @@
         ]
       }
     },
+    "/api/v1/auth/password/change": {
+      "post": {
+        "tags": [
+          "Autenticación"
+        ],
+        "summary": "Cambia la contraseña de la cuenta autenticada y rota todas sus sesiones.",
+        "operationId": "changePassword",
+        "requestBody": {
+          "description": "Contraseña actual y nueva; la nueva debe tener 12–128 caracteres, al menos una letra y un dígito",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChangePasswordRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "Contraseña cambiada; sesiones anteriores revocadas y nueva cookie emitida"
+          },
+          "400": {
+            "description": "Contraseña nueva débil o igual a la actual",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sesión inválida o contraseña actual incorrecta",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Origen no permitido",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Cambio concurrente detectado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Demasiados intentos",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Almacenamiento o verificación no disponibles",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "commercialSession": []
+          }
+        ]
+      }
+    },
+    "/api/v1/auth/sessions/revoke": {
+      "post": {
+        "tags": [
+          "Autenticación"
+        ],
+        "summary": "Revoca todas las sesiones de la cuenta autenticada, incluida la actual.",
+        "operationId": "revokeSessions",
+        "responses": {
+          "204": {
+            "description": "Todas las sesiones revocadas y cookie eliminada"
+          },
+          "401": {
+            "description": "Sesión inválida o cuenta deshabilitada",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Origen no permitido",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Almacenamiento no disponible",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "commercialSession": []
+          }
+        ]
+      }
+    },
     "/api/v1/installations": {
       "post": {
         "tags": [
@@ -699,6 +838,23 @@
   },
   "components": {
     "schemas": {
+      "ChangePasswordRequest": {
+        "type": "object",
+        "required": [
+          "current_password",
+          "new_password"
+        ],
+        "properties": {
+          "current_password": {
+            "type": "string",
+            "example": "contraseña-actual-larga"
+          },
+          "new_password": {
+            "type": "string",
+            "example": "nueva-contraseña-2026"
+          }
+        }
+      },
       "ErrorResponse": {
         "type": "object",
         "required": [
