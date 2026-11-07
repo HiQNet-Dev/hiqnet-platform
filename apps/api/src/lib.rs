@@ -15,7 +15,7 @@ use platform_application::{
     RegisterInstallationRequest, SharedRepository, SharedSigner,
 };
 use platform_core::ids::InstallationId;
-use platform_storage_postgres::{open, pool_repository};
+use platform_storage_postgres::{is_ready, open, pool_repository};
 use serde::Serialize;
 use sqlx::PgPool;
 use std::sync::Arc;
@@ -96,18 +96,16 @@ async fn health() -> impl IntoResponse {
 
 /// Ejecuta un roundtrip real a PostgreSQL para determinar si la API puede atender tráfico.
 async fn ready(State(state): State<AppState>) -> impl IntoResponse {
-    match sqlx::query_scalar::<_, i32>("SELECT 1")
-        .fetch_one(&state.db_pool)
-        .await
-    {
-        Ok(1) => (
+    if is_ready(&state.db_pool).await {
+        (
             StatusCode::OK,
             Json(serde_json::json!({ "status": "ok", "database": "up" })),
-        ),
-        _ => (
+        )
+    } else {
+        (
             StatusCode::SERVICE_UNAVAILABLE,
             Json(serde_json::json!({ "status": "unavailable", "database": "down" })),
-        ),
+        )
     }
 }
 

@@ -32,6 +32,16 @@ pub fn pool_repository(pool: PgPool) -> PgRepository {
     PgRepository::new(pool)
 }
 
+/// Un fallo en el roundtrip indica indisponibilidad; no se filtran errores de conexión al cliente.
+pub async fn is_ready(pool: &PgPool) -> bool {
+    matches!(
+        sqlx::query_scalar::<_, i32>("SELECT 1")
+            .fetch_one(pool)
+            .await,
+        Ok(1)
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
