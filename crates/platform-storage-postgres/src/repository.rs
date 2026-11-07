@@ -44,7 +44,10 @@ impl PlatformRepository for PgRepository {
         .bind(installation.trial_ends_at)
         .fetch_optional(&self.pool)
         .await
-        .map_err(|_| AppError::Storage)?;
+        .map_err(|error| match error {
+            sqlx::Error::Database(db) if db.is_unique_violation() => AppError::Conflict,
+            _ => AppError::Storage,
+        })?;
 
         if result.is_none() {
             let existing = sqlx::query(
@@ -78,7 +81,7 @@ impl PlatformRepository for PgRepository {
     ) -> AppResult<Installation> {
         let mut installation = self.get_installation(id).await?.ok_or(AppError::NotFound)?;
         installation.start_trial(now).map_err(AppError::Domain)?;
-        sqlx::query(
+        let result = sqlx::query(
             "UPDATE installation\n             SET trial_started_at = $2, trial_ends_at = $3, last_seen_at = $4\n             WHERE id = $1 AND trial_started_at IS NULL",
         )
         .bind(id.as_uuid())
@@ -88,12 +91,15 @@ impl PlatformRepository for PgRepository {
         .execute(&self.pool)
         .await
         .map_err(|_| AppError::Storage)?;
+        if result.rows_affected() == 0 {
+            return Err(AppError::Conflict);
+        }
         Ok(installation)
     }
 
     async fn record_license(&self, license: &IssuedLicense) -> AppResult<()> {
         sqlx::query(
-            "INSERT INTO issued_license\n             (grant_id, installation_id, organization_id, plan, features_json,\n              issued_at, valid_until, grant_json, signature_b64)\n             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)",
+            "INSERT INTO issued_license\n             (grant_id, installation_id, organization_id, plan, features_json,\n              issued_at, valid_until, grant_json, signature_b64)\n             VALUES ($1, $2, $3, $4, $5::jsonb, $6, $7, $8, $9)",
         )
         .bind(license.grant_id.as_uuid())
         .bind(license.installation_id.as_uuid())
@@ -115,7 +121,7 @@ impl PlatformRepository for PgRepository {
         installation_id: InstallationId,
     ) -> AppResult<Vec<IssuedLicense>> {
         let rows = sqlx::query(
-            "SELECT grant_id, installation_id, organization_id, plan, features_json,\n                    issued_at, valid_until, grant_json, signature_b64\n             FROM issued_license\n             WHERE installation_id = $1\n             ORDER BY issued_at DESC",
+            "SELECT grant_id, installation_id, organization_id, plan, features_json::text AS features_json,\n                    issued_at, valid_until, grant_json, signature_b64\n             FROM issued_license\n             WHERE installation_id = $1\n             ORDER BY issued_at DESC",
         )
         .bind(installation_id.as_uuid())
         .fetch_all(&self.pool)

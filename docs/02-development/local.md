@@ -1,4 +1,4 @@
-# Desarrollo local de Platform (P00)
+# Desarrollo local de Platform
 
 ## Preparación
 
@@ -18,6 +18,8 @@ Comprueba `docker version`, `docker compose version`, `cargo --version` y que lo
 También puedes iniciar `cargo run -p hiqnet-platform-api` desde el host usando `DATABASE_URL` de `.env`, siempre que el puerto 8080 esté libre (detén el servicio `api` de Compose antes). La API no arranca sin `DATABASE_URL`. Usa `docker compose exec postgres psql -U hiqnet -d hiqnet` para consultar; ajusta usuario/BD a `.env`. Inspecciona `\dt`, `SELECT version, success FROM _sqlx_migrations;` y `SELECT table_name FROM information_schema.tables WHERE table_schema='public';`.
 
 La migración `0001_init.sql` crea `installation` (ID, organización UUID, etiqueta única por organización, estado, fechas y trial), `issued_license` (grant, FK a instalación, organización, plan, JSONB de features, validez, payload y firma) y sus índices. `_sqlx_migrations` registra la versión aplicada. No hay tablas de clientes, facturación ni sync; no cambies una migración publicada.
+
+Consulta [API y Swagger (P01)](api.md) para abrir la documentación, probar rutas y actualizar el contrato.
 
 ## Pruebas aisladas
 

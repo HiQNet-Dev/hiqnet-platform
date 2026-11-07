@@ -2,87 +2,820 @@
   "openapi": "3.1.0",
   "info": {
     "title": "HiQNet Platform API",
-    "version": "0.1.0",
-    "description": "Control plane de HiQNet: planes, instalaciones y emisión de autorizaciones firmadas para POS locales. Las capacidades de billing real, sincronización y portal administrativo siguen pendientes."
+    "description": "Plano de control técnico; sin identidad comercial, facturación ni sincronización productivas. El token administrativo es temporal y exclusivo de desarrollo.",
+    "version": "0.1.0"
   },
   "paths": {
+    "/api/v1/installations": {
+      "post": {
+        "tags": [
+          "Instalaciones"
+        ],
+        "summary": "Registra una instalación técnica; requiere el token administrativo DEV.",
+        "operationId": "registerInstallation",
+        "requestBody": {
+          "description": "organization_id UUID y device_label no vacío; installation_id UUID opcional",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RegisterInstallationBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Instalación registrada",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InstallationResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Etiqueta vacía o JSON malformado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Token ausente, incorrecto o no configurado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Instalación o etiqueta ya registrada",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Content-Type distinto de application/json",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "JSON incompatible con el esquema",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "PostgreSQL no disponible",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "devAdminToken": []
+          }
+        ]
+      }
+    },
+    "/api/v1/installations/{id}": {
+      "get": {
+        "tags": [
+          "Instalaciones"
+        ],
+        "summary": "Consulta una instalación; el identificador no concede autorización por sí solo.",
+        "operationId": "getInstallation",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Identificador UUID de la instalación",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Instalación encontrada",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InstallationResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "UUID de ruta inválido",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Token ausente o incorrecto",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Instalación inexistente",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "PostgreSQL no disponible",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "devAdminToken": []
+          }
+        ]
+      }
+    },
+    "/api/v1/installations/{id}/licenses": {
+      "get": {
+        "tags": [
+          "Licencias DEV"
+        ],
+        "summary": "Lista las autorizaciones registradas; para UUID desconocidos devuelve lista vacía.",
+        "operationId": "listLicenses",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Identificador UUID de la instalación",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Autorizaciones; lista vacía si no existen",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/LicenseRecordResponse"
+                  }
+                },
+                "example": []
+              }
+            }
+          },
+          "400": {
+            "description": "UUID de ruta inválido",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Token ausente o incorrecto",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "PostgreSQL no disponible",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "devAdminToken": []
+          }
+        ]
+      },
+      "post": {
+        "tags": [
+          "Licencias DEV"
+        ],
+        "summary": "Emite una autorización de desarrollo sólo cuando el firmante DEV está habilitado.",
+        "operationId": "issueLicense",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Identificador UUID de la instalación",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "description": "plan: trial, local, pro o enterprise; valid_until debe ser futuro",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/IssueLicenseBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Autorización DEV firmada",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IssuedLicenseResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "UUID, plan, vigencia o JSON malformado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Token ausente o incorrecto",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Instalación inexistente",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Content-Type distinto de application/json",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "JSON incompatible con el esquema",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Emisión DEV o PostgreSQL indisponibles",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "devAdminToken": []
+          }
+        ]
+      }
+    },
+    "/api/v1/installations/{id}/trial": {
+      "post": {
+        "tags": [
+          "Instalaciones"
+        ],
+        "summary": "Activa una sola vez el trial técnico de 30 días para una instalación.",
+        "operationId": "startTrial",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Identificador UUID de la instalación",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Trial activado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InstallationResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "UUID de ruta inválido",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Token ausente o incorrecto",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Instalación inexistente",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Trial activado anteriormente",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "PostgreSQL no disponible",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "devAdminToken": []
+          }
+        ]
+      }
+    },
+    "/api/v1/plans": {
+      "get": {
+        "tags": [
+          "Planes"
+        ],
+        "summary": "Devuelve el catálogo técnico. Los nombres de plan no implican disponibilidad comercial.",
+        "operationId": "listPlans",
+        "responses": {
+          "200": {
+            "description": "Catálogo de planes",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/PlanResponse"
+                  }
+                },
+                "example": [
+                  {
+                    "display_name": "Trial (30 días)",
+                    "features": [
+                      "catalog",
+                      "sales"
+                    ],
+                    "plan": "trial"
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
     "/health": {
       "get": {
-        "summary": "Estado del servicio",
+        "tags": [
+          "Operación"
+        ],
+        "summary": "Comprueba únicamente que el proceso HTTP responde; no implica disponibilidad de PostgreSQL.",
+        "operationId": "getHealth",
         "responses": {
-          "200": { "description": "Servicio disponible" }
+          "200": {
+            "description": "Proceso HTTP activo; no comprueba PostgreSQL",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthResponse"
+                },
+                "example": {
+                  "status": "ok",
+                  "version": "0.1.0"
+                }
+              }
+            }
+          }
         }
       }
     },
     "/ready": {
       "get": {
-        "summary": "Disponibilidad de PostgreSQL (SELECT 1)",
+        "tags": [
+          "Operación"
+        ],
+        "summary": "Ejecuta un roundtrip real a PostgreSQL para determinar si la API puede atender tráfico.",
+        "operationId": "getReadiness",
         "responses": {
-          "200": { "description": "Conexión a PostgreSQL operativa" },
-          "503": { "description": "PostgreSQL no disponible" }
-        }
-      }
-    },
-    "/api/v1/plans": {
-      "get": {
-        "summary": "Catálogo de planes comerciales",
-        "responses": {
-          "200": { "description": "Lista de planes" }
-        }
-      }
-    },
-    "/api/v1/installations": {
-      "post": {
-        "summary": "Registrar una instalación del POS",
-        "security": [{ "bearerAuth": [] }],
-        "responses": {
-          "201": { "description": "Instalación registrada" },
-          "401": { "description": "No autorizado" }
-        }
-      }
-    },
-    "/api/v1/installations/{id}": {
-      "get": {
-        "summary": "Consultar una instalación",
-        "responses": {
-          "200": { "description": "Instalación" },
-          "404": { "description": "No encontrada" }
-        }
-      }
-    },
-    "/api/v1/installations/{id}/trial": {
-      "post": {
-        "summary": "Activar el Trial de 30 días",
-        "security": [{ "bearerAuth": [] }],
-        "responses": {
-          "200": { "description": "Trial activado" },
-          "409": { "description": "Trial ya activado" }
-        }
-      }
-    },
-    "/api/v1/installations/{id}/licenses": {
-      "post": {
-        "summary": "Emitir una autorización firmada (solo desarrollo)",
-        "security": [{ "bearerAuth": [] }],
-        "responses": {
-          "201": { "description": "Autorización emitida" },
-          "401": { "description": "No autorizado" },
-          "503": { "description": "Emisión deshabilitada" }
-        }
-      },
-      "get": {
-        "summary": "Listar autorizaciones emitidas",
-        "responses": {
-          "200": { "description": "Lista de autorizaciones" }
+          "200": {
+            "description": "PostgreSQL respondió a SELECT 1",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReadinessResponse"
+                },
+                "example": {
+                  "database": "up",
+                  "status": "ok"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "PostgreSQL no disponible",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReadinessResponse"
+                },
+                "example": {
+                  "database": "down",
+                  "status": "unavailable"
+                }
+              }
+            }
+          }
         }
       }
     }
   },
   "components": {
+    "schemas": {
+      "ErrorResponse": {
+        "type": "object",
+        "required": [
+          "code",
+          "message"
+        ],
+        "properties": {
+          "code": {
+            "type": "string",
+            "example": "not_found"
+          },
+          "message": {
+            "type": "string",
+            "example": "no se encontró el recurso solicitado"
+          }
+        }
+      },
+      "HealthResponse": {
+        "type": "object",
+        "required": [
+          "status",
+          "version"
+        ],
+        "properties": {
+          "status": {
+            "type": "string",
+            "example": "ok"
+          },
+          "version": {
+            "type": "string",
+            "example": "0.1.0"
+          }
+        }
+      },
+      "InstallationResponse": {
+        "type": "object",
+        "required": [
+          "id",
+          "organization_id",
+          "device_label",
+          "status",
+          "registered_at"
+        ],
+        "properties": {
+          "device_label": {
+            "type": "string",
+            "example": "Caja de pruebas"
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "example": "123e4567-e89b-42d3-a456-426614174000"
+          },
+          "organization_id": {
+            "type": "string",
+            "format": "uuid",
+            "example": "123e4567-e89b-42d3-a456-426614174001"
+          },
+          "registered_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "status": {
+            "type": "string",
+            "example": "active"
+          },
+          "trial_ends_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "trial_started_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          }
+        }
+      },
+      "IssueLicenseBody": {
+        "type": "object",
+        "required": [
+          "plan",
+          "valid_until"
+        ],
+        "properties": {
+          "plan": {
+            "type": "string",
+            "example": "trial"
+          },
+          "valid_until": {
+            "type": "string",
+            "format": "date-time",
+            "example": "2030-01-01T00:00:00Z"
+          }
+        },
+        "additionalProperties": false
+      },
+      "IssuedLicenseResponse": {
+        "type": "object",
+        "required": [
+          "grant_id",
+          "installation_id",
+          "plan",
+          "valid_until",
+          "grant_json",
+          "signature_b64",
+          "public_key_b64"
+        ],
+        "properties": {
+          "grant_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "grant_json": {
+            "type": "string"
+          },
+          "installation_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "plan": {
+            "type": "string"
+          },
+          "public_key_b64": {
+            "type": "string"
+          },
+          "signature_b64": {
+            "type": "string"
+          },
+          "valid_until": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "LicenseRecordResponse": {
+        "type": "object",
+        "required": [
+          "grant_id",
+          "installation_id",
+          "organization_id",
+          "plan",
+          "features_json",
+          "issued_at",
+          "valid_until",
+          "grant_json",
+          "signature_b64"
+        ],
+        "properties": {
+          "features_json": {
+            "type": "string",
+            "description": "JSON serializado como cadena, no objeto embebido."
+          },
+          "grant_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "grant_json": {
+            "type": "string"
+          },
+          "installation_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "issued_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "organization_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "plan": {
+            "type": "string"
+          },
+          "signature_b64": {
+            "type": "string"
+          },
+          "valid_until": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "PlanResponse": {
+        "type": "object",
+        "required": [
+          "plan",
+          "display_name",
+          "features"
+        ],
+        "properties": {
+          "display_name": {
+            "type": "string",
+            "example": "Trial (30 días)"
+          },
+          "features": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "example": [
+              "catalog",
+              "sales"
+            ]
+          },
+          "plan": {
+            "type": "string",
+            "example": "trial"
+          }
+        }
+      },
+      "ReadinessResponse": {
+        "type": "object",
+        "required": [
+          "status",
+          "database"
+        ],
+        "properties": {
+          "database": {
+            "type": "string",
+            "example": "up"
+          },
+          "status": {
+            "type": "string",
+            "example": "ok"
+          }
+        }
+      },
+      "RegisterInstallationBody": {
+        "type": "object",
+        "required": [
+          "organization_id",
+          "device_label"
+        ],
+        "properties": {
+          "device_label": {
+            "type": "string",
+            "example": "Caja de pruebas",
+            "minLength": 1
+          },
+          "installation_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid",
+            "example": "123e4567-e89b-42d3-a456-426614174000"
+          },
+          "organization_id": {
+            "type": "string",
+            "format": "uuid",
+            "example": "123e4567-e89b-42d3-a456-426614174001"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
     "securitySchemes": {
-      "bearerAuth": {
+      "devAdminToken": {
         "type": "http",
-        "scheme": "bearer"
+        "scheme": "bearer",
+        "description": "Token administrativo temporal para pruebas DEV; no es una sesión de usuario."
       }
     }
   }

@@ -60,8 +60,14 @@ jobs:
           psql -h localhost -U hiqnet -d postgres -v ON_ERROR_STOP=1 -c 'CREATE DATABASE hiqnet_restore'
           docker exec "$postgres_container" pg_restore --exit-on-error -U hiqnet -d hiqnet_restore /tmp/hiqnet-ci.dump
           test "$(psql -h localhost -U hiqnet -d hiqnet_restore -Atc "SELECT count(*) FROM installation WHERE device_label = 'synthetic-ci'")" = 1
-      - name: Validar OpenAPI
-        run: python3 -c "import json; d=json.load(open('openapi/openapi.json')); assert d['openapi'].startswith('3.1'); assert '/health' in d['paths'] and '/ready' in d['paths']; print('openapi ok')"
+      - name: Validar OpenAPI 3.1 y snapshot generado desde router
+        run: |
+          set -euo pipefail
+          python3 -m venv /tmp/hiqnet-openapi-venv
+          /tmp/hiqnet-openapi-venv/bin/python -m pip install openapi-spec-validator==0.9.0
+          /tmp/hiqnet-openapi-venv/bin/python -m openapi_spec_validator --schema 3.1 openapi/openapi.json
+          cargo run --quiet -p hiqnet-platform-api --bin generate-openapi > /tmp/hiqnet-openapi.json
+          cmp openapi/openapi.json /tmp/hiqnet-openapi.json
       - name: Validar SemVer sin publicar
         run: python3 -m unittest discover -s scripts -p 'test_*.py'
 
