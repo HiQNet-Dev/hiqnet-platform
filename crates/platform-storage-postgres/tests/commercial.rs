@@ -248,7 +248,7 @@ async fn upgrades_p01_data_without_granting_legacy_access() {
             .fetch_one(&pool)
             .await
             .unwrap();
-    let already_upgraded: bool = if migrations_table.is_some() {
+    let applied2: bool = if migrations_table.is_some() {
         sqlx::query_scalar(
             "SELECT EXISTS (SELECT 1 FROM _sqlx_migrations WHERE version = 2 AND success)",
         )
@@ -258,20 +258,53 @@ async fn upgrades_p01_data_without_granting_legacy_access() {
     } else {
         false
     };
-    if !already_upgraded {
-        // SQLx 0.8 no ofrece run_to: arrancar con la migración publicada intacta.
-        let mut previous = sqlx::migrate!("../../migrations");
-        previous.migrations = std::borrow::Cow::Owned(
-            previous
-                .iter()
-                .filter(|migration| migration.version == 1)
-                .cloned()
-                .collect(),
-        );
-        previous.run(&pool).await.unwrap();
+    let fixture: bool = if applied2 {
+        sqlx::query_scalar("SELECT EXISTS (SELECT 1 FROM installation WHERE id = $1)")
+            .bind(id)
+            .fetch_one(&pool)
+            .await
+            .unwrap()
+    } else {
+        false
+    };
+    if !fixture {
+        if !applied2 {
+            // SQLx 0.8 no ofrece run_to: arrancar con la migración publicada intacta.
+            let mut previous = sqlx::migrate!("../../migrations");
+            previous.migrations = std::borrow::Cow::Owned(
+                previous
+                    .iter()
+                    .filter(|migration| migration.version == 1)
+                    .cloned()
+                    .collect(),
+            );
+            previous.run(&pool).await.unwrap();
+        } else {
+            // La migración 2 ya se aplicó antes de este fixture: simular la
+            // importación heredada sin conceder cuenta ni membresía.
+            sqlx::query(
+                "INSERT INTO organization (id, display_name, status, created_at)
+                 VALUES ($1, 'Organización previa sin reclamar', 'legacy_unclaimed', now())
+                 ON CONFLICT (id) DO NOTHING",
+            )
+            .bind(organization)
+            .execute(&pool)
+            .await
+            .unwrap();
+            sqlx::query(
+                "INSERT INTO commercial_audit_event (id, organization_id, action, occurred_at)
+                 VALUES ($1, $2, 'legacy_import', now())",
+            )
+            .bind(Uuid::new_v4())
+            .bind(organization)
+            .execute(&pool)
+            .await
+            .unwrap();
+        }
         sqlx::query(
             "INSERT INTO installation (id, organization_id, device_label, status, registered_at)
-         VALUES ($1, $2, 'legacy-fixture', 'active', now())",
+             VALUES ($1, $2, 'legacy-fixture', 'active', now())
+             ON CONFLICT (id) DO NOTHING",
         )
         .bind(id)
         .bind(organization)
@@ -279,9 +312,10 @@ async fn upgrades_p01_data_without_granting_legacy_access() {
         .await
         .unwrap();
         sqlx::query(
-        "INSERT INTO issued_license (grant_id, installation_id, organization_id, plan,
-           features_json, issued_at, valid_until, grant_json, signature_b64)
-         VALUES ($1, $2, $3, 'trial', '[]'::jsonb, now(), now() + interval '1 day', '{}', 'synthetic')",
+            "INSERT INTO issued_license (grant_id, installation_id, organization_id, plan,
+               features_json, issued_at, valid_until, grant_json, signature_b64)
+             VALUES ($1, $2, $3, 'trial', '[]'::jsonb, now(), now() + interval '1 day', '{}', 'synthetic')
+             ON CONFLICT (grant_id) DO NOTHING",
         )
         .bind(grant)
         .bind(id)
