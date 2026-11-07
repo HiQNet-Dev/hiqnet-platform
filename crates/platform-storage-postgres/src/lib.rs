@@ -2,9 +2,11 @@
 
 use sqlx::PgPool;
 
+pub mod auth;
 pub mod commercial;
 pub mod repository;
 
+pub use auth::PgAuthRepository;
 pub use commercial::PgCommercialRepository;
 pub use repository::PgRepository;
 
