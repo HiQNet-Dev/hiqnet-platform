@@ -1,8 +1,9 @@
 //! Casos de uso y puertos de HiQNet Platform.
 //!
-//! La plataforma no implementa cobro real ni SLA; solo registra instalaciones,
-//! activa Trials y emite autorizaciones firmadas para POS locales.
+//! Sin cobro real ni sesiones comerciales: la identidad P02.1 sólo se invoca
+//! desde adaptadores internos confiables hasta incorporar autenticación P02.2.
 
+pub mod commercial;
 pub mod error;
 pub mod ports;
 pub mod service;

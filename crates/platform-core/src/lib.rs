@@ -4,6 +4,7 @@
 //! el registro de instalaciones y el contrato de autorización comercial que el
 //! POS verifica localmente.
 
+pub mod commercial;
 pub mod error;
 pub mod ids;
 pub mod installation;

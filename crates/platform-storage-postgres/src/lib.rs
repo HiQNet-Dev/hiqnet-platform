@@ -2,8 +2,10 @@
 
 use sqlx::PgPool;
 
+pub mod commercial;
 pub mod repository;
 
+pub use commercial::PgCommercialRepository;
 pub use repository::PgRepository;
 
 #[derive(Debug, thiserror::Error)]
@@ -50,6 +52,12 @@ mod tests {
     async fn applies_initial_migration_and_rolls_back_synthetic_data() {
         let url = std::env::var("TEST_DATABASE_URL")
             .expect("TEST_DATABASE_URL debe apuntar a una base aislada de pruebas");
+        assert!(
+            url.rsplit('/')
+                .next()
+                .is_some_and(|database| database.contains("test") && database != "hiqnet"),
+            "TEST_DATABASE_URL debe identificar una base aislada llamada test"
+        );
         let pool = open(&url).await.expect("migración inicial");
         let tables: i64 = sqlx::query_scalar(
             "SELECT count(*) FROM information_schema.tables \
@@ -63,6 +71,14 @@ mod tests {
         let mut tx = pool.begin().await.unwrap();
         let installation_id = uuid::Uuid::new_v4();
         let organization_id = uuid::Uuid::new_v4();
+        sqlx::query(
+            "INSERT INTO organization (id, display_name, status, created_at)
+             VALUES ($1, 'fixture-p00', 'active', now())",
+        )
+        .bind(organization_id)
+        .execute(&mut *tx)
+        .await
+        .unwrap();
         sqlx::query(
             "INSERT INTO installation (id, organization_id, device_label, status, registered_at) \
              VALUES ($1, $2, 'fixture-p00', 'active', now())",

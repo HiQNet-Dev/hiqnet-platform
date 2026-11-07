@@ -53,6 +53,10 @@ macro_rules! id_type {
 }
 
 id_type!(OrganizationId, "Identificador de la organización cliente.");
+id_type!(
+    CommercialAccountId,
+    "Identificador de una cuenta comercial; no es un usuario POS."
+);
 id_type!(InstallationId, "Identificador de una instalación del POS.");
 id_type!(
     GrantId,

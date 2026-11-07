@@ -46,6 +46,7 @@ impl PlatformRepository for PgRepository {
         .await
         .map_err(|error| match error {
             sqlx::Error::Database(db) if db.is_unique_violation() => AppError::Conflict,
+            sqlx::Error::Database(db) if db.is_foreign_key_violation() => AppError::NotFound,
             _ => AppError::Storage,
         })?;
 
@@ -57,7 +58,11 @@ impl PlatformRepository for PgRepository {
             .fetch_one(&self.pool)
             .await
             .map_err(|_| AppError::Storage)?;
-            return Ok(row_to_installation(existing));
+            let existing = row_to_installation(existing);
+            if existing.organization_id != installation.organization_id {
+                return Err(AppError::Conflict);
+            }
+            return Ok(existing);
         }
 
         Ok(installation.clone())
@@ -146,7 +151,7 @@ impl PlatformRepository for PgRepository {
     }
 }
 
-fn row_to_installation(row: sqlx::postgres::PgRow) -> Installation {
+pub(crate) fn row_to_installation(row: sqlx::postgres::PgRow) -> Installation {
     let status = match row.get::<String, _>("status").as_str() {
         "suspended" => InstallationStatus::Suspended,
         "unregistered" => InstallationStatus::Unregistered,

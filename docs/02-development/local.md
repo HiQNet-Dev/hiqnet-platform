@@ -21,11 +21,15 @@ La migración `0001_init.sql` crea `installation` (ID, organización UUID, etiqu
 
 Consulta [API y Swagger (P01)](api.md) para abrir la documentación, probar rutas y actualizar el contrato.
 
+El esquema comercial P02.1 y sus relaciones se documentan en [identidad comercial](../01-architecture/commercial-identity.md). P02.1 no publica rutas comerciales ni altera tu base principal durante las pruebas de migración.
+
 ## Pruebas aisladas
 
 Crea una BD nueva sin reutilizar la de desarrollo: `docker compose exec postgres psql -U hiqnet -d postgres -c 'CREATE DATABASE hiqnet_test_p00;'`. Configura `TEST_DATABASE_URL` con **la misma contraseña de `.env`** y nombre `hiqnet_test_p00` (sin imprimirla); en PowerShell, por ejemplo: `$env:TEST_DATABASE_URL = ((Get-Content .env | Where-Object { $_ -match '^DATABASE_URL=' }).Substring(13) -replace '/hiqnet$', '/hiqnet_test_p00')`. En Bash: carga `.env` en shell local sólo si confías en ese archivo y sustituye el nombre de BD al exportar `TEST_DATABASE_URL`. Nunca apuntes `TEST_DATABASE_URL` a tu base de desarrollo o producción. Los tests aplican migraciones desde cero, prueban operaciones SQL sintéticas de ambas tablas y revierten la fixture en una transacción.
 
 Ejecuta `cargo build --workspace`, `cargo fmt --all -- --check`, `cargo clippy --workspace --all-targets -- -D warnings`, `cargo test --workspace`, `python3 -m unittest discover -s scripts -p 'test_*.py'` y `python3 scripts/check_repository.py`. El gate de archivos comprueba sólo rutas versionadas y encabezados PEM: **no sustituye secret scanning completo**. CI crea su propia base `hiqnet_test` sobre un servicio PostgreSQL efímero, ejecuta migraciones en tests y nunca toca tu volumen local.
+
+Para P02.1, usa una `TEST_DATABASE_URL` **nueva** e aislada como `hiqnet_test_p021` y crea otra base distinta, por ejemplo `docker compose exec postgres psql -U hiqnet -d postgres -c 'CREATE DATABASE hiqnet_upgrade_test_p021;'`. Configura `TEST_UPGRADE_DATABASE_URL` con esta última usando el mismo método de sustitución que `TEST_DATABASE_URL`; en PowerShell: `$env:TEST_UPGRADE_DATABASE_URL = ((Get-Content .env | Where-Object { $_ -match '^DATABASE_URL=' }).Substring(13) -replace '/hiqnet$', '/hiqnet_upgrade_test_p021')`. No uses la base principal ni una base con datos valiosos: el test de upgrade arranca sólo con P00/P01, inserta instalaciones/licencias sintéticas y aplica P02.1. La base `TEST_DATABASE_URL` prueba migración desde cero, índices y restricciones; los tests de cuentas dejan eventos sintéticos por diseño de auditoría inmutable. CI destruye sus bases efímeras al terminar; las bases locales sólo se eliminan manualmente tras verificar que no contienen datos ajenos. En P02.1 el API DEV exige organización preexistente; véase [ejemplo local](api.md).
 
 ## Backup y restore sintético (sin sobrescribir bases)
 

@@ -15,7 +15,7 @@ Rutas existentes (sin query parameters):
 | GET | `/health` | Pública | 200 | Estado del proceso, no de BD |
 | GET | `/ready` | Pública | 200 | 503 si falla PostgreSQL |
 | GET | `/api/v1/plans` | Pública | 200 | Catálogo técnico, sin precios ni disponibilidad comercial |
-| POST | `/api/v1/installations` | Bearer DEV | 201 | 400 etiqueta vacía; 409 etiqueta duplicada; 415/422 JSON inválido; 503 BD |
+| POST | `/api/v1/installations` | Bearer DEV | 201 | 400 etiqueta vacía; 404 organización inexistente; 409 etiqueta duplicada; 415/422 JSON inválido; 503 BD |
 | GET | `/api/v1/installations/{id}` | Bearer DEV | 200 | 400 UUID inválido; 404 no existe; 503 BD |
 | POST | `/api/v1/installations/{id}/trial` | Bearer DEV | 200 | 404 no existe; 409 ya activado; 503 BD |
 | GET | `/api/v1/installations/{id}/licenses` | Bearer DEV | 200 | UUID inexistente: `[]`; 400 UUID inválido; 503 BD |
@@ -35,6 +35,12 @@ curl http://127.0.0.1:8080/api/v1/plans
 
 Para rutas protegidas, genera un token aleatorio **sólo localmente**, configura `HIQNET_PLATFORM_ADMIN_TOKEN` en `.env` (no lo subas a Git) y reinicia `api` con `docker compose up -d api`. Introduce el valor en **Authorize → devAdminToken** en Swagger UI; usa la misma credencial en `Authorization: Bearer <TOKEN_DEV_LOCAL>` con curl. No pegues la credencial real en PR, logs ni ejemplos. No se trata de identidad de usuarios: es una protección administrativa temporal DEV, no un mecanismo multitenant ni de producción.
 
+Desde P02.1, la organización de una instalación **debe existir**: un UUID enviado por el cliente no crea organización ni concede membresía. Para probar el endpoint técnico antes de P02.2, crea exclusivamente en tu base **local DEV** una organización sintética (sin cuenta ni membresías). Nunca ejecutes este ejemplo sobre una base compartida o productiva:
+
+```sh
+docker compose exec postgres psql -U hiqnet -d hiqnet -c "INSERT INTO organization (id, display_name, status, created_at) VALUES ('123e4567-e89b-42d3-a456-426614174001', 'Organización DEV sintética', 'active', now()) ON CONFLICT (id) DO NOTHING;"
+```
+
 ```sh
 curl -i -X POST http://127.0.0.1:8080/api/v1/installations \
   -H 'Authorization: Bearer <TOKEN_DEV_LOCAL>' \
@@ -45,7 +51,7 @@ curl -i http://127.0.0.1:8080/api/v1/installations/123e4567-e89b-42d3-a456-42661
   -H 'Authorization: Bearer <TOKEN_DEV_LOCAL>'
 ```
 
-No repitas el mismo UUID de ejemplo si ya lo registraste: la creación con ID existente es idempotente y puede devolver la instalación previa. Trial sólo puede activarse una vez. Para emitir licencias DEV, además del token se requieren `HIQNET_PLATFORM_ALLOW_DEV_ISSUANCE=true` y una semilla Ed25519 local válida (`HIQNET_PLATFORM_SIGNING_KEY_B64`); por defecto está deshabilitado. Nunca uses una semilla de ejemplo para emitir fuera de pruebas.
+No repitas el mismo UUID de ejemplo si ya lo registraste: la creación con ID existente en **la misma organización** es idempotente y puede devolver la instalación previa; si el UUID pertenece a otra organización responde 409. Trial sólo puede activarse una vez. Para emitir licencias DEV, además del token se requieren `HIQNET_PLATFORM_ALLOW_DEV_ISSUANCE=true` y una semilla Ed25519 local válida (`HIQNET_PLATFORM_SIGNING_KEY_B64`); por defecto está deshabilitado. Nunca uses una semilla de ejemplo para emitir fuera de pruebas.
 
 ## Pruebas y evolución del contrato
 
