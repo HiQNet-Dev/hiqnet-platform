@@ -208,6 +208,7 @@ async fn list_plans(State(state): State<AppState>) -> Result<Json<Vec<PlanRespon
         (status = 201, description = "Instalación registrada", body = InstallationResponse),
         (status = 400, description = "Etiqueta vacía o JSON malformado", body = ErrorResponse),
         (status = 401, description = "Token ausente, incorrecto o no configurado", body = ErrorResponse),
+        (status = 404, description = "Organización comercial inexistente", body = ErrorResponse),
         (status = 409, description = "Instalación o etiqueta ya registrada", body = ErrorResponse),
         (status = 415, description = "Content-Type distinto de application/json", body = ErrorResponse),
         (status = 422, description = "JSON incompatible con el esquema", body = ErrorResponse),
@@ -398,6 +399,17 @@ mod tests {
     use std::time::Duration;
     use tower::ServiceExt;
 
+    fn isolated_test_url() -> String {
+        let url = std::env::var("TEST_DATABASE_URL").expect("base aislada requerida");
+        assert!(
+            url.rsplit('/')
+                .next()
+                .is_some_and(|database| database.contains("test") && database != "hiqnet"),
+            "TEST_DATABASE_URL debe identificar una base aislada llamada test"
+        );
+        url
+    }
+
     fn state(pool: PgPool) -> AppState {
         AppState {
             service: Arc::new(PlatformService::new(
@@ -430,6 +442,25 @@ mod tests {
             licensing_enabled,
             db_pool: pool,
         }
+    }
+
+    async fn test_organization(pool: &PgPool, id: Uuid) {
+        sqlx::query(
+            "INSERT INTO organization (id, display_name, status, created_at)
+             VALUES ($1, 'Organización sintética', 'active', now())",
+        )
+        .bind(id)
+        .execute(pool)
+        .await
+        .unwrap();
+    }
+
+    async fn remove_test_organization(pool: &PgPool, id: Uuid) {
+        sqlx::query("DELETE FROM organization WHERE id = $1")
+            .bind(id)
+            .execute(pool)
+            .await
+            .unwrap();
     }
 
     async fn send(
@@ -554,11 +585,12 @@ mod tests {
 
     #[tokio::test]
     async fn http_routes_auth_errors_and_real_postgres_match_contract() {
-        let url = std::env::var("TEST_DATABASE_URL").expect("base aislada requerida");
+        let url = isolated_test_url();
         let pool = open(&url).await.unwrap();
         let router = build_router(dev_state(pool.clone(), false), true);
         let id = Uuid::new_v4();
         let org = Uuid::new_v4();
+        test_organization(&pool, org).await;
         let path = format!("/api/v1/installations/{id}");
         let body = json!({"installation_id":id,"organization_id":org,"device_label":format!("fixture-{id}")});
         let token = Some("token-sintetico-p01");
@@ -701,6 +733,22 @@ mod tests {
             .0,
             StatusCode::CONFLICT
         );
+        let other_org = Uuid::new_v4();
+        test_organization(&pool, other_org).await;
+        let wrong_org = json!({"installation_id":id,"organization_id":other_org,"device_label":format!("fixture-{id}")});
+        assert_eq!(
+            send(
+                &router,
+                Method::POST,
+                "/api/v1/installations",
+                token,
+                Some(wrong_org)
+            )
+            .await
+            .0,
+            StatusCode::CONFLICT
+        );
+        remove_test_organization(&pool, other_org).await;
         let invalid = json!({"organization_id":org,"device_label":"   "});
         assert_eq!(
             send(
@@ -747,6 +795,7 @@ mod tests {
             .execute(&pool)
             .await
             .unwrap();
+        remove_test_organization(&pool, org).await;
     }
 
     #[tokio::test]
@@ -773,11 +822,12 @@ mod tests {
 
     #[tokio::test]
     async fn dev_signing_and_json_rejections_match_documented_responses() {
-        let url = std::env::var("TEST_DATABASE_URL").expect("base aislada requerida");
+        let url = isolated_test_url();
         let pool = open(&url).await.unwrap();
         let router = build_router(dev_state(pool.clone(), true), false);
         let id = Uuid::new_v4();
         let org = Uuid::new_v4();
+        test_organization(&pool, org).await;
         let token = Some("token-sintetico-p01");
         let path = format!("/api/v1/installations/{id}/licenses");
         let registration = json!({"installation_id": id, "organization_id": org, "device_label":format!("fixture-{id}")});
@@ -896,6 +946,7 @@ mod tests {
             .execute(&pool)
             .await
             .unwrap();
+        remove_test_organization(&pool, org).await;
     }
 
     #[tokio::test]
@@ -913,8 +964,7 @@ mod tests {
 
     #[tokio::test]
     async fn readiness_uses_real_postgres() {
-        let url = std::env::var("TEST_DATABASE_URL")
-            .expect("TEST_DATABASE_URL debe apuntar a una base aislada de pruebas");
+        let url = isolated_test_url();
         let pool = open(&url).await.unwrap();
         assert_eq!(
             ready(State(state(pool))).await.into_response().status(),
