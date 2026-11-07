@@ -6,6 +6,146 @@
     "version": "0.1.0"
   },
   "paths": {
+    "/api/v1/auth/login": {
+      "post": {
+        "tags": [
+          "Autenticación"
+        ],
+        "summary": "Inicia una sesión comercial con credenciales verificadas.",
+        "operationId": "login",
+        "requestBody": {
+          "description": "Credenciales comerciales; la contraseña nunca se registra",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LoginRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "Sesión creada; establece cookie HttpOnly hiqnet_session"
+          },
+          "401": {
+            "description": "Credenciales inválidas, cuenta deshabilitada o bloqueada",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Origen no permitido",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Demasiados intentos",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Almacenamiento no disponible",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/logout": {
+      "post": {
+        "tags": [
+          "Autenticación"
+        ],
+        "summary": "Cierra la sesión actual y borra la cookie. Operación idempotente.",
+        "operationId": "logout",
+        "responses": {
+          "204": {
+            "description": "Sesión revocada y cookie eliminada"
+          },
+          "403": {
+            "description": "Origen no permitido",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "commercialSession": []
+          }
+        ]
+      }
+    },
+    "/api/v1/auth/me": {
+      "get": {
+        "tags": [
+          "Autenticación"
+        ],
+        "summary": "Devuelve la identidad derivada exclusivamente de la sesión verificada.",
+        "operationId": "me",
+        "responses": {
+          "200": {
+            "description": "Identidad autenticada",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MeResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sesión inválida, expirada o revocada",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Almacenamiento no disponible",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "commercialSession": []
+          }
+        ]
+      }
+    },
     "/api/v1/installations": {
       "post": {
         "tags": [
@@ -747,6 +887,39 @@
           }
         }
       },
+      "LoginRequest": {
+        "type": "object",
+        "required": [
+          "email",
+          "password"
+        ],
+        "properties": {
+          "email": {
+            "type": "string",
+            "example": "cuenta@example.test"
+          },
+          "password": {
+            "type": "string",
+            "example": "contraseña-sintética"
+          }
+        }
+      },
+      "MeResponse": {
+        "type": "object",
+        "required": [
+          "account_id",
+          "email"
+        ],
+        "properties": {
+          "account_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "email": {
+            "type": "string"
+          }
+        }
+      },
       "PlanResponse": {
         "type": "object",
         "required": [
@@ -822,6 +995,12 @@
       }
     },
     "securitySchemes": {
+      "commercialSession": {
+        "type": "apiKey",
+        "in": "cookie",
+        "name": "hiqnet_session",
+        "description": "Cookie de sesión comercial HttpOnly emitida por /api/v1/auth/login."
+      },
       "devAdminToken": {
         "type": "http",
         "scheme": "bearer",

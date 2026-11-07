@@ -12,7 +12,9 @@ use axum::{
     http::{HeaderMap, StatusCode},
     response::IntoResponse,
 };
+mod auth;
 mod contract;
+use auth::{AuthContext, AuthState};
 use contract::{
     ErrorResponse, HealthResponse, InstallationResponse, IssueLicenseBody, IssuedLicenseResponse,
     LicenseRecordResponse, PlanResponse, ReadinessResponse, RegisterInstallationBody,
@@ -25,7 +27,7 @@ use sqlx::PgPool;
 use std::sync::Arc;
 use utoipa::openapi::{
     Info, OpenApi as OpenApiDocument,
-    security::{HttpAuthScheme, HttpBuilder, SecurityScheme},
+    security::{ApiKey, ApiKeyValue, HttpAuthScheme, HttpBuilder, SecurityScheme},
 };
 use utoipa_axum::{router::OpenApiRouter, routes};
 use utoipa_swagger_ui::SwaggerUi;
@@ -114,6 +116,9 @@ fn api_routes() -> (Router<AppState>, OpenApiDocument) {
         .routes(routes!(get_installation))
         .routes(routes!(start_trial))
         .routes(routes!(issue_license, list_licenses))
+        .routes(routes!(login))
+        .routes(routes!(logout))
+        .routes(routes!(me))
         .split_for_parts();
     document.info = Info::new("HiQNet Platform API", env!("CARGO_PKG_VERSION"));
     document.info.description = Some("Plano de control técnico; sin identidad comercial, facturación ni sincronización productivas. El token administrativo es temporal y exclusivo de desarrollo.".into());
@@ -131,6 +136,16 @@ fn api_routes() -> (Router<AppState>, OpenApiDocument) {
                 .build(),
         ),
     );
+    document
+        .components
+        .get_or_insert_with(Default::default)
+        .add_security_scheme(
+            "commercialSession",
+            SecurityScheme::ApiKey(ApiKey::Cookie(ApiKeyValue::with_description(
+                "hiqnet_session",
+                "Cookie de sesión comercial HttpOnly emitida por /api/v1/auth/login.",
+            ))),
+        );
     (router, document)
 }
 
@@ -138,9 +153,11 @@ pub fn openapi_document() -> OpenApiDocument {
     api_routes().1
 }
 
-pub fn build_router(state: AppState, docs_enabled: bool) -> Router {
+pub fn build_router(state: AppState, docs_enabled: bool, auth_state: AuthState) -> Router {
     let (router, document) = api_routes();
-    let router = router.with_state(state);
+    let router = router
+        .with_state(state)
+        .layer(axum::Extension(auth_state.clone()));
     if docs_enabled {
         router.merge(SwaggerUi::new("/docs").url("/api-docs/openapi.json", document))
     } else {
@@ -333,6 +350,172 @@ async fn list_licenses(
     Ok(Json(licenses.into_iter().map(Into::into).collect()))
 }
 
+#[derive(serde::Deserialize, utoipa::ToSchema)]
+pub struct LoginRequest {
+    #[schema(example = "cuenta@example.test")]
+    pub email: String,
+    #[schema(example = "contraseña-sintética")]
+    pub password: String,
+}
+
+#[derive(serde::Serialize, utoipa::ToSchema)]
+pub struct MeResponse {
+    #[schema(value_type = String, format = Uuid)]
+    pub account_id: uuid::Uuid,
+    pub email: String,
+}
+
+fn auth_error(error: platform_application::auth::AuthError) -> HttpError {
+    use platform_application::auth::AuthError;
+    match error {
+        AuthError::InvalidCredentials => auth::error(
+            StatusCode::UNAUTHORIZED,
+            "invalid_credentials",
+            "credenciales inválidas",
+        ),
+        AuthError::RateLimited => auth::error(
+            StatusCode::TOO_MANY_REQUESTS,
+            "rate_limited",
+            "demasiados intentos; inténtalo más tarde",
+        ),
+        AuthError::InvalidSession => auth::error(
+            StatusCode::UNAUTHORIZED,
+            "unauthorized",
+            "sesión inválida o expirada",
+        ),
+        AuthError::Storage => auth::error(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "storage_error",
+            "no fue posible completar la operación",
+        ),
+    }
+}
+
+fn limiter_key(email: &str) -> String {
+    use base64::Engine as _;
+    base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(
+        platform_application::security::hash_token(&email.trim().to_lowercase()),
+    )
+}
+
+/// Inicia una sesión comercial con credenciales verificadas.
+#[utoipa::path(post, path = "/api/v1/auth/login", operation_id = "login", tag = "Autenticación",
+    request_body(content = LoginRequest, description = "Credenciales comerciales; la contraseña nunca se registra"),
+    responses(
+        (status = 204, description = "Sesión creada; establece cookie HttpOnly hiqnet_session"),
+        (status = 401, description = "Credenciales inválidas, cuenta deshabilitada o bloqueada", body = ErrorResponse),
+        (status = 403, description = "Origen no permitido", body = ErrorResponse),
+        (status = 429, description = "Demasiados intentos", body = ErrorResponse),
+        (status = 503, description = "Almacenamiento no disponible", body = ErrorResponse)))]
+async fn login(
+    axum::Extension(auth_state): axum::Extension<AuthState>,
+    headers: HeaderMap,
+    Json(request): Json<LoginRequest>,
+) -> Result<impl IntoResponse, HttpError> {
+    if !auth::origin_allowed(&headers, &auth_state) {
+        return Err(auth::error(
+            StatusCode::FORBIDDEN,
+            "origin_not_allowed",
+            "origen no permitido",
+        ));
+    }
+    let key = limiter_key(&request.email);
+    if auth_state.limiter.is_limited(&key) {
+        return Err(auth_error(
+            platform_application::auth::AuthError::RateLimited,
+        ));
+    }
+    let issued = match auth_state
+        .service
+        .login(
+            &request.email,
+            &request.password,
+            time::OffsetDateTime::now_utc(),
+            auth_state.session_ttl,
+        )
+        .await
+    {
+        Ok(issued) => issued,
+        Err(error) => {
+            if matches!(
+                error,
+                platform_application::auth::AuthError::InvalidCredentials
+            ) {
+                auth_state.limiter.record(&key);
+            }
+            return Err(auth_error(error));
+        }
+    };
+    auth_state.limiter.reset(&key);
+    let cookie = auth::session_cookie(
+        &auth_state,
+        &issued.token,
+        std::time::Duration::from_secs(auth_state.session_ttl.whole_seconds().max(0) as u64),
+    );
+    let mut response = StatusCode::NO_CONTENT.into_response();
+    response.headers_mut().insert(
+        axum::http::header::SET_COOKIE,
+        axum::http::HeaderValue::from_str(&cookie)
+            .map_err(|_| auth_error(platform_application::auth::AuthError::Storage))?,
+    );
+    Ok(response)
+}
+
+/// Cierra la sesión actual y borra la cookie. Operación idempotente.
+#[utoipa::path(post, path = "/api/v1/auth/logout", operation_id = "logout", tag = "Autenticación",
+    security(("commercialSession" = [])),
+    responses(
+        (status = 204, description = "Sesión revocada y cookie eliminada"),
+        (status = 403, description = "Origen no permitido", body = ErrorResponse)))]
+async fn logout(
+    axum::Extension(auth_state): axum::Extension<AuthState>,
+    headers: HeaderMap,
+) -> Result<impl IntoResponse, HttpError> {
+    if !auth::origin_allowed(&headers, &auth_state) {
+        return Err(auth::error(
+            StatusCode::FORBIDDEN,
+            "origin_not_allowed",
+            "origen no permitido",
+        ));
+    }
+    if let Some(token) = auth::cookie_token(&headers) {
+        auth_state
+            .service
+            .logout(&token, time::OffsetDateTime::now_utc())
+            .await
+            .map_err(auth_error)?;
+    }
+    let mut response = StatusCode::NO_CONTENT.into_response();
+    response.headers_mut().insert(
+        axum::http::header::SET_COOKIE,
+        axum::http::HeaderValue::from_str(&auth::clear_cookie(&auth_state))
+            .map_err(|_| auth_error(platform_application::auth::AuthError::Storage))?,
+    );
+    Ok(response)
+}
+
+/// Devuelve la identidad derivada exclusivamente de la sesión verificada.
+#[utoipa::path(get, path = "/api/v1/auth/me", operation_id = "me", tag = "Autenticación",
+    security(("commercialSession" = [])),
+    responses(
+        (status = 200, description = "Identidad autenticada", body = MeResponse),
+        (status = 401, description = "Sesión inválida, expirada o revocada", body = ErrorResponse),
+        (status = 503, description = "Almacenamiento no disponible", body = ErrorResponse)))]
+async fn me(
+    axum::Extension(auth_state): axum::Extension<AuthState>,
+    auth_context: AuthContext,
+) -> Result<Json<MeResponse>, HttpError> {
+    let identity = auth_state
+        .service
+        .identity(auth_context.session.account_id)
+        .await
+        .map_err(auth_error)?;
+    Ok(Json(MeResponse {
+        account_id: identity.account_id.as_uuid(),
+        email: identity.email,
+    }))
+}
+
 pub async fn run() -> anyhow::Result<()> {
     dotenvy::dotenv().ok();
     tracing_subscriber::fmt()
@@ -365,6 +548,33 @@ pub async fn run() -> anyhow::Result<()> {
         .ok()
         .filter(|value| !value.is_empty());
 
+    let development = std::env::var("HIQNET_PLATFORM_ENV")
+        .map(|value| value == "development")
+        .unwrap_or(false);
+    // Secure está activo por defecto; sólo puede desactivarse explícitamente en DEV.
+    let cookie_secure = match std::env::var("HIQNET_PLATFORM_COOKIE_SECURE") {
+        Ok(value) if value == "false" => {
+            if !development {
+                anyhow::bail!(
+                    "HIQNET_PLATFORM_COOKIE_SECURE=false sólo se permite con HIQNET_PLATFORM_ENV=development"
+                );
+            }
+            false
+        }
+        _ => true,
+    };
+    let allowed_origin = std::env::var("HIQNET_PLATFORM_ALLOWED_ORIGIN")
+        .ok()
+        .filter(|value| !value.is_empty());
+    let session_hours: i64 = std::env::var("HIQNET_PLATFORM_SESSION_TTL_HOURS")
+        .ok()
+        .and_then(|value| value.parse().ok())
+        .unwrap_or(8)
+        .clamp(1, 168);
+    let auth_service = Arc::new(platform_application::AuthService::new(
+        platform_storage_postgres::PgAuthRepository::new(pool.clone()),
+    ));
+
     let service = Arc::new(PlatformService::new(repository, signer));
     let state = AppState {
         service,
@@ -372,11 +582,21 @@ pub async fn run() -> anyhow::Result<()> {
         licensing_enabled,
         db_pool: pool,
     };
+    let auth_state = AuthState {
+        service: auth_service,
+        cookie_secure,
+        allowed_origin,
+        session_ttl: time::Duration::hours(session_hours),
+        limiter: Arc::new(auth::LoginLimiter::new(
+            10,
+            std::time::Duration::from_secs(60),
+        )),
+    };
 
     // La documentación sólo se expone cuando el entorno la habilita explícitamente.
     let docs_enabled =
         std::env::var("HIQNET_PLATFORM_ENABLE_DOCS").is_ok_and(|value| value == "true");
-    let app = build_router(state, docs_enabled);
+    let app = build_router(state, docs_enabled, auth_state);
     let port: u16 = std::env::var("PORT")
         .ok()
         .and_then(|value| value.parse().ok())
@@ -419,6 +639,21 @@ mod tests {
             admin_token: None,
             licensing_enabled: false,
             db_pool: pool,
+        }
+    }
+
+    fn test_auth_state(pool: PgPool) -> AuthState {
+        AuthState {
+            service: Arc::new(platform_application::AuthService::new(
+                platform_storage_postgres::PgAuthRepository::new(pool),
+            )),
+            cookie_secure: false,
+            allowed_origin: Some("http://127.0.0.1:8080".into()),
+            session_ttl: time::Duration::hours(1),
+            limiter: Arc::new(auth::LoginLimiter::new(
+                10,
+                std::time::Duration::from_secs(60),
+            )),
         }
     }
 
@@ -510,6 +745,9 @@ mod tests {
             ("/api/v1/installations/{id}/trial", "post"),
             ("/api/v1/installations/{id}/licenses", "get"),
             ("/api/v1/installations/{id}/licenses", "post"),
+            ("/api/v1/auth/login", "post"),
+            ("/api/v1/auth/logout", "post"),
+            ("/api/v1/auth/me", "get"),
         ];
         let actual: Vec<(&str, &str)> = current["paths"]
             .as_object()
@@ -536,6 +774,10 @@ mod tests {
             );
             if path.starts_with("/api/v1/installations") {
                 assert_eq!(operation["security"], json!([{"devAdminToken": []}]));
+            } else if path == "/api/v1/auth/login" {
+                assert!(operation.get("security").is_none());
+            } else if path == "/api/v1/auth/logout" || path == "/api/v1/auth/me" {
+                assert_eq!(operation["security"], json!([{"commercialSession": []}]));
             } else {
                 assert!(operation.get("security").is_none());
             }
@@ -547,7 +789,8 @@ mod tests {
         let pool = sqlx::postgres::PgPoolOptions::new()
             .connect_lazy("postgres://invalid:invalid@127.0.0.1:1/invalid")
             .unwrap();
-        let disabled = build_router(state(pool.clone()), false);
+        let auth_state = test_auth_state(pool.clone());
+        let disabled = build_router(state(pool.clone()), false, auth_state.clone());
         assert_eq!(
             send(&disabled, Method::GET, "/docs", None, None).await.0,
             StatusCode::NOT_FOUND
@@ -558,7 +801,7 @@ mod tests {
                 .0,
             StatusCode::NOT_FOUND
         );
-        let enabled = build_router(state(pool), true);
+        let enabled = build_router(state(pool), true, auth_state);
         let spec = send(&enabled, Method::GET, "/api-docs/openapi.json", None, None).await;
         assert_eq!(spec.0, StatusCode::OK);
         assert_eq!(spec.1, serde_json::to_value(openapi_document()).unwrap());
@@ -587,7 +830,11 @@ mod tests {
     async fn http_routes_auth_errors_and_real_postgres_match_contract() {
         let url = isolated_test_url();
         let pool = open(&url).await.unwrap();
-        let router = build_router(dev_state(pool.clone(), false), true);
+        let router = build_router(
+            dev_state(pool.clone(), false),
+            true,
+            test_auth_state(pool.clone()),
+        );
         let id = Uuid::new_v4();
         let org = Uuid::new_v4();
         test_organization(&pool, org).await;
@@ -804,7 +1051,11 @@ mod tests {
             .acquire_timeout(Duration::from_millis(300))
             .connect_lazy("postgres://invalid:invalid@127.0.0.1:1/invalid")
             .unwrap();
-        let router = build_router(dev_state(pool, false), false);
+        let router = build_router(
+            dev_state(pool.clone(), false),
+            false,
+            test_auth_state(pool.clone()),
+        );
         let path = format!("/api/v1/installations/{}", Uuid::new_v4());
         let (status, error) = send(
             &router,
@@ -824,7 +1075,11 @@ mod tests {
     async fn dev_signing_and_json_rejections_match_documented_responses() {
         let url = isolated_test_url();
         let pool = open(&url).await.unwrap();
-        let router = build_router(dev_state(pool.clone(), true), false);
+        let router = build_router(
+            dev_state(pool.clone(), true),
+            false,
+            test_auth_state(pool.clone()),
+        );
         let id = Uuid::new_v4();
         let org = Uuid::new_v4();
         test_organization(&pool, org).await;
@@ -988,5 +1243,224 @@ mod tests {
             admin_guard(&headers, &None),
             Err(AppError::AdminDisabled)
         ));
+    }
+
+    async fn seed_credential(pool: &PgPool, email: &str, password: &str) {
+        use platform_application::auth::AuthRepository as _;
+        let now = time::OffsetDateTime::now_utc();
+        let account = platform_application::commercial::CommercialService::new(
+            platform_storage_postgres::PgCommercialRepository::new(pool.clone()),
+        )
+        .create_account(email, "Cuenta API", now)
+        .await
+        .unwrap();
+        let hash = platform_application::security::hash_password(password.to_owned())
+            .await
+            .unwrap();
+        platform_storage_postgres::PgAuthRepository::new(pool.clone())
+            .create_credential(&platform_core::auth::CommercialCredential::new(
+                account.id, hash, now,
+            ))
+            .await
+            .unwrap();
+    }
+
+    async fn send_auth(
+        router: &Router,
+        uri: &str,
+        cookie: Option<&str>,
+        origin: Option<&str>,
+        body: Option<Value>,
+    ) -> (StatusCode, HeaderMap, Value) {
+        let mut request = Request::builder().method(Method::POST).uri(uri);
+        if let Some(cookie) = cookie {
+            request = request.header(header::COOKIE, cookie);
+        }
+        if let Some(origin) = origin {
+            request = request.header(header::ORIGIN, origin);
+        }
+        let payload = if let Some(body) = body {
+            request = request.header(header::CONTENT_TYPE, "application/json");
+            Body::from(body.to_string())
+        } else {
+            Body::empty()
+        };
+        let response = router
+            .clone()
+            .oneshot(request.body(payload).unwrap())
+            .await
+            .unwrap();
+        let status = response.status();
+        let headers = response.headers().clone();
+        let bytes = to_bytes(response.into_body(), 1024 * 1024).await.unwrap();
+        (
+            status,
+            headers,
+            serde_json::from_slice(&bytes).unwrap_or(Value::Null),
+        )
+    }
+
+    fn session_from(headers: &HeaderMap) -> String {
+        let raw = headers.get(header::SET_COOKIE).unwrap().to_str().unwrap();
+        assert!(raw.contains("HttpOnly"));
+        assert!(raw.contains("SameSite=Lax"));
+        assert!(raw.contains("Path=/api"));
+        raw.split(';').next().unwrap().to_owned()
+    }
+
+    #[tokio::test]
+    async fn login_me_logout_and_csrf_match_contract() {
+        let pool = open(&isolated_test_url()).await.unwrap();
+        let email = format!("api-{}@example.test", Uuid::new_v4());
+        let password = "contraseña-api-larga";
+        seed_credential(&pool, &email, password).await;
+        let router = build_router(state(pool.clone()), false, test_auth_state(pool.clone()));
+        let login_body = json!({"email": email, "password": password});
+
+        // Origen ajeno: rechazado antes de tocar credenciales.
+        let (status, headers, _) = send_auth(
+            &router,
+            "/api/v1/auth/login",
+            None,
+            Some("https://evil.example"),
+            Some(login_body.clone()),
+        )
+        .await;
+        assert_eq!(status, StatusCode::FORBIDDEN);
+        assert!(headers.get(header::SET_COOKIE).is_none());
+
+        // Contraseña incorrecta: error genérico y sin cookie.
+        let (status, headers, body) = send_auth(
+            &router,
+            "/api/v1/auth/login",
+            None,
+            Some("http://127.0.0.1:8080"),
+            Some(json!({"email": email, "password": "incorrecta"})),
+        )
+        .await;
+        assert_eq!(status, StatusCode::UNAUTHORIZED);
+        assert_eq!(body["code"], "invalid_credentials");
+        assert!(headers.get(header::SET_COOKIE).is_none());
+
+        // Login correcto: cookie de sesión opaca.
+        let (status, headers, _) = send_auth(
+            &router,
+            "/api/v1/auth/login",
+            None,
+            Some("http://127.0.0.1:8080"),
+            Some(login_body.clone()),
+        )
+        .await;
+        assert_eq!(status, StatusCode::NO_CONTENT);
+        let cookie = session_from(&headers);
+        assert!(!cookie.contains("Secure"), "DEV sin HTTPS no marca Secure");
+
+        // /me deriva la identidad de la cookie, no del cuerpo.
+        let me = router
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri("/api/v1/auth/me")
+                    .header(header::COOKIE, &cookie)
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(me.status(), StatusCode::OK);
+        let bytes = to_bytes(me.into_body(), 1024 * 1024).await.unwrap();
+        let me_body: Value = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(me_body["email"], email);
+
+        // Cookie alterada no autentica.
+        let tampered = router
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri("/api/v1/auth/me")
+                    .header(header::COOKIE, "hiqnet_session=alterado")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(tampered.status(), StatusCode::UNAUTHORIZED);
+
+        // Logout real: revoca y borra la cookie.
+        let (status, headers, _) = send_auth(
+            &router,
+            "/api/v1/auth/logout",
+            Some(&cookie),
+            Some("http://127.0.0.1:8080"),
+            None,
+        )
+        .await;
+        assert_eq!(status, StatusCode::NO_CONTENT);
+        assert!(
+            headers
+                .get(header::SET_COOKIE)
+                .unwrap()
+                .to_str()
+                .unwrap()
+                .contains("Max-Age=0")
+        );
+        let after = router
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri("/api/v1/auth/me")
+                    .header(header::COOKIE, &cookie)
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(after.status(), StatusCode::UNAUTHORIZED);
+
+        // Logout con origen ajeno no revoca ni toca la sesión.
+        let (status, _, _) = send_auth(
+            &router,
+            "/api/v1/auth/logout",
+            Some(&cookie),
+            Some("https://evil.example"),
+            None,
+        )
+        .await;
+        assert_eq!(status, StatusCode::FORBIDDEN);
+    }
+
+    #[tokio::test]
+    async fn login_rate_limit_blocks_repeated_attempts() {
+        let pool = open(&isolated_test_url()).await.unwrap();
+        let email = format!("rate-{}@example.test", Uuid::new_v4());
+        seed_credential(&pool, &email, "contraseña-api-larga").await;
+        let mut auth_state = test_auth_state(pool.clone());
+        auth_state.limiter = Arc::new(auth::LoginLimiter::new(
+            2,
+            std::time::Duration::from_secs(60),
+        ));
+        let router = build_router(state(pool.clone()), false, auth_state);
+        let bad = json!({"email": email, "password": "incorrecta"});
+        for _ in 0..2 {
+            let (status, _, _) = send_auth(
+                &router,
+                "/api/v1/auth/login",
+                None,
+                Some("http://127.0.0.1:8080"),
+                Some(bad.clone()),
+            )
+            .await;
+            assert_eq!(status, StatusCode::UNAUTHORIZED);
+        }
+        let (status, _, body) = send_auth(
+            &router,
+            "/api/v1/auth/login",
+            None,
+            Some("http://127.0.0.1:8080"),
+            Some(bad),
+        )
+        .await;
+        assert_eq!(status, StatusCode::TOO_MANY_REQUESTS);
+        assert_eq!(body["code"], "rate_limited");
     }
 }
