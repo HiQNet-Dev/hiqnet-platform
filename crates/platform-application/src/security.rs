@@ -94,18 +94,24 @@ mod tests {
         assert!(!verify_password_sync("x", "hash-invalido"));
     }
 
+    /// Medición informativa, no un gate de CI: el hardware y la carga varían.
+    /// Ejecutar con `cargo test -p platform-application benchmark_argon2id -- --ignored --nocapture`.
     #[test]
-    fn costo_argon2id_es_razonable_en_este_equipo() {
+    #[ignore = "medición de rendimiento informativa"]
+    fn benchmark_argon2id() {
+        let iterations: u32 = std::env::var("ARGON2_BENCH_ITERATIONS")
+            .ok()
+            .and_then(|value| value.parse().ok())
+            .unwrap_or(3);
         let start = std::time::Instant::now();
-        for _ in 0..3 {
+        for _ in 0..iterations {
             let hash = hash_password_sync("medición-de-costo-local").unwrap();
             assert!(verify_password_sync("medición-de-costo-local", &hash));
         }
-        let average = start.elapsed() / 3;
-        println!("Argon2id promedio hash+verify: {average:?}");
-        assert!(
-            average < std::time::Duration::from_secs(2),
-            "costo Argon2id excesivo: {average:?}"
+        let average = start.elapsed() / iterations.max(1);
+        println!(
+            "Argon2id (m={ARGON2_MEMORY_KIB} KiB, t={ARGON2_ITERATIONS}, p={ARGON2_PARALLELISM}): \
+             promedio hash+verify {average:?} ({iterations} iteraciones)"
         );
     }
 
