@@ -642,3 +642,238 @@ async fn challenge_expirado_no_crea_binding() {
             .unwrap();
     assert_eq!(bindings, 0);
 }
+
+async fn approved_proof_fixture(
+    pool: &PgPool,
+    label: &str,
+) -> (Uuid, CommercialAccountId, ProofAttempt, InstallationId) {
+    use platform_core::ids::OrganizationId;
+
+    let (organization_id, _, owner) = fixture(pool).await;
+    let service = EnrollmentService::new(
+        PgEnrollmentRepository::new(pool.clone()),
+        600,
+        "http://127.0.0.1:8080/device".into(),
+    );
+    let installation = InstallationId::new();
+    let signing = ed25519_dalek::SigningKey::generate(&mut OsRng);
+    let public_key = format!(
+        "ed25519:v1:{}",
+        base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(signing.verifying_key().as_bytes())
+    );
+    let challenge = service
+        .begin_enrollment(
+            BeginEnrollmentRequest {
+                installation_id: installation,
+                public_key: public_key.clone(),
+                device_label: label.into(),
+                app_version: "0.1.0".into(),
+                platform: "linux".into(),
+                idempotency_key: None,
+            },
+            OffsetDateTime::now_utc(),
+        )
+        .await
+        .unwrap();
+    service
+        .approve_enrollment(
+            ApproveEnrollmentRequest {
+                user_code: challenge.user_code,
+                organization_id: OrganizationId::from_uuid(organization_id),
+                actor_account_id: owner,
+            },
+            OffsetDateTime::now_utc(),
+        )
+        .await
+        .unwrap();
+    let message = canonical_proof_message(
+        &challenge.device_code,
+        installation,
+        &public_key,
+        &challenge.nonce,
+    );
+    let signature = signing.sign(&message);
+    (
+        organization_id,
+        owner,
+        ProofAttempt {
+            device_code: challenge.device_code,
+            installation_id: installation,
+            public_key,
+            nonce: challenge.nonce,
+            signature: base64::engine::general_purpose::URL_SAFE_NO_PAD
+                .encode(signature.to_bytes()),
+        },
+        installation,
+    )
+}
+
+async fn wait_for_organization_lock(pool: &PgPool) {
+    for _ in 0..200 {
+        let blocked: i64 = sqlx::query_scalar(
+            "SELECT count(*) FROM pg_stat_activity \
+             WHERE wait_event_type = 'Lock' AND query LIKE '%organization%'",
+        )
+        .fetch_one(pool)
+        .await
+        .unwrap();
+        if blocked > 0 {
+            return;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+    }
+    panic!("proof debe esperar el lock de organización");
+}
+
+async fn prove_in_task(
+    pool: PgPool,
+    proof: ProofAttempt,
+) -> Result<
+    platform_application::enrollment::EnrollmentCompletion,
+    platform_application::enrollment::EnrollmentError,
+> {
+    let service = EnrollmentService::new(
+        PgEnrollmentRepository::new(pool),
+        600,
+        "http://127.0.0.1:8080/device".into(),
+    );
+    service
+        .prove_enrollment(proof, OffsetDateTime::now_utc())
+        .await
+}
+
+#[tokio::test]
+async fn revocacion_cambio_de_rol_y_archivado_concurrentes_impiden_binding() {
+    use platform_application::enrollment::EnrollmentError;
+
+    let pool = open(&test_url()).await.unwrap();
+
+    let (organization_id, owner, proof, installation) =
+        approved_proof_fixture(&pool, "Caja revocada").await;
+    let mut blocker = pool.begin().await.unwrap();
+    sqlx::query("SELECT id FROM organization WHERE id = $1 FOR UPDATE")
+        .bind(organization_id)
+        .execute(&mut *blocker)
+        .await
+        .unwrap();
+    sqlx::query(
+        "UPDATE organization_membership SET revoked_at = now() \
+         WHERE organization_id = $1 AND account_id = $2",
+    )
+    .bind(organization_id)
+    .bind(owner.as_uuid())
+    .execute(&mut *blocker)
+    .await
+    .unwrap();
+    let task = tokio::spawn(prove_in_task(pool.clone(), proof));
+    wait_for_organization_lock(&pool).await;
+    blocker.commit().await.unwrap();
+    assert!(matches!(
+        task.await.unwrap(),
+        Err(EnrollmentError::Forbidden)
+    ));
+    let count: i64 =
+        sqlx::query_scalar("SELECT count(*) FROM installation_binding WHERE installation_id = $1")
+            .bind(installation.as_uuid())
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(count, 0);
+
+    let (organization_id, owner, proof, installation) =
+        approved_proof_fixture(&pool, "Caja rol cambiado").await;
+    let mut blocker = pool.begin().await.unwrap();
+    sqlx::query("SELECT id FROM organization WHERE id = $1 FOR UPDATE")
+        .bind(organization_id)
+        .execute(&mut *blocker)
+        .await
+        .unwrap();
+    sqlx::query(
+        "UPDATE organization_membership SET role = 'admin' \
+         WHERE organization_id = $1 AND account_id = $2",
+    )
+    .bind(organization_id)
+    .bind(owner.as_uuid())
+    .execute(&mut *blocker)
+    .await
+    .unwrap();
+    let task = tokio::spawn(prove_in_task(pool.clone(), proof));
+    wait_for_organization_lock(&pool).await;
+    blocker.commit().await.unwrap();
+    assert!(matches!(
+        task.await.unwrap(),
+        Err(EnrollmentError::Forbidden)
+    ));
+    let count: i64 =
+        sqlx::query_scalar("SELECT count(*) FROM installation_binding WHERE installation_id = $1")
+            .bind(installation.as_uuid())
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(count, 0);
+
+    let (organization_id, _, proof, installation) =
+        approved_proof_fixture(&pool, "Caja organización archivada").await;
+    let mut blocker = pool.begin().await.unwrap();
+    sqlx::query("SELECT id FROM organization WHERE id = $1 FOR UPDATE")
+        .bind(organization_id)
+        .execute(&mut *blocker)
+        .await
+        .unwrap();
+    sqlx::query("UPDATE organization SET status = 'archived' WHERE id = $1")
+        .bind(organization_id)
+        .execute(&mut *blocker)
+        .await
+        .unwrap();
+    let task = tokio::spawn(prove_in_task(pool.clone(), proof));
+    wait_for_organization_lock(&pool).await;
+    blocker.commit().await.unwrap();
+    assert!(matches!(
+        task.await.unwrap(),
+        Err(EnrollmentError::Forbidden)
+    ));
+    let count: i64 =
+        sqlx::query_scalar("SELECT count(*) FROM installation_binding WHERE installation_id = $1")
+            .bind(installation.as_uuid())
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(count, 0);
+}
+
+#[tokio::test]
+async fn dos_proof_simultaneos_crean_un_unico_binding() {
+    let pool = open(&test_url()).await.unwrap();
+    let (_, _, proof, installation) = approved_proof_fixture(&pool, "Caja dos proof").await;
+    let first = tokio::spawn(prove_in_task(pool.clone(), proof.clone()));
+    let second = tokio::spawn(prove_in_task(pool.clone(), proof));
+    let first = first.await.unwrap();
+    let second = second.await.unwrap();
+    assert!(
+        first.is_ok() || second.is_ok(),
+        "al menos uno debe completar o reproducir el binding"
+    );
+    let bindings: i64 =
+        sqlx::query_scalar("SELECT count(*) FROM installation_binding WHERE installation_id = $1")
+            .bind(installation.as_uuid())
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(bindings, 1);
+    let identities: i64 =
+        sqlx::query_scalar("SELECT count(*) FROM installation_identity WHERE installation_id = $1")
+            .bind(installation.as_uuid())
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(identities, 1);
+    let completed: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM enrollment_request \
+         WHERE installation_id = $1 AND status = 'completed'",
+    )
+    .bind(installation.as_uuid())
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(completed, 1);
+}
