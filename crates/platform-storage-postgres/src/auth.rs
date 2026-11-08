@@ -245,7 +245,8 @@ impl AuthRepository for PgAuthRepository {
         .map_err(storage)?;
 
         sqlx::query(
-            "UPDATE commercial_session SET revoked_at = $2
+            "UPDATE commercial_session
+             SET revoked_at = GREATEST($2, clock_timestamp(), created_at)
              WHERE account_id = $1 AND revoked_at IS NULL",
         )
         .bind(session.account_id.as_uuid())
@@ -315,7 +316,7 @@ impl AuthRepository for PgAuthRepository {
     ) -> AuthResult<Option<CommercialAccountId>> {
         let account_id: Option<Uuid> = sqlx::query_scalar(
             "UPDATE commercial_session
-             SET revoked_at = GREATEST($2, clock_timestamp())
+             SET revoked_at = GREATEST($2, clock_timestamp(), created_at)
              WHERE token_hash = $1 AND revoked_at IS NULL
              RETURNING account_id",
         )
@@ -428,7 +429,8 @@ impl AuthRepository for PgAuthRepository {
         let expires_at = effective_now + ttl;
 
         sqlx::query(
-            "UPDATE commercial_session SET revoked_at = $2
+            "UPDATE commercial_session
+             SET revoked_at = GREATEST($2, clock_timestamp(), created_at)
              WHERE account_id = $1 AND revoked_at IS NULL",
         )
         .bind(account_id.as_uuid())
@@ -490,7 +492,8 @@ impl AuthRepository for PgAuthRepository {
             .map_err(storage)?;
         let effective_now = db_now.max(now);
         sqlx::query(
-            "UPDATE commercial_session SET revoked_at = $2
+            "UPDATE commercial_session
+             SET revoked_at = GREATEST($2, clock_timestamp(), created_at)
              WHERE account_id = $1 AND revoked_at IS NULL",
         )
         .bind(account_id.as_uuid())

@@ -1,6 +1,6 @@
-# P02.2 — Autenticación comercial: diseño aprobado, implementación P02.2-A y pendientes
+# P02.2 — Autenticación comercial: diseño aprobado e implementación P02.2-A/P02.2-B
 
-Documento de seguimiento de la estrategia definida en [ADR-0002](adr-0002-authentication-strategy.md). Distingue explícitamente lo aprobado, lo implementado en P02.2-A y lo que queda para P02.2-B o posteriores.
+Documento de seguimiento de la estrategia definida en [ADR-0002](adr-0002-authentication-strategy.md). Distingue explícitamente lo aprobado, lo implementado en P02.2-A/P02.2-B y lo que queda para fases posteriores.
 
 ## Diseño aprobado
 
@@ -29,7 +29,7 @@ Las marcas de tiempo de sesiones, revocaciones y auditoría usan `clock_timestam
 
 La medición de Argon2id es informativa y reproducible, no un gate de CI: `cargo test -p platform-application benchmark_argon2id -- --ignored --nocapture` (iteraciones con `ARGON2_BENCH_ITERATIONS`). En este equipo Windows con build debug el promedio hash+verify medido fue ≈0,85 s (≈1,4 s bajo carga concurrente); release es menor.
 
-## Pendiente para P02.2-B y posteriores
+## Pendiente para fases posteriores
 
 - Verificación de correo y activación de cuentas productivas.
 - Recuperación de contraseña por correo con tokens de un solo uso y expiración corta.

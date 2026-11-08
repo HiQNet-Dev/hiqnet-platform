@@ -1,7 +1,7 @@
 //! Consultas comerciales aisladas por actor verificado y organización.
 
 use async_trait::async_trait;
-use platform_application::commercial::CommercialRepository;
+use platform_application::commercial::{CommercialRepository, OrganizationView};
 use platform_core::{
     commercial::{
         CommercialAccount, CommercialError, CommercialOrganization, CommercialResult,
@@ -177,14 +177,17 @@ impl CommercialRepository for PgCommercialRepository {
         organization: &CommercialOrganization,
     ) -> CommercialResult<()> {
         let mut tx = self.pool.begin().await.map_err(storage)?;
-        let active: bool = sqlx::query_scalar(
-            "SELECT EXISTS (SELECT 1 FROM commercial_account WHERE id = $1 AND status = 'active')",
+        // Bloqueo de cuenta: una deshabilitación confirmada antes de crear no
+        // puede ser ignorada por un estado leído fuera de la transacción.
+        let active: Option<Uuid> = sqlx::query_scalar(
+            "SELECT id FROM commercial_account
+             WHERE id = $1 AND status = 'active' FOR UPDATE",
         )
         .bind(actor.as_uuid())
-        .fetch_one(&mut *tx)
+        .fetch_optional(&mut *tx)
         .await
         .map_err(storage)?;
-        if !active {
+        if active.is_none() {
             return Err(CommercialError::NotFound);
         }
         sqlx::query(
@@ -420,5 +423,68 @@ impl CommercialRepository for PgCommercialRepository {
         .map_err(storage)?;
         row.map(super::repository::row_to_installation)
             .ok_or(CommercialError::NotFound)
+    }
+
+    async fn list_organizations(
+        &self,
+        actor: CommercialAccountId,
+    ) -> CommercialResult<Vec<OrganizationView>> {
+        // Límite técnico acotado; la paginación por cursor queda para P02.3-B.
+        let rows = sqlx::query(
+            "SELECT o.id, o.display_name, m.role, m.role_version
+             FROM organization_membership m
+             JOIN organization o ON o.id = m.organization_id AND o.status = 'active'
+             JOIN commercial_account a ON a.id = m.account_id AND a.status = 'active'
+             WHERE m.account_id = $1 AND m.revoked_at IS NULL
+             ORDER BY o.display_name, o.id
+             LIMIT 100",
+        )
+        .bind(actor.as_uuid())
+        .fetch_all(&self.pool)
+        .await
+        .map_err(storage)?;
+        rows.into_iter()
+            .map(|row| {
+                let role: String = row.get("role");
+                let version: i16 = row.get("role_version");
+                Ok(OrganizationView {
+                    id: OrganizationId::from_uuid(row.get("id")),
+                    display_name: row.get("display_name"),
+                    role: OrganizationRole::from_storage(&role, version)?,
+                    status: "active",
+                })
+            })
+            .collect()
+    }
+
+    async fn get_organization(
+        &self,
+        actor: CommercialAccountId,
+        organization: OrganizationId,
+    ) -> CommercialResult<OrganizationView> {
+        let row = sqlx::query(
+            "SELECT o.id, o.display_name, m.role, m.role_version
+             FROM organization_membership m
+             JOIN organization o ON o.id = m.organization_id AND o.status = 'active'
+             JOIN commercial_account a ON a.id = m.account_id AND a.status = 'active'
+             WHERE m.account_id = $1 AND m.organization_id = $2
+               AND m.revoked_at IS NULL",
+        )
+        .bind(actor.as_uuid())
+        .bind(organization.as_uuid())
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(storage)?;
+        let Some(row) = row else {
+            return Err(CommercialError::NotFound);
+        };
+        let role: String = row.get("role");
+        let version: i16 = row.get("role_version");
+        Ok(OrganizationView {
+            id: OrganizationId::from_uuid(row.get("id")),
+            display_name: row.get("display_name"),
+            role: OrganizationRole::from_storage(&role, version)?,
+            status: "active",
+        })
     }
 }

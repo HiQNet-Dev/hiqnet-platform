@@ -12,6 +12,15 @@ use platform_core::{
 };
 use time::OffsetDateTime;
 
+/// Vista mínima de una organización para el actor autenticado.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct OrganizationView {
+    pub id: OrganizationId,
+    pub display_name: String,
+    pub role: OrganizationRole,
+    pub status: &'static str,
+}
+
 #[async_trait]
 pub trait CommercialRepository: Send + Sync {
     async fn create_account(&self, account: &CommercialAccount) -> CommercialResult<()>;
@@ -53,6 +62,17 @@ pub trait CommercialRepository: Send + Sync {
         actor: CommercialAccountId,
         installation: InstallationId,
     ) -> CommercialResult<Installation>;
+    /// Organizaciones activas donde el actor tiene membresía activa.
+    async fn list_organizations(
+        &self,
+        actor: CommercialAccountId,
+    ) -> CommercialResult<Vec<OrganizationView>>;
+    /// Organización activa con membresía activa del actor; `NotFound` si no.
+    async fn get_organization(
+        &self,
+        actor: CommercialAccountId,
+        organization: OrganizationId,
+    ) -> CommercialResult<OrganizationView>;
 }
 
 pub struct CommercialService<R: CommercialRepository> {
@@ -141,5 +161,20 @@ impl<R: CommercialRepository> CommercialService<R> {
         installation: InstallationId,
     ) -> CommercialResult<Installation> {
         self.repository.get_installation(actor, installation).await
+    }
+
+    pub async fn list_organizations(
+        &self,
+        actor: CommercialAccountId,
+    ) -> CommercialResult<Vec<OrganizationView>> {
+        self.repository.list_organizations(actor).await
+    }
+
+    pub async fn get_organization(
+        &self,
+        actor: CommercialAccountId,
+        organization: OrganizationId,
+    ) -> CommercialResult<OrganizationView> {
+        self.repository.get_organization(actor, organization).await
     }
 }
