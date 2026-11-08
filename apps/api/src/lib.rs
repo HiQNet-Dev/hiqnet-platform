@@ -19,10 +19,14 @@ use contract::{
     ErrorResponse, HealthResponse, InstallationResponse, IssueLicenseBody, IssuedLicenseResponse,
     LicenseRecordResponse, PlanResponse, ReadinessResponse, RegisterInstallationBody,
 };
-use platform_application::{AppError, PlatformService, SharedRepository, SharedSigner};
+use platform_application::{
+    AppError, PlatformService, SharedRepository, SharedSigner,
+    commercial::{CommercialService, OrganizationView},
+};
 use platform_core::DomainError;
+use platform_core::commercial::CommercialError;
 use platform_core::ids::InstallationId;
-use platform_storage_postgres::{is_ready, open, pool_repository};
+use platform_storage_postgres::{PgCommercialRepository, is_ready, open, pool_repository};
 use sqlx::PgPool;
 use std::sync::Arc;
 use utoipa::openapi::{
@@ -36,6 +40,8 @@ use uuid::Uuid;
 #[derive(Clone)]
 pub struct AppState {
     pub service: Arc<PlatformService>,
+    pub commercial: Arc<CommercialService<PgCommercialRepository>>,
+    pub organization_limiter: Arc<auth::LoginLimiter>,
     pub admin_token: Option<String>,
     pub licensing_enabled: bool,
     pub db_pool: PgPool,
@@ -121,9 +127,12 @@ fn api_routes() -> (Router<AppState>, OpenApiDocument) {
         .routes(routes!(me))
         .routes(routes!(change_password))
         .routes(routes!(revoke_sessions))
+        .routes(routes!(list_organizations))
+        .routes(routes!(create_organization))
+        .routes(routes!(get_organization))
         .split_for_parts();
     document.info = Info::new("HiQNet Platform API", env!("CARGO_PKG_VERSION"));
-    document.info.description = Some("Plano de control técnico; sin identidad comercial, facturación ni sincronización productivas. El token administrativo es temporal y exclusivo de desarrollo.".into());
+    document.info.description = Some("Plano de control técnico con identidad comercial y sesiones; sin facturación, suscripciones ni sincronización productivas. El token administrativo es temporal y exclusivo de desarrollo.".into());
     document
         .components
         .get_or_insert_with(Default::default)
@@ -403,6 +412,30 @@ fn auth_error(error: platform_application::auth::AuthError) -> HttpError {
     }
 }
 
+fn commercial_error(error: CommercialError) -> HttpError {
+    match error {
+        CommercialError::NotFound => {
+            auth::error(StatusCode::NOT_FOUND, "not_found", "recurso no encontrado")
+        }
+        CommercialError::Conflict => auth::error(
+            StatusCode::CONFLICT,
+            "conflict",
+            "el recurso ya existe o entra en conflicto",
+        ),
+        CommercialError::InvalidName | CommercialError::InvalidEmail => auth::error(
+            StatusCode::BAD_REQUEST,
+            "validation_error",
+            "solicitud inválida",
+        ),
+        // Rol/versión inválidos en datos persistidos o fallo de almacenamiento.
+        CommercialError::InvalidRole | CommercialError::Storage => auth::error(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "storage_error",
+            "no fue posible completar la operación",
+        ),
+    }
+}
+
 fn limiter_key(email: &str) -> String {
     use base64::Engine as _;
     base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(
@@ -666,6 +699,152 @@ async fn revoke_sessions(
     Ok(response)
 }
 
+#[derive(serde::Serialize, utoipa::ToSchema)]
+pub struct OrganizationResponse {
+    #[schema(value_type = String, format = Uuid, example = "123e4567-e89b-42d3-a456-426614174010")]
+    pub id: Uuid,
+    #[schema(example = "Mi negocio")]
+    pub display_name: String,
+    #[schema(example = "owner")]
+    pub role: String,
+    #[schema(example = "active")]
+    pub status: String,
+}
+
+#[derive(serde::Serialize, utoipa::ToSchema)]
+pub struct OrganizationListResponse {
+    pub items: Vec<OrganizationResponse>,
+}
+
+#[derive(serde::Deserialize, utoipa::ToSchema)]
+#[serde(deny_unknown_fields)]
+pub struct CreateOrganizationRequest {
+    #[schema(example = "Mi negocio", min_length = 1, max_length = 200)]
+    pub display_name: String,
+}
+
+fn organization_response(view: OrganizationView) -> OrganizationResponse {
+    OrganizationResponse {
+        id: view.id.as_uuid(),
+        display_name: view.display_name,
+        role: view.role.as_str().to_owned(),
+        status: view.status.to_owned(),
+    }
+}
+
+/// Lista las organizaciones activas del actor autenticado (máximo técnico 100).
+#[utoipa::path(get, path = "/api/v1/organizations", operation_id = "listOrganizations", tag = "Organizaciones",
+    security(("commercialSession" = [])),
+    responses(
+        (status = 200, description = "Organizaciones activas con membresía activa; orden por nombre e id", body = OrganizationListResponse),
+        (status = 401, description = "Sesión inválida o cuenta deshabilitada", body = ErrorResponse),
+        (status = 503, description = "PostgreSQL no disponible", body = ErrorResponse)))]
+async fn list_organizations(
+    State(state): State<AppState>,
+    auth_context: AuthContext,
+) -> Result<Json<OrganizationListResponse>, HttpError> {
+    let organizations = state
+        .commercial
+        .list_organizations(auth_context.session.account_id)
+        .await
+        .map_err(commercial_error)?;
+    Ok(Json(OrganizationListResponse {
+        items: organizations
+            .into_iter()
+            .map(organization_response)
+            .collect(),
+    }))
+}
+
+/// Crea una organización activa y asigna owner a la cuenta autenticada.
+#[utoipa::path(post, path = "/api/v1/organizations", operation_id = "createOrganization", tag = "Organizaciones",
+    request_body(content = CreateOrganizationRequest, description = "Nombre visible; la cuenta autenticada recibe owner"),
+    security(("commercialSession" = [])),
+    responses(
+        (status = 201, description = "Organización creada; cabecera Location con la ruta del recurso", body = OrganizationResponse,
+            headers(("Location" = String, description = "URL del recurso creado"))),
+        (status = 400, description = "Nombre inválido", body = ErrorResponse),
+        (status = 401, description = "Sesión inválida o cuenta deshabilitada", body = ErrorResponse),
+        (status = 403, description = "Origen no permitido", body = ErrorResponse),
+        (status = 409, description = "Conflicto de creación", body = ErrorResponse),
+        (status = 429, description = "Demasiadas creaciones", body = ErrorResponse),
+        (status = 503, description = "PostgreSQL no disponible", body = ErrorResponse)))]
+async fn create_organization(
+    State(state): State<AppState>,
+    axum::Extension(auth_state): axum::Extension<AuthState>,
+    auth_context: AuthContext,
+    headers: HeaderMap,
+    Json(request): Json<CreateOrganizationRequest>,
+) -> Result<impl IntoResponse, HttpError> {
+    if !auth::origin_allowed(&headers, &auth_state) {
+        return Err(auth::error(
+            StatusCode::FORBIDDEN,
+            "origin_not_allowed",
+            "origen no permitido",
+        ));
+    }
+    let key = format!("organization-create:{}", auth_context.session.account_id);
+    if state.organization_limiter.is_limited(&key) {
+        return Err(auth::error(
+            StatusCode::TOO_MANY_REQUESTS,
+            "rate_limited",
+            "demasiadas creaciones; inténtalo más tarde",
+        ));
+    }
+    state.organization_limiter.record(&key);
+    let created = state
+        .commercial
+        .create_organization(
+            auth_context.session.account_id,
+            &request.display_name,
+            time::OffsetDateTime::now_utc(),
+        )
+        .await
+        .map_err(commercial_error)?;
+    // La ventana de creación cuenta también los intentos exitosos.
+    let location = format!("/api/v1/organizations/{}", created.id);
+    let body = OrganizationResponse {
+        id: created.id.as_uuid(),
+        display_name: created.display_name,
+        role: "owner".into(),
+        status: "active".into(),
+    };
+    let mut response = (StatusCode::CREATED, Json(body)).into_response();
+    response.headers_mut().insert(
+        axum::http::header::LOCATION,
+        axum::http::HeaderValue::from_str(&location)
+            .map_err(|_| commercial_error(CommercialError::Storage))?,
+    );
+    Ok(response)
+}
+
+/// Consulta una organización propia; un UUID ajeno responde 404 neutral.
+#[utoipa::path(get, path = "/api/v1/organizations/{id}", operation_id = "getOrganization", tag = "Organizaciones",
+    params(("id" = Uuid, Path, description = "Identificador UUID de la organización")),
+    security(("commercialSession" = [])),
+    responses(
+        (status = 200, description = "Organización activa con membresía activa", body = OrganizationResponse),
+        (status = 400, description = "UUID inválido", body = ErrorResponse),
+        (status = 401, description = "Sesión inválida o cuenta deshabilitada", body = ErrorResponse),
+        (status = 404, description = "No existe o pertenece a otra cuenta", body = ErrorResponse),
+        (status = 503, description = "PostgreSQL no disponible", body = ErrorResponse)))]
+async fn get_organization(
+    State(state): State<AppState>,
+    auth_context: AuthContext,
+    id: Result<Path<Uuid>, PathRejection>,
+) -> Result<Json<OrganizationResponse>, HttpError> {
+    let Path(id) = id.map_err(path_error)?;
+    let organization = state
+        .commercial
+        .get_organization(
+            auth_context.session.account_id,
+            platform_core::ids::OrganizationId::from_uuid(id),
+        )
+        .await
+        .map_err(commercial_error)?;
+    Ok(Json(organization_response(organization)))
+}
+
 pub async fn run() -> anyhow::Result<()> {
     dotenvy::dotenv().ok();
     tracing_subscriber::fmt()
@@ -731,8 +910,16 @@ pub async fn run() -> anyhow::Result<()> {
     ));
 
     let service = Arc::new(PlatformService::new(repository, signer));
+    let commercial = Arc::new(CommercialService::new(PgCommercialRepository::new(
+        pool.clone(),
+    )));
     let state = AppState {
         service,
+        commercial,
+        organization_limiter: Arc::new(auth::LoginLimiter::new(
+            5,
+            std::time::Duration::from_secs(60),
+        )),
         admin_token,
         licensing_enabled,
         db_pool: pool,
@@ -793,6 +980,13 @@ mod tests {
                 Arc::new(pool_repository(pool.clone())),
                 None,
             )),
+            commercial: Arc::new(CommercialService::new(PgCommercialRepository::new(
+                pool.clone(),
+            ))),
+            organization_limiter: Arc::new(auth::LoginLimiter::new(
+                5,
+                std::time::Duration::from_secs(60),
+            )),
             admin_token: None,
             licensing_enabled: false,
             db_pool: pool,
@@ -831,6 +1025,13 @@ mod tests {
             service: Arc::new(PlatformService::new(
                 Arc::new(pool_repository(pool.clone())),
                 Some(signer),
+            )),
+            commercial: Arc::new(CommercialService::new(PgCommercialRepository::new(
+                pool.clone(),
+            ))),
+            organization_limiter: Arc::new(auth::LoginLimiter::new(
+                5,
+                std::time::Duration::from_secs(60),
             )),
             admin_token: Some("token-sintetico-p01".into()),
             licensing_enabled,
@@ -909,6 +1110,9 @@ mod tests {
             ("/api/v1/auth/me", "get"),
             ("/api/v1/auth/password/change", "post"),
             ("/api/v1/auth/sessions/revoke", "post"),
+            ("/api/v1/organizations", "get"),
+            ("/api/v1/organizations", "post"),
+            ("/api/v1/organizations/{id}", "get"),
         ];
         let actual: Vec<(&str, &str)> = current["paths"]
             .as_object()
@@ -943,6 +1147,8 @@ mod tests {
                     | "/api/v1/auth/me"
                     | "/api/v1/auth/password/change"
                     | "/api/v1/auth/sessions/revoke"
+                    | "/api/v1/organizations"
+                    | "/api/v1/organizations/{id}"
             ) {
                 assert_eq!(operation["security"], json!([{"commercialSession": []}]));
             } else {
@@ -1711,6 +1917,7 @@ mod tests {
             test_auth_state(unavailable),
         );
         let outage = router
+            .clone()
             .oneshot(
                 Request::builder()
                     .uri("/api/v1/auth/me")
@@ -1726,6 +1933,21 @@ mod tests {
         assert_eq!(body["code"], "storage_error");
         assert!(!body.to_string().contains("postgres://"));
         assert!(!body.to_string().contains("SELECT"));
+
+        let organizations_outage = router
+            .oneshot(
+                Request::builder()
+                    .uri("/api/v1/organizations")
+                    .header(header::COOKIE, "hiqnet_session=token-sintetico")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(
+            organizations_outage.status(),
+            StatusCode::SERVICE_UNAVAILABLE
+        );
 
         let pool = open(&isolated_test_url()).await.unwrap();
         let router = build_router(state(pool.clone()), false, test_auth_state(pool));
@@ -1967,6 +2189,240 @@ mod tests {
         .await;
         assert_eq!(status, StatusCode::TOO_MANY_REQUESTS);
         assert_eq!(response["code"], "rate_limited");
+    }
+
+    #[tokio::test]
+    async fn organizations_api_isolates_tenants_and_requires_session() {
+        let pool = open(&isolated_test_url()).await.unwrap();
+        let email_a = format!("org-a-{}@example.test", Uuid::new_v4());
+        let email_b = format!("org-b-{}@example.test", Uuid::new_v4());
+        let password = "contraseña-inicial-1";
+        seed_credential(&pool, &email_a, password).await;
+        seed_credential(&pool, &email_b, password).await;
+        let router = build_router(state(pool.clone()), false, test_auth_state(pool.clone()));
+        let origin = Some("http://127.0.0.1:8080");
+
+        let login = |email: String| {
+            let router = router.clone();
+            async move {
+                let (status, headers, _) = send_auth(
+                    &router,
+                    "/api/v1/auth/login",
+                    None,
+                    Some("http://127.0.0.1:8080"),
+                    Some(json!({"email": email, "password": "contraseña-inicial-1"})),
+                )
+                .await;
+                assert_eq!(status, StatusCode::NO_CONTENT);
+                session_from(&headers)
+            }
+        };
+        let cookie_a = login(email_a.clone()).await;
+        let cookie_b = login(email_b).await;
+
+        let (status, headers, body) = send_auth(
+            &router,
+            "/api/v1/organizations",
+            Some(&cookie_a),
+            origin,
+            Some(json!({"display_name": "Alfa"})),
+        )
+        .await;
+        assert_eq!(status, StatusCode::CREATED);
+        assert_eq!(body["role"], "owner");
+        assert_eq!(body["status"], "active");
+        assert!(
+            headers
+                .get(header::LOCATION)
+                .unwrap()
+                .to_str()
+                .unwrap()
+                .starts_with("/api/v1/organizations/")
+        );
+        let alfa = body["id"].as_str().unwrap().to_owned();
+
+        let (status, _, body) = send_auth(
+            &router,
+            "/api/v1/organizations",
+            Some(&cookie_b),
+            origin,
+            Some(json!({"display_name": "Beta"})),
+        )
+        .await;
+        assert_eq!(status, StatusCode::CREATED);
+        let beta = body["id"].as_str().unwrap().to_owned();
+
+        let (status, _, _) = send_auth(
+            &router,
+            "/api/v1/organizations",
+            Some(&cookie_a),
+            origin,
+            Some(json!({"display_name": "Alfa 2"})),
+        )
+        .await;
+        assert_eq!(status, StatusCode::CREATED);
+
+        let unauthenticated_list = router
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri("/api/v1/organizations")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(unauthenticated_list.status(), StatusCode::UNAUTHORIZED);
+
+        // GET no usa send_auth (siempre POST); petición directa.
+        let list_a = router
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri("/api/v1/organizations")
+                    .header(header::COOKIE, &cookie_a)
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(list_a.status(), StatusCode::OK);
+        let bytes = to_bytes(list_a.into_body(), 1024 * 1024).await.unwrap();
+        let list_a: Value = serde_json::from_slice(&bytes).unwrap();
+        let names: Vec<&str> = list_a["items"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|item| item["display_name"].as_str().unwrap())
+            .collect();
+        assert_eq!(names, ["Alfa", "Alfa 2"]);
+        assert!(
+            list_a["items"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .all(|item| item["role"] == "owner")
+        );
+
+        let cross = router
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri(format!("/api/v1/organizations/{beta}"))
+                    .header(header::COOKIE, &cookie_a)
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(cross.status(), StatusCode::NOT_FOUND);
+        let own = router
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri(format!("/api/v1/organizations/{alfa}"))
+                    .header(header::COOKIE, &cookie_a)
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(own.status(), StatusCode::OK);
+        let invalid = router
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri("/api/v1/organizations/no-es-uuid")
+                    .header(header::COOKIE, &cookie_a)
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(invalid.status(), StatusCode::BAD_REQUEST);
+
+        // CSRF en creación.
+        let (status, _, _) = send_auth(
+            &router,
+            "/api/v1/organizations",
+            Some(&cookie_a),
+            Some("https://evil.example"),
+            Some(json!({"display_name": "No permitido"})),
+        )
+        .await;
+        assert_eq!(status, StatusCode::FORBIDDEN);
+
+        // Cuenta deshabilitada: sin listado.
+        let account_a: Uuid = sqlx::query_scalar(
+            "SELECT account_id FROM commercial_credential c
+             JOIN commercial_account a ON a.id = c.account_id
+             WHERE a.email = $1",
+        )
+        .bind(&email_a)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        sqlx::query("UPDATE commercial_account SET status = 'disabled' WHERE id = $1")
+            .bind(account_a)
+            .execute(&pool)
+            .await
+            .unwrap();
+        let disabled = router
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri("/api/v1/organizations")
+                    .header(header::COOKIE, &cookie_a)
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(disabled.status(), StatusCode::UNAUTHORIZED);
+    }
+
+    #[tokio::test]
+    async fn organization_creation_is_rate_limited() {
+        let pool = open(&isolated_test_url()).await.unwrap();
+        let email = format!("org-rate-{}@example.test", Uuid::new_v4());
+        let password = "contraseña-inicial-1";
+        seed_credential(&pool, &email, password).await;
+        let mut app_state = state(pool.clone());
+        app_state.organization_limiter = Arc::new(auth::LoginLimiter::new(
+            1,
+            std::time::Duration::from_secs(60),
+        ));
+        let router = build_router(app_state, false, test_auth_state(pool.clone()));
+        let origin = Some("http://127.0.0.1:8080");
+        let (status, headers, _) = send_auth(
+            &router,
+            "/api/v1/auth/login",
+            None,
+            origin,
+            Some(json!({"email": email, "password": password})),
+        )
+        .await;
+        assert_eq!(status, StatusCode::NO_CONTENT);
+        let cookie = session_from(&headers);
+        let (status, _, _) = send_auth(
+            &router,
+            "/api/v1/organizations",
+            Some(&cookie),
+            origin,
+            Some(json!({"display_name": "Primera"})),
+        )
+        .await;
+        assert_eq!(status, StatusCode::CREATED);
+        let (status, _, body) = send_auth(
+            &router,
+            "/api/v1/organizations",
+            Some(&cookie),
+            origin,
+            Some(json!({"display_name": "Segunda"})),
+        )
+        .await;
+        assert_eq!(status, StatusCode::TOO_MANY_REQUESTS);
+        assert_eq!(body["code"], "rate_limited");
     }
 
     #[tokio::test]

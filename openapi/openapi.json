@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "HiQNet Platform API",
-    "description": "Plano de control técnico; sin identidad comercial, facturación ni sincronización productivas. El token administrativo es temporal y exclusivo de desarrollo.",
+    "description": "Plano de control técnico con identidad comercial y sesiones; sin facturación, suscripciones ni sincronización productivas. El token administrativo es temporal y exclusivo de desarrollo.",
     "version": "0.1.0"
   },
   "paths": {
@@ -737,6 +737,233 @@
         ]
       }
     },
+    "/api/v1/organizations": {
+      "get": {
+        "tags": [
+          "Organizaciones"
+        ],
+        "summary": "Lista las organizaciones activas del actor autenticado (máximo técnico 100).",
+        "operationId": "listOrganizations",
+        "responses": {
+          "200": {
+            "description": "Organizaciones activas con membresía activa; orden por nombre e id",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrganizationListResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sesión inválida o cuenta deshabilitada",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "PostgreSQL no disponible",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "commercialSession": []
+          }
+        ]
+      },
+      "post": {
+        "tags": [
+          "Organizaciones"
+        ],
+        "summary": "Crea una organización activa y asigna owner a la cuenta autenticada.",
+        "operationId": "createOrganization",
+        "requestBody": {
+          "description": "Nombre visible; la cuenta autenticada recibe owner",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateOrganizationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Organización creada; cabecera Location con la ruta del recurso",
+            "headers": {
+              "Location": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "URL del recurso creado"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrganizationResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Nombre inválido",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sesión inválida o cuenta deshabilitada",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Origen no permitido",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflicto de creación",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Demasiadas creaciones",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "PostgreSQL no disponible",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "commercialSession": []
+          }
+        ]
+      }
+    },
+    "/api/v1/organizations/{id}": {
+      "get": {
+        "tags": [
+          "Organizaciones"
+        ],
+        "summary": "Consulta una organización propia; un UUID ajeno responde 404 neutral.",
+        "operationId": "getOrganization",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Identificador UUID de la organización",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Organización activa con membresía activa",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrganizationResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "UUID inválido",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sesión inválida o cuenta deshabilitada",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No existe o pertenece a otra cuenta",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "PostgreSQL no disponible",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "commercialSession": []
+          }
+        ]
+      }
+    },
     "/api/v1/plans": {
       "get": {
         "tags": [
@@ -854,6 +1081,21 @@
             "example": "nueva-contraseña-2026"
           }
         }
+      },
+      "CreateOrganizationRequest": {
+        "type": "object",
+        "required": [
+          "display_name"
+        ],
+        "properties": {
+          "display_name": {
+            "type": "string",
+            "example": "Mi negocio",
+            "maxLength": 200,
+            "minLength": 1
+          }
+        },
+        "additionalProperties": false
       },
       "ErrorResponse": {
         "type": "object",
@@ -1073,6 +1315,48 @@
           },
           "email": {
             "type": "string"
+          }
+        }
+      },
+      "OrganizationListResponse": {
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OrganizationResponse"
+            }
+          }
+        }
+      },
+      "OrganizationResponse": {
+        "type": "object",
+        "required": [
+          "id",
+          "display_name",
+          "role",
+          "status"
+        ],
+        "properties": {
+          "display_name": {
+            "type": "string",
+            "example": "Mi negocio"
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "example": "123e4567-e89b-42d3-a456-426614174010"
+          },
+          "role": {
+            "type": "string",
+            "example": "owner"
+          },
+          "status": {
+            "type": "string",
+            "example": "active"
           }
         }
       },
