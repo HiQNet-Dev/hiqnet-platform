@@ -3083,6 +3083,7 @@ mod tests {
             assert_eq!(status, StatusCode::CREATED);
         }
         let mut cursor: Option<String> = None;
+        let mut organization_cursor: Option<String> = None;
         let mut names = Vec::new();
         loop {
             let uri = match &cursor {
@@ -3101,11 +3102,68 @@ mod tests {
                     .map(|item| item["display_name"].as_str().unwrap().to_owned()),
             );
             cursor = body["next_cursor"].as_str().map(str::to_owned);
+            if organization_cursor.is_none() {
+                organization_cursor = cursor.clone();
+            }
             if cursor.is_none() {
                 break;
             }
         }
         assert_eq!(names, ["Equipo A", "Equipo C", "Equipo D", "Equipo E"]);
+        let organization_cursor = organization_cursor.expect("cursor de organizaciones");
+
+        // Cursores ligados al tipo de listado y, para miembros, a la organización.
+        let (status, _, body) = send_auth(
+            &router,
+            "/api/v1/organizations",
+            Some(&owner_cookie),
+            origin,
+            Some(json!({"display_name": "Equipo F"})),
+        )
+        .await;
+        assert_eq!(status, StatusCode::CREATED);
+        let team_f = body["id"].as_str().unwrap().to_owned();
+        let (status, _, _) = send_auth(
+            &router,
+            &format!("/api/v1/organizations/{team_f}/members"),
+            Some(&owner_cookie),
+            origin,
+            Some(json!({"account_id": member_id, "role": "member"})),
+        )
+        .await;
+        assert_eq!(status, StatusCode::CREATED);
+        let (status, _, body) = send_method(
+            &router,
+            Method::GET,
+            &format!("/api/v1/organizations/{team_f}/members?limit=1"),
+            Some(&owner_cookie),
+            None,
+            None,
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        let member_cursor = body["next_cursor"].as_str().unwrap().to_owned();
+
+        for uri in [
+            format!("/api/v1/organizations/{organization}/members?cursor={member_cursor}"),
+            format!("/api/v1/organizations/{organization}/members?cursor={organization_cursor}"),
+            format!("/api/v1/organizations?cursor={member_cursor}"),
+        ] {
+            let (status, _, _) =
+                send_method(&router, Method::GET, &uri, Some(&owner_cookie), None, None).await;
+            assert_eq!(status, StatusCode::BAD_REQUEST, "{uri}");
+        }
+        let oversized = "a".repeat(2049);
+        let (status, _, _) = send_method(
+            &router,
+            Method::GET,
+            &format!("/api/v1/organizations/{organization}/members?cursor={oversized}"),
+            Some(&owner_cookie),
+            None,
+            None,
+        )
+        .await;
+        assert_eq!(status, StatusCode::BAD_REQUEST);
 
         for uri in [
             "/api/v1/organizations?limit=0",

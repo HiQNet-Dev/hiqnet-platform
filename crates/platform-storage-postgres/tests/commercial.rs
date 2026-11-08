@@ -1,3 +1,4 @@
+use base64::Engine as _;
 use platform_application::commercial::CommercialService;
 use platform_core::{
     commercial::{CommercialError, OrganizationRole},
@@ -1380,6 +1381,270 @@ async fn concurrent_role_change_and_revocation_are_serialized() {
     );
     assert_eq!(
         service.get_organization(target.id, organization.id).await,
+        Err(CommercialError::NotFound)
+    );
+}
+
+#[tokio::test]
+async fn cursors_are_bound_to_listing_and_organization() {
+    let pool = open(&isolated_url("TEST_DATABASE_URL")).await.unwrap();
+    let service = CommercialService::new(PgCommercialRepository::new(pool.clone()));
+    let now = OffsetDateTime::now_utc();
+    let owner = service
+        .create_account(
+            &format!("p023b-cursor-{}@example.test", Uuid::new_v4()),
+            "Cursor B",
+            now,
+        )
+        .await
+        .unwrap();
+    let member = service
+        .create_account(
+            &format!("p023b-cursor-m-{}@example.test", Uuid::new_v4()),
+            "Cursor M",
+            now,
+        )
+        .await
+        .unwrap();
+    let organization_a = service
+        .create_organization(owner.id, "Cursor A", now)
+        .await
+        .unwrap();
+    let organization_b = service
+        .create_organization(owner.id, "Cursor B", now)
+        .await
+        .unwrap();
+    service
+        .create_organization(owner.id, "Cursor C", now)
+        .await
+        .unwrap();
+    service
+        .add_member(
+            owner.id,
+            organization_a.id,
+            member.id,
+            OrganizationRole::Member,
+            now,
+        )
+        .await
+        .unwrap();
+
+    let member_page = service
+        .list_members(owner.id, organization_a.id, None, 1)
+        .await
+        .unwrap();
+    let member_cursor = member_page.next_cursor.expect("cursor de miembros");
+    assert!(
+        service
+            .list_members(owner.id, organization_a.id, Some(&member_cursor), 1)
+            .await
+            .is_ok(),
+        "el cursor es válido en su propio listado y organización"
+    );
+    assert_eq!(
+        service
+            .list_members(owner.id, organization_b.id, Some(&member_cursor), 1)
+            .await,
+        Err(CommercialError::InvalidCursor),
+        "un cursor de miembros no se reutiliza en otra organización"
+    );
+
+    let organization_page = service.list_organizations(owner.id, None, 1).await.unwrap();
+    let organization_cursor = organization_page
+        .next_cursor
+        .expect("cursor de organizaciones");
+    assert_eq!(
+        service
+            .list_members(owner.id, organization_a.id, Some(&organization_cursor), 1)
+            .await,
+        Err(CommercialError::InvalidCursor),
+        "un cursor de organizaciones no sirve para miembros"
+    );
+    assert_eq!(
+        service
+            .list_organizations(owner.id, Some(&member_cursor), 1)
+            .await,
+        Err(CommercialError::InvalidCursor),
+        "un cursor de miembros no sirve para organizaciones"
+    );
+
+    let encode = |value: serde_json::Value| {
+        base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(serde_json::to_vec(&value).unwrap())
+    };
+    let wrong_kind = encode(serde_json::json!({
+        "v": 1, "k": "organizations", "n": "Cursor A", "i": Uuid::new_v4()
+    }));
+    assert_eq!(
+        service
+            .list_members(owner.id, organization_a.id, Some(&wrong_kind), 1)
+            .await,
+        Err(CommercialError::InvalidCursor)
+    );
+    let wrong_version = encode(serde_json::json!({
+        "v": 2, "k": "members", "o": organization_a.id.as_uuid(),
+        "t": 0, "i": Uuid::new_v4()
+    }));
+    assert_eq!(
+        service
+            .list_members(owner.id, organization_a.id, Some(&wrong_version), 1)
+            .await,
+        Err(CommercialError::InvalidCursor)
+    );
+    // Formato anterior sin versión, tipo ni organización: ya no se acepta.
+    let legacy_member_cursor = encode(serde_json::json!({"t": 0, "i": Uuid::new_v4()}));
+    assert_eq!(
+        service
+            .list_members(owner.id, organization_a.id, Some(&legacy_member_cursor), 1)
+            .await,
+        Err(CommercialError::InvalidCursor)
+    );
+    let legacy_organization_cursor =
+        encode(serde_json::json!({"n": "Cursor A", "i": Uuid::new_v4()}));
+    assert_eq!(
+        service
+            .list_organizations(owner.id, Some(&legacy_organization_cursor), 1)
+            .await,
+        Err(CommercialError::InvalidCursor)
+    );
+    let oversized = "a".repeat(2049);
+    assert_eq!(
+        service
+            .list_organizations(owner.id, Some(&oversized), 1)
+            .await,
+        Err(CommercialError::InvalidCursor)
+    );
+    assert_eq!(
+        service
+            .list_members(owner.id, organization_a.id, Some(&oversized), 1)
+            .await,
+        Err(CommercialError::InvalidCursor)
+    );
+}
+
+#[tokio::test]
+async fn member_listing_authorization_and_read_share_one_statement() {
+    let pool = open(&isolated_url("TEST_DATABASE_URL")).await.unwrap();
+    let service = CommercialService::new(PgCommercialRepository::new(pool.clone()));
+    let now = OffsetDateTime::now_utc();
+    let owner = service
+        .create_account(
+            &format!("p023b-window-{}@example.test", Uuid::new_v4()),
+            "Window B",
+            now,
+        )
+        .await
+        .unwrap();
+    let member = service
+        .create_account(
+            &format!("p023b-window-m-{}@example.test", Uuid::new_v4()),
+            "Window M",
+            now,
+        )
+        .await
+        .unwrap();
+    let organization = service
+        .create_organization(owner.id, "Ventana", now)
+        .await
+        .unwrap();
+    service
+        .add_member(
+            owner.id,
+            organization.id,
+            member.id,
+            OrganizationRole::Member,
+            now,
+        )
+        .await
+        .unwrap();
+
+    // Evidencia de la ventana con dos conexiones coordinadas: si autorización y
+    // lectura fueran sentencias separadas, la lectura posterior a la revocación
+    // confirmada seguiría devolviendo filas.
+    let mut first = pool.acquire().await.unwrap();
+    let authorized: Option<String> = sqlx::query_scalar(
+        "SELECT mine.role
+         FROM organization_membership mine
+         JOIN organization o ON o.id = mine.organization_id AND o.status = 'active'
+         JOIN commercial_account a ON a.id = mine.account_id AND a.status = 'active'
+         WHERE mine.organization_id = $1 AND mine.account_id = $2
+           AND mine.revoked_at IS NULL",
+    )
+    .bind(organization.id.as_uuid())
+    .bind(owner.id.as_uuid())
+    .fetch_optional(&mut *first)
+    .await
+    .unwrap();
+    assert_eq!(authorized.as_deref(), Some("owner"));
+
+    let mut second = pool.acquire().await.unwrap();
+    sqlx::query(
+        "UPDATE organization_membership
+         SET revoked_at = GREATEST(clock_timestamp(), joined_at)
+         WHERE organization_id = $1 AND account_id = $2",
+    )
+    .bind(organization.id.as_uuid())
+    .bind(owner.id.as_uuid())
+    .execute(&mut *second)
+    .await
+    .unwrap();
+    let stale_rows: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM organization_membership
+         WHERE organization_id = $1 AND revoked_at IS NULL",
+    )
+    .bind(organization.id.as_uuid())
+    .fetch_one(&mut *first)
+    .await
+    .unwrap();
+    assert!(
+        stale_rows > 0,
+        "la antigua fase de lectura sin autorización veía datos tras la revocación"
+    );
+
+    // La implementación corregida reautoriza en la misma sentencia: 404 neutral.
+    assert_eq!(
+        service
+            .list_members(owner.id, organization.id, None, 50)
+            .await,
+        Err(CommercialError::NotFound)
+    );
+
+    // Una revocación no confirmada no se observa: antes del commit la lectura
+    // mantiene la instantánea con la membresía; después, queda denegada.
+    let other_owner = service
+        .create_account(
+            &format!("p023b-window-o2-{}@example.test", Uuid::new_v4()),
+            "Window O2",
+            now,
+        )
+        .await
+        .unwrap();
+    let other_organization = service
+        .create_organization(other_owner.id, "Ventana 2", now)
+        .await
+        .unwrap();
+    let mut tx = pool.begin().await.unwrap();
+    sqlx::query(
+        "UPDATE organization_membership
+         SET revoked_at = GREATEST(clock_timestamp(), joined_at)
+         WHERE organization_id = $1 AND account_id = $2",
+    )
+    .bind(other_organization.id.as_uuid())
+    .bind(other_owner.id.as_uuid())
+    .execute(&mut *tx)
+    .await
+    .unwrap();
+    assert!(
+        service
+            .list_members(other_owner.id, other_organization.id, None, 50)
+            .await
+            .is_ok(),
+        "sin commit la revocación aún no es visible"
+    );
+    tx.commit().await.unwrap();
+    assert_eq!(
+        service
+            .list_members(other_owner.id, other_organization.id, None, 50)
+            .await,
         Err(CommercialError::NotFound)
     );
 }

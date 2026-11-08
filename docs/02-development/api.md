@@ -114,7 +114,7 @@ La creación está limitada a 5 solicitudes por minuto y cuenta en esta instanci
 
 ### Paginación por cursor (P02.3-B)
 
-`GET /api/v1/organizations` y `GET /api/v1/organizations/{id}/members` aceptan `limit` (1–100, por defecto 50) y `cursor`. El campo `next_cursor` de la respuesta es opaco: se envía tal cual como `cursor` para obtener la página siguiente y se omite en la última página. El orden es estable: organizaciones por `display_name` e `id`; miembros por `joined_at` y `account_id`. Un cursor malformado, un límite fuera de rango o un cursor de otro listado devuelven 400. El límite es técnico y no representa una cuota comercial por plan. El formato de `items` es compatible con P02.3-A; sólo se añadió `next_cursor`.
+`GET /api/v1/organizations` y `GET /api/v1/organizations/{id}/members` aceptan `limit` (1–100, por defecto 50) y `cursor`. El campo `next_cursor` de la respuesta es opaco: se envía tal cual como `cursor` para obtener la página siguiente y se omite en la última página. El orden es estable: organizaciones por `display_name` e `id`; miembros por `joined_at` y `account_id`. El cursor incluye versión y tipo de listado; el de miembros queda vinculado a la organización. Reutilizarlo en otro listado u organización, enviar una versión desconocida o superar 2048 caracteres devuelve 400. Un cursor malformado o un límite fuera de rango también devuelven 400. El límite es técnico y no representa una cuota comercial por plan. El formato de `items` es compatible con P02.3-A; sólo se añadió `next_cursor`.
 
 ### Membresías y roles
 
