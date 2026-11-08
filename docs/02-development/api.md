@@ -30,6 +30,9 @@ Rutas de identidad comercial (P02.2-A), independientes del token DEV anterior:
 | GET | `/api/v1/auth/me` | Cookie de sesión | 200 identidad | 401 sesión ausente/expirada/revocada; 503 BD |
 | POST | `/api/v1/auth/password/change` | Cookie de sesión | 204 + nueva cookie | 400 política; 401 actual incorrecta/sesión; 403 origen; 409 concurrencia; 429 rate limit; 503 BD |
 | POST | `/api/v1/auth/sessions/revoke` | Cookie de sesión | 204 y cookie borrada | 401 sesión; 403 origen; 503 BD |
+| GET | `/api/v1/organizations` | Cookie de sesión | 200 `items` | 401 sesión; 503 BD |
+| POST | `/api/v1/organizations` | Cookie de sesión | 201 + `Location` | 400 nombre; 401 sesión; 403 origen; 429 límite; 503 BD |
+| GET | `/api/v1/organizations/{id}` | Cookie de sesión | 200 organización | 400 UUID; 401 sesión; 404 ajena; 503 BD |
 
 La sesión comercial no es el token DEV ni una identidad POS. El `account_id` de `/me` proviene **solo** de la cookie verificada en PostgreSQL; ningún body, query o encabezado puede elegirlo. Cada login rota sesiones previas y persiste únicamente el hash SHA-256 del token. La cookie es `HttpOnly`, `SameSite=Lax`, `Path=/api` y `Secure` salvo en `HIQNET_PLATFORM_ENV=development` con `HIQNET_PLATFORM_COOKIE_SECURE=false` explícito; el arranque rechaza desactivar `Secure` fuera de development. **En producción toda mutación exige `Origin` exacto** igual a `HIQNET_PLATFORM_ALLOWED_ORIGIN`; `null`, valores múltiples, malformados o ausentes se rechazan. Sólo development admite ausencia de `Origin` para curl/Swagger; sin origen configurado se falla cerrado. La contraseña se protege con Argon2id (m=19456 KiB, t=2, p=1, salt aleatorio) y nunca se registra; `HIQNET_PLATFORM_AUTH_CONCURRENCY` (4 por defecto) acota verificaciones simultáneas y responde 503 `auth_overloaded` bajo saturación.
 
@@ -89,6 +92,21 @@ curl -i -b cookies.txt -X POST http://127.0.0.1:8080/api/v1/auth/logout \
   -H 'Origin: http://127.0.0.1:8080'
 # 204 y cookie con Max-Age=0
 ```
+
+### Organizaciones autenticadas
+
+Con cookie comercial se pueden crear y consultar únicamente organizaciones propias. `GET /api/v1/organizations` devuelve las organizaciones activas con membresía activa, ordenadas por nombre e id y limitadas técnicamente a 100; la paginación por cursor queda pendiente. `POST /api/v1/organizations` acepta sólo `display_name`, exige Origin válido y asigna `owner` en la misma transacción que crea la organización, la membresía y las auditorías `organization_created`/`membership_added`; no es idempotente y no admite `account_id`, `owner_id`, `tenant_id` ni `role` del cliente. `GET /api/v1/organizations/{id}` responde 404 neutral para organizaciones ajenas, archivadas, `legacy_unclaimed` o sin membresía activa.
+
+```sh
+curl -i -b cookies.txt -X POST http://127.0.0.1:8080/api/v1/organizations \
+  -H 'Content-Type: application/json' \
+  -H 'Origin: http://127.0.0.1:8080' \
+  -d '{"display_name":"Mi negocio"}'
+# 201 y Location: /api/v1/organizations/<uuid>
+curl -i -b cookies.txt http://127.0.0.1:8080/api/v1/organizations
+```
+
+La creación está limitada a 5 solicitudes por minuto y cuenta en esta instancia (protección técnica, no cuota de plan). Las organizaciones heredadas no se reclaman automáticamente. La administración de membresías y roles queda para P02.3-B.
 
 ### Cambio de contraseña y revocación de sesiones
 

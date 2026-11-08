@@ -1,6 +1,6 @@
 # ADR-0002: Estrategia de autenticación comercial para P02.2
 
-**Estado:** ACCEPTED e implementado para P02.2-A. **Implementación:** `feat/platform-commercial-auth-p022a`; detalles en [diseño P02.2](p022-authentication-design.md).
+**Estado:** ACCEPTED e implementado para P02.2-A y P02.2-B en `main`. **Implementación:** PRs #6 y #7; detalles en [diseño P02.2](p022-authentication-design.md).
 
 ## Contexto
 
