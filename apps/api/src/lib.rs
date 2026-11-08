@@ -6,8 +6,8 @@
 use axum::{
     Json, Router,
     extract::{
-        Path, State,
-        rejection::{JsonRejection, PathRejection},
+        Path, Query, State,
+        rejection::{JsonRejection, PathRejection, QueryRejection},
     },
     http::{HeaderMap, StatusCode},
     response::IntoResponse,
@@ -21,11 +21,11 @@ use contract::{
 };
 use platform_application::{
     AppError, PlatformService, SharedRepository, SharedSigner,
-    commercial::{CommercialService, OrganizationView},
+    commercial::{CommercialService, DEFAULT_PAGE_LIMIT, MAX_PAGE_LIMIT, OrganizationView},
 };
 use platform_core::DomainError;
-use platform_core::commercial::CommercialError;
-use platform_core::ids::InstallationId;
+use platform_core::commercial::{CommercialError, OrganizationMembership, OrganizationRole};
+use platform_core::ids::{CommercialAccountId, InstallationId, OrganizationId};
 use platform_storage_postgres::{PgCommercialRepository, is_ready, open, pool_repository};
 use sqlx::PgPool;
 use std::sync::Arc;
@@ -93,6 +93,16 @@ fn path_error(rejection: PathRejection) -> HttpError {
     )
 }
 
+fn query_error(rejection: QueryRejection) -> HttpError {
+    (
+        rejection.status(),
+        Json(ErrorResponse {
+            code: "invalid_query",
+            message: "parámetros de consulta inválidos".into(),
+        }),
+    )
+}
+
 fn path_id(path: Result<Path<Uuid>, PathRejection>) -> Result<InstallationId, HttpError> {
     path.map(|Path(id)| InstallationId::from_uuid(id))
         .map_err(path_error)
@@ -130,6 +140,8 @@ fn api_routes() -> (Router<AppState>, OpenApiDocument) {
         .routes(routes!(list_organizations))
         .routes(routes!(create_organization))
         .routes(routes!(get_organization))
+        .routes(routes!(list_members, add_member))
+        .routes(routes!(change_member_role, revoke_member))
         .split_for_parts();
     document.info = Info::new("HiQNet Platform API", env!("CARGO_PKG_VERSION"));
     document.info.description = Some("Plano de control técnico con identidad comercial y sesiones; sin facturación, suscripciones ni sincronización productivas. El token administrativo es temporal y exclusivo de desarrollo.".into());
@@ -417,12 +429,19 @@ fn commercial_error(error: CommercialError) -> HttpError {
         CommercialError::NotFound => {
             auth::error(StatusCode::NOT_FOUND, "not_found", "recurso no encontrado")
         }
+        CommercialError::Forbidden => auth::error(
+            StatusCode::FORBIDDEN,
+            "forbidden",
+            "rol insuficiente para la operación",
+        ),
         CommercialError::Conflict => auth::error(
             StatusCode::CONFLICT,
             "conflict",
             "el recurso ya existe o entra en conflicto",
         ),
-        CommercialError::InvalidName | CommercialError::InvalidEmail => auth::error(
+        CommercialError::InvalidName
+        | CommercialError::InvalidEmail
+        | CommercialError::InvalidCursor => auth::error(
             StatusCode::BAD_REQUEST,
             "validation_error",
             "solicitud inválida",
@@ -714,6 +733,69 @@ pub struct OrganizationResponse {
 #[derive(serde::Serialize, utoipa::ToSchema)]
 pub struct OrganizationListResponse {
     pub items: Vec<OrganizationResponse>,
+    /// Cursor opaco para la página siguiente; ausente en la última página.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schema(
+        example = "eyJuIjoiTWkgbmVnb2NpbyIsImkiOiIxMjNlNDU2Ny1lODliLTQyZDMtYTQ1Ni00MjY2MTQxNzQwMTAifQ"
+    )]
+    pub next_cursor: Option<String>,
+}
+
+#[derive(serde::Serialize, utoipa::ToSchema)]
+pub struct MemberResponse {
+    #[schema(value_type = String, format = Uuid, example = "123e4567-e89b-42d3-a456-426614174011")]
+    pub account_id: Uuid,
+    #[schema(example = "member")]
+    pub role: String,
+    #[serde(with = "time::serde::rfc3339")]
+    #[schema(value_type = String, format = DateTime, example = "2026-11-08T00:00:00Z")]
+    pub joined_at: time::OffsetDateTime,
+}
+
+#[derive(serde::Serialize, utoipa::ToSchema)]
+pub struct MemberListResponse {
+    pub items: Vec<MemberResponse>,
+    /// Cursor opaco para la página siguiente; ausente en la última página.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schema(
+        example = "eyJ0IjoxNzYyNTYwMDAwMDAwMDAwMDAsImkiOiIxMjNlNDU2Ny1lODliLTQyZDMtYTQ1Ni00MjY2MTQxNzQwMTEifQ"
+    )]
+    pub next_cursor: Option<String>,
+}
+
+#[derive(serde::Serialize, utoipa::ToSchema)]
+pub struct MemberRoleResponse {
+    #[schema(value_type = String, format = Uuid, example = "123e4567-e89b-42d3-a456-426614174011")]
+    pub account_id: Uuid,
+    #[schema(example = "admin")]
+    pub role: String,
+}
+
+#[derive(serde::Deserialize, utoipa::IntoParams)]
+#[into_params(parameter_in = Query)]
+pub struct PageQuery {
+    #[param(example = 50, minimum = 1, maximum = 100)]
+    pub limit: Option<u32>,
+    #[param(
+        example = "eyJuIjoiTWkgbmVnb2NpbyIsImkiOiIxMjNlNDU2Ny1lODliLTQyZDMtYTQ1Ni00MjY2MTQxNzQwMTAifQ"
+    )]
+    pub cursor: Option<String>,
+}
+
+#[derive(serde::Deserialize, utoipa::ToSchema)]
+#[serde(deny_unknown_fields)]
+pub struct AddMemberRequest {
+    #[schema(value_type = String, format = Uuid, example = "123e4567-e89b-42d3-a456-426614174011")]
+    pub account_id: Uuid,
+    #[schema(example = "member")]
+    pub role: String,
+}
+
+#[derive(serde::Deserialize, utoipa::ToSchema)]
+#[serde(deny_unknown_fields)]
+pub struct ChangeMemberRoleRequest {
+    #[schema(example = "admin")]
+    pub role: String,
 }
 
 #[derive(serde::Deserialize, utoipa::ToSchema)]
@@ -732,27 +814,59 @@ fn organization_response(view: OrganizationView) -> OrganizationResponse {
     }
 }
 
-/// Lista las organizaciones activas del actor autenticado (máximo técnico 100).
+fn member_response(membership: OrganizationMembership) -> MemberResponse {
+    MemberResponse {
+        account_id: membership.account_id.as_uuid(),
+        role: membership.role.as_str().to_owned(),
+        joined_at: membership.joined_at,
+    }
+}
+
+fn page_params(
+    query: Result<Query<PageQuery>, QueryRejection>,
+) -> Result<(Option<String>, u32), HttpError> {
+    let Query(query) = query.map_err(query_error)?;
+    let limit = query.limit.unwrap_or(DEFAULT_PAGE_LIMIT);
+    if !(1..=MAX_PAGE_LIMIT).contains(&limit) {
+        return Err(auth::error(
+            StatusCode::BAD_REQUEST,
+            "validation_error",
+            "limit debe estar entre 1 y 100",
+        ));
+    }
+    let cursor = query.cursor.filter(|value| !value.is_empty());
+    Ok((cursor, limit))
+}
+
+/// Convierte el rol del cliente; un valor fuera de owner/admin/member es 400.
+fn role_from_request(role: &str) -> Result<OrganizationRole, HttpError> {
+    OrganizationRole::from_storage(role, OrganizationRole::VERSION)
+        .map_err(|_| auth::error(StatusCode::BAD_REQUEST, "validation_error", "rol inválido"))
+}
+
+/// Lista las organizaciones activas del actor autenticado con paginación por cursor.
 #[utoipa::path(get, path = "/api/v1/organizations", operation_id = "listOrganizations", tag = "Organizaciones",
+    params(PageQuery),
     security(("commercialSession" = [])),
     responses(
-        (status = 200, description = "Organizaciones activas con membresía activa; orden por nombre e id", body = OrganizationListResponse),
+        (status = 200, description = "Organizaciones activas con membresía activa; orden por nombre e id. Usa next_cursor para continuar", body = OrganizationListResponse),
+        (status = 400, description = "Cursor o límite inválido", body = ErrorResponse),
         (status = 401, description = "Sesión inválida o cuenta deshabilitada", body = ErrorResponse),
         (status = 503, description = "PostgreSQL no disponible", body = ErrorResponse)))]
 async fn list_organizations(
     State(state): State<AppState>,
     auth_context: AuthContext,
+    query: Result<Query<PageQuery>, QueryRejection>,
 ) -> Result<Json<OrganizationListResponse>, HttpError> {
-    let organizations = state
+    let (cursor, limit) = page_params(query)?;
+    let page = state
         .commercial
-        .list_organizations(auth_context.session.account_id)
+        .list_organizations(auth_context.session.account_id, cursor.as_deref(), limit)
         .await
         .map_err(commercial_error)?;
     Ok(Json(OrganizationListResponse {
-        items: organizations
-            .into_iter()
-            .map(organization_response)
-            .collect(),
+        items: page.items.into_iter().map(organization_response).collect(),
+        next_cursor: page.next_cursor,
     }))
 }
 
@@ -843,6 +957,189 @@ async fn get_organization(
         .await
         .map_err(commercial_error)?;
     Ok(Json(organization_response(organization)))
+}
+
+/// Lista las membresías activas de una organización accesible para el actor.
+#[utoipa::path(get, path = "/api/v1/organizations/{id}/members", operation_id = "listOrganizationMembers", tag = "Membresías",
+    params(("id" = Uuid, Path, description = "Identificador UUID de la organización"), PageQuery),
+    security(("commercialSession" = [])),
+    responses(
+        (status = 200, description = "Membresías activas visibles para owner, admin o member; orden por alta y cuenta", body = MemberListResponse),
+        (status = 400, description = "UUID, cursor o límite inválido", body = ErrorResponse),
+        (status = 401, description = "Sesión inválida o cuenta deshabilitada", body = ErrorResponse),
+        (status = 404, description = "Organización inexistente, ajena o sin membresía activa", body = ErrorResponse),
+        (status = 503, description = "PostgreSQL no disponible", body = ErrorResponse)))]
+async fn list_members(
+    State(state): State<AppState>,
+    auth_context: AuthContext,
+    id: Result<Path<Uuid>, PathRejection>,
+    query: Result<Query<PageQuery>, QueryRejection>,
+) -> Result<Json<MemberListResponse>, HttpError> {
+    let Path(id) = id.map_err(path_error)?;
+    let (cursor, limit) = page_params(query)?;
+    let page = state
+        .commercial
+        .list_members(
+            auth_context.session.account_id,
+            OrganizationId::from_uuid(id),
+            cursor.as_deref(),
+            limit,
+        )
+        .await
+        .map_err(commercial_error)?;
+    Ok(Json(MemberListResponse {
+        items: page.items.into_iter().map(member_response).collect(),
+        next_cursor: page.next_cursor,
+    }))
+}
+
+/// Agrega una cuenta activa como miembro; sólo un owner de la organización.
+#[utoipa::path(post, path = "/api/v1/organizations/{id}/members", operation_id = "addOrganizationMember", tag = "Membresías",
+    params(("id" = Uuid, Path, description = "Identificador UUID de la organización")),
+    request_body(content = AddMemberRequest, description = "account_id de la cuenta activa y rol owner/admin/member"),
+    security(("commercialSession" = [])),
+    responses(
+        (status = 201, description = "Membresía creada; cabecera Location con la ruta del recurso", body = MemberRoleResponse,
+            headers(("Location" = String, description = "URL del recurso creado"))),
+        (status = 400, description = "UUID o rol inválido", body = ErrorResponse),
+        (status = 401, description = "Sesión inválida o cuenta deshabilitada", body = ErrorResponse),
+        (status = 403, description = "Origen no permitido o actor sin rol owner", body = ErrorResponse),
+        (status = 404, description = "Organización ajena, cuenta inexistente o deshabilitada", body = ErrorResponse),
+        (status = 409, description = "La cuenta ya tuvo o tiene membresía en la organización", body = ErrorResponse),
+        (status = 503, description = "PostgreSQL no disponible", body = ErrorResponse)))]
+async fn add_member(
+    State(state): State<AppState>,
+    axum::Extension(auth_state): axum::Extension<AuthState>,
+    auth_context: AuthContext,
+    headers: HeaderMap,
+    id: Result<Path<Uuid>, PathRejection>,
+    request: Result<Json<AddMemberRequest>, JsonRejection>,
+) -> Result<impl IntoResponse, HttpError> {
+    if !auth::origin_allowed(&headers, &auth_state) {
+        return Err(auth::error(
+            StatusCode::FORBIDDEN,
+            "origin_not_allowed",
+            "origen no permitido",
+        ));
+    }
+    let Path(id) = id.map_err(path_error)?;
+    let Json(request) = request.map_err(json_error)?;
+    let role = role_from_request(&request.role)?;
+    state
+        .commercial
+        .add_member(
+            auth_context.session.account_id,
+            OrganizationId::from_uuid(id),
+            CommercialAccountId::from_uuid(request.account_id),
+            role,
+            time::OffsetDateTime::now_utc(),
+        )
+        .await
+        .map_err(commercial_error)?;
+    let body = MemberRoleResponse {
+        account_id: request.account_id,
+        role: role.as_str().to_owned(),
+    };
+    let location = format!("/api/v1/organizations/{id}/members/{}", request.account_id);
+    let mut response = (StatusCode::CREATED, Json(body)).into_response();
+    response.headers_mut().insert(
+        axum::http::header::LOCATION,
+        axum::http::HeaderValue::from_str(&location)
+            .map_err(|_| commercial_error(CommercialError::Storage))?,
+    );
+    Ok(response)
+}
+
+/// Cambia el rol de un miembro; sólo un owner y sin romper el último propietario.
+#[utoipa::path(patch, path = "/api/v1/organizations/{id}/members/{account_id}", operation_id = "changeOrganizationMemberRole", tag = "Membresías",
+    params(
+        ("id" = Uuid, Path, description = "Identificador UUID de la organización"),
+        ("account_id" = Uuid, Path, description = "Identificador UUID de la cuenta miembro")),
+    request_body(content = ChangeMemberRoleRequest, description = "Nuevo rol owner/admin/member"),
+    security(("commercialSession" = [])),
+    responses(
+        (status = 200, description = "Rol actualizado", body = MemberRoleResponse),
+        (status = 400, description = "UUID o rol inválido", body = ErrorResponse),
+        (status = 401, description = "Sesión inválida o cuenta deshabilitada", body = ErrorResponse),
+        (status = 403, description = "Origen no permitido o actor sin rol owner", body = ErrorResponse),
+        (status = 404, description = "Organización ajena o membresía inexistente", body = ErrorResponse),
+        (status = 409, description = "Rol sin cambios o último propietario protegido", body = ErrorResponse),
+        (status = 503, description = "PostgreSQL no disponible", body = ErrorResponse)))]
+async fn change_member_role(
+    State(state): State<AppState>,
+    axum::Extension(auth_state): axum::Extension<AuthState>,
+    auth_context: AuthContext,
+    headers: HeaderMap,
+    path: Result<Path<(Uuid, Uuid)>, PathRejection>,
+    request: Result<Json<ChangeMemberRoleRequest>, JsonRejection>,
+) -> Result<Json<MemberRoleResponse>, HttpError> {
+    if !auth::origin_allowed(&headers, &auth_state) {
+        return Err(auth::error(
+            StatusCode::FORBIDDEN,
+            "origin_not_allowed",
+            "origen no permitido",
+        ));
+    }
+    let Path((id, account_id)) = path.map_err(path_error)?;
+    let Json(request) = request.map_err(json_error)?;
+    let role = role_from_request(&request.role)?;
+    state
+        .commercial
+        .change_role(
+            auth_context.session.account_id,
+            OrganizationId::from_uuid(id),
+            CommercialAccountId::from_uuid(account_id),
+            role,
+            time::OffsetDateTime::now_utc(),
+        )
+        .await
+        .map_err(commercial_error)?;
+    Ok(Json(MemberRoleResponse {
+        account_id,
+        role: role.as_str().to_owned(),
+    }))
+}
+
+/// Revoca la membresía activa; sólo un owner y sin dejar la organización sin owner.
+#[utoipa::path(delete, path = "/api/v1/organizations/{id}/members/{account_id}", operation_id = "revokeOrganizationMember", tag = "Membresías",
+    params(
+        ("id" = Uuid, Path, description = "Identificador UUID de la organización"),
+        ("account_id" = Uuid, Path, description = "Identificador UUID de la cuenta miembro")),
+    security(("commercialSession" = [])),
+    responses(
+        (status = 204, description = "Membresía revocada; deja de conceder acceso"),
+        (status = 400, description = "UUID inválido", body = ErrorResponse),
+        (status = 401, description = "Sesión inválida o cuenta deshabilitada", body = ErrorResponse),
+        (status = 403, description = "Origen no permitido o actor sin rol owner", body = ErrorResponse),
+        (status = 404, description = "Organización ajena o membresía inexistente", body = ErrorResponse),
+        (status = 409, description = "Último propietario protegido", body = ErrorResponse),
+        (status = 503, description = "PostgreSQL no disponible", body = ErrorResponse)))]
+async fn revoke_member(
+    State(state): State<AppState>,
+    axum::Extension(auth_state): axum::Extension<AuthState>,
+    auth_context: AuthContext,
+    headers: HeaderMap,
+    path: Result<Path<(Uuid, Uuid)>, PathRejection>,
+) -> Result<StatusCode, HttpError> {
+    if !auth::origin_allowed(&headers, &auth_state) {
+        return Err(auth::error(
+            StatusCode::FORBIDDEN,
+            "origin_not_allowed",
+            "origen no permitido",
+        ));
+    }
+    let Path((id, account_id)) = path.map_err(path_error)?;
+    state
+        .commercial
+        .revoke_member(
+            auth_context.session.account_id,
+            OrganizationId::from_uuid(id),
+            CommercialAccountId::from_uuid(account_id),
+            time::OffsetDateTime::now_utc(),
+        )
+        .await
+        .map_err(commercial_error)?;
+    Ok(StatusCode::NO_CONTENT)
 }
 
 pub async fn run() -> anyhow::Result<()> {
@@ -1113,6 +1410,10 @@ mod tests {
             ("/api/v1/organizations", "get"),
             ("/api/v1/organizations", "post"),
             ("/api/v1/organizations/{id}", "get"),
+            ("/api/v1/organizations/{id}/members", "get"),
+            ("/api/v1/organizations/{id}/members", "post"),
+            ("/api/v1/organizations/{id}/members/{account_id}", "patch"),
+            ("/api/v1/organizations/{id}/members/{account_id}", "delete"),
         ];
         let actual: Vec<(&str, &str)> = current["paths"]
             .as_object()
@@ -1147,9 +1448,8 @@ mod tests {
                     | "/api/v1/auth/me"
                     | "/api/v1/auth/password/change"
                     | "/api/v1/auth/sessions/revoke"
-                    | "/api/v1/organizations"
-                    | "/api/v1/organizations/{id}"
-            ) {
+            ) || path.starts_with("/api/v1/organizations")
+            {
                 assert_eq!(operation["security"], json!([{"commercialSession": []}]));
             } else {
                 assert!(operation.get("security").is_none());
@@ -1645,7 +1945,18 @@ mod tests {
         origin: Option<&str>,
         body: Option<Value>,
     ) -> (StatusCode, HeaderMap, Value) {
-        let mut request = Request::builder().method(Method::POST).uri(uri);
+        send_method(router, Method::POST, uri, cookie, origin, body).await
+    }
+
+    async fn send_method(
+        router: &Router,
+        method: Method,
+        uri: &str,
+        cookie: Option<&str>,
+        origin: Option<&str>,
+        body: Option<Value>,
+    ) -> (StatusCode, HeaderMap, Value) {
+        let mut request = Request::builder().method(method).uri(uri);
         if let Some(cookie) = cookie {
             request = request.header(header::COOKIE, cookie);
         }
@@ -1935,6 +2246,7 @@ mod tests {
         assert!(!body.to_string().contains("SELECT"));
 
         let organizations_outage = router
+            .clone()
             .oneshot(
                 Request::builder()
                     .uri("/api/v1/organizations")
@@ -1948,6 +2260,18 @@ mod tests {
             organizations_outage.status(),
             StatusCode::SERVICE_UNAVAILABLE
         );
+
+        let members_outage = router
+            .oneshot(
+                Request::builder()
+                    .uri(format!("/api/v1/organizations/{}/members", Uuid::new_v4()))
+                    .header(header::COOKIE, "hiqnet_session=token-sintetico")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(members_outage.status(), StatusCode::SERVICE_UNAVAILABLE);
 
         let pool = open(&isolated_test_url()).await.unwrap();
         let router = build_router(state(pool.clone()), false, test_auth_state(pool));
@@ -2458,5 +2782,339 @@ mod tests {
         .await;
         assert_eq!(status, StatusCode::TOO_MANY_REQUESTS);
         assert_eq!(body["code"], "rate_limited");
+    }
+
+    #[tokio::test]
+    async fn members_api_enforces_roles_and_tenant_isolation() {
+        let pool = open(&isolated_test_url()).await.unwrap();
+        let password = "contraseña-miembros-1";
+        let owner_email = format!("members-owner-{}@example.test", Uuid::new_v4());
+        let member_email = format!("members-member-{}@example.test", Uuid::new_v4());
+        let foreign_email = format!("members-foreign-{}@example.test", Uuid::new_v4());
+        for email in [&owner_email, &member_email, &foreign_email] {
+            seed_credential(&pool, email, password).await;
+        }
+        let router = build_router(state(pool.clone()), false, test_auth_state(pool.clone()));
+        let origin = Some("http://127.0.0.1:8080");
+
+        let login = |email: String| {
+            let router = router.clone();
+            async move {
+                let (status, headers, _) = send_auth(
+                    &router,
+                    "/api/v1/auth/login",
+                    None,
+                    Some("http://127.0.0.1:8080"),
+                    Some(json!({"email": email, "password": "contraseña-miembros-1"})),
+                )
+                .await;
+                assert_eq!(status, StatusCode::NO_CONTENT);
+                session_from(&headers)
+            }
+        };
+        let owner_cookie = login(owner_email.clone()).await;
+        let member_cookie = login(member_email.clone()).await;
+        let foreign_cookie = login(foreign_email.clone()).await;
+
+        let account_id = |email: String| {
+            let pool = pool.clone();
+            async move {
+                sqlx::query_scalar::<_, Uuid>(
+                    "SELECT c.account_id FROM commercial_credential c
+                     JOIN commercial_account a ON a.id = c.account_id
+                     WHERE a.email = $1",
+                )
+                .bind(email)
+                .fetch_one(&pool)
+                .await
+                .unwrap()
+            }
+        };
+        let owner_id = account_id(owner_email.clone()).await;
+        let member_id = account_id(member_email.clone()).await;
+        let owner_text = owner_id.to_string();
+        let member_text = member_id.to_string();
+
+        let (status, _, body) = send_auth(
+            &router,
+            "/api/v1/organizations",
+            Some(&owner_cookie),
+            origin,
+            Some(json!({"display_name": "Equipo A"})),
+        )
+        .await;
+        assert_eq!(status, StatusCode::CREATED);
+        let organization = body["id"].as_str().unwrap().to_owned();
+        let (status, _, body) = send_auth(
+            &router,
+            "/api/v1/organizations",
+            Some(&foreign_cookie),
+            origin,
+            Some(json!({"display_name": "Equipo B"})),
+        )
+        .await;
+        assert_eq!(status, StatusCode::CREATED);
+        let foreign_organization = body["id"].as_str().unwrap().to_owned();
+
+        let members_uri = format!("/api/v1/organizations/{organization}/members");
+        let foreign_members_uri = format!("/api/v1/organizations/{foreign_organization}/members");
+
+        // Alta por owner con Location y sin datos personales adicionales.
+        let (status, headers, body) = send_auth(
+            &router,
+            &members_uri,
+            Some(&owner_cookie),
+            origin,
+            Some(json!({"account_id": member_id, "role": "member"})),
+        )
+        .await;
+        assert_eq!(status, StatusCode::CREATED, "{body}");
+        assert!(
+            headers
+                .get(header::LOCATION)
+                .unwrap()
+                .to_str()
+                .unwrap()
+                .ends_with(&member_text)
+        );
+
+        let (status, _, body) = send_method(
+            &router,
+            Method::GET,
+            &members_uri,
+            Some(&owner_cookie),
+            None,
+            None,
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        let items = body["items"].as_array().unwrap();
+        assert_eq!(items.len(), 2);
+        let owner_item = items
+            .iter()
+            .find(|item| item["account_id"].as_str() == Some(owner_text.as_str()))
+            .unwrap();
+        assert_eq!(owner_item["role"], "owner");
+        let member_item = items
+            .iter()
+            .find(|item| item["account_id"].as_str() == Some(member_text.as_str()))
+            .unwrap();
+        assert_eq!(member_item["role"], "member");
+        assert!(member_item["joined_at"].is_string());
+        for item in items {
+            assert!(item.get("email").is_none());
+            assert!(item.get("display_name").is_none());
+            assert!(item.get("password_hash").is_none());
+        }
+
+        // Cualquier miembro activo consulta.
+        let (status, _, _) = send_method(
+            &router,
+            Method::GET,
+            &members_uri,
+            Some(&member_cookie),
+            None,
+            None,
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+
+        // admin/member no administran.
+        let (status, _, _) = send_auth(
+            &router,
+            &members_uri,
+            Some(&member_cookie),
+            origin,
+            Some(json!({"account_id": owner_id, "role": "member"})),
+        )
+        .await;
+        assert_eq!(status, StatusCode::FORBIDDEN);
+        let (status, _, _) = send_method(
+            &router,
+            Method::PATCH,
+            &format!("{members_uri}/{owner_text}"),
+            Some(&member_cookie),
+            origin,
+            Some(json!({"role": "owner"})),
+        )
+        .await;
+        assert_eq!(status, StatusCode::FORBIDDEN);
+        let (status, _, _) = send_method(
+            &router,
+            Method::DELETE,
+            &format!("{members_uri}/{owner_text}"),
+            Some(&member_cookie),
+            origin,
+            None,
+        )
+        .await;
+        assert_eq!(status, StatusCode::FORBIDDEN);
+
+        // Tenant ajeno: 404 neutral en consulta y mutación.
+        let (status, _, _) = send_method(
+            &router,
+            Method::GET,
+            &foreign_members_uri,
+            Some(&owner_cookie),
+            None,
+            None,
+        )
+        .await;
+        assert_eq!(status, StatusCode::NOT_FOUND);
+        let (status, _, _) = send_auth(
+            &router,
+            &foreign_members_uri,
+            Some(&owner_cookie),
+            origin,
+            Some(json!({"account_id": member_id, "role": "member"})),
+        )
+        .await;
+        assert_eq!(status, StatusCode::NOT_FOUND);
+
+        // Rol inválido antes de tocar la base.
+        let (status, _, body) = send_method(
+            &router,
+            Method::PATCH,
+            &format!("{members_uri}/{member_text}"),
+            Some(&owner_cookie),
+            origin,
+            Some(json!({"role": "superuser"})),
+        )
+        .await;
+        assert_eq!(status, StatusCode::BAD_REQUEST);
+        assert_eq!(body["code"], "validation_error");
+
+        let (status, _, body) = send_method(
+            &router,
+            Method::PATCH,
+            &format!("{members_uri}/{member_text}"),
+            Some(&owner_cookie),
+            origin,
+            Some(json!({"role": "admin"})),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(body["role"], "admin");
+        let (status, _, _) = send_method(
+            &router,
+            Method::PATCH,
+            &format!("{members_uri}/{member_text}"),
+            Some(&owner_cookie),
+            origin,
+            Some(json!({"role": "admin"})),
+        )
+        .await;
+        assert_eq!(status, StatusCode::CONFLICT);
+
+        // Duplicado y reincorporación tras revocación.
+        let (status, _, _) = send_auth(
+            &router,
+            &members_uri,
+            Some(&owner_cookie),
+            origin,
+            Some(json!({"account_id": member_id, "role": "member"})),
+        )
+        .await;
+        assert_eq!(status, StatusCode::CONFLICT);
+        let (status, _, _) = send_method(
+            &router,
+            Method::DELETE,
+            &format!("{members_uri}/{member_text}"),
+            Some(&owner_cookie),
+            origin,
+            None,
+        )
+        .await;
+        assert_eq!(status, StatusCode::NO_CONTENT);
+        let (status, _, _) = send_method(
+            &router,
+            Method::GET,
+            &members_uri,
+            Some(&member_cookie),
+            None,
+            None,
+        )
+        .await;
+        assert_eq!(status, StatusCode::NOT_FOUND, "la revocación quita acceso");
+        let (status, _, _) = send_auth(
+            &router,
+            &members_uri,
+            Some(&owner_cookie),
+            origin,
+            Some(json!({"account_id": member_id, "role": "member"})),
+        )
+        .await;
+        assert_eq!(status, StatusCode::CONFLICT);
+        let (status, _, _) = send_method(
+            &router,
+            Method::DELETE,
+            &format!("{members_uri}/{owner_text}"),
+            Some(&owner_cookie),
+            origin,
+            None,
+        )
+        .await;
+        assert_eq!(status, StatusCode::CONFLICT, "último owner protegido");
+
+        // CSRF y sesión ausente.
+        let (status, _, _) = send_auth(
+            &router,
+            &members_uri,
+            Some(&owner_cookie),
+            Some("https://evil.example"),
+            Some(json!({"account_id": member_id, "role": "member"})),
+        )
+        .await;
+        assert_eq!(status, StatusCode::FORBIDDEN);
+        let (status, _, _) =
+            send_method(&router, Method::GET, &members_uri, None, None, None).await;
+        assert_eq!(status, StatusCode::UNAUTHORIZED);
+
+        // Paginación de organizaciones compatible con P02.3-A.
+        for name in ["Equipo C", "Equipo D", "Equipo E"] {
+            let (status, _, _) = send_auth(
+                &router,
+                "/api/v1/organizations",
+                Some(&owner_cookie),
+                origin,
+                Some(json!({"display_name": name})),
+            )
+            .await;
+            assert_eq!(status, StatusCode::CREATED);
+        }
+        let mut cursor: Option<String> = None;
+        let mut names = Vec::new();
+        loop {
+            let uri = match &cursor {
+                Some(cursor) => format!("/api/v1/organizations?limit=1&cursor={cursor}"),
+                None => "/api/v1/organizations?limit=1".to_owned(),
+            };
+            let (status, _, body) =
+                send_method(&router, Method::GET, &uri, Some(&owner_cookie), None, None).await;
+            assert_eq!(status, StatusCode::OK);
+            assert!(body["items"].as_array().unwrap().len() <= 1);
+            names.extend(
+                body["items"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .map(|item| item["display_name"].as_str().unwrap().to_owned()),
+            );
+            cursor = body["next_cursor"].as_str().map(str::to_owned);
+            if cursor.is_none() {
+                break;
+            }
+        }
+        assert_eq!(names, ["Equipo A", "Equipo C", "Equipo D", "Equipo E"]);
+
+        for uri in [
+            "/api/v1/organizations?limit=0",
+            "/api/v1/organizations?limit=101",
+            "/api/v1/organizations?cursor=no-es-un-cursor",
+        ] {
+            let (status, _, _) =
+                send_method(&router, Method::GET, uri, Some(&owner_cookie), None, None).await;
+            assert_eq!(status, StatusCode::BAD_REQUEST, "{uri}");
+        }
     }
 }
