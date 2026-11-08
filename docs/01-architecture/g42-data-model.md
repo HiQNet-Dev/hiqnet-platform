@@ -52,6 +52,7 @@ erDiagram
     organization ||--o{ installation_binding : vincula
     installation ||--o| installation_binding : pertenece
     installation ||--o{ installation_identity : posee
+    installation_identity ||--o{ installation_binding : evidencia
     organization ||--o| trial_entitlement : consume
     installation ||--o{ issued_license : recibe
     commercial_account ||--o{ commercial_security_event : genera
@@ -71,6 +72,7 @@ erDiagram
 
 - Las filas existentes quedan `legacy` y **no** obtienen acceso comercial automático.
 - No se añade `public_key` aquí: el historial vive en `installation_identity`.
+- `installation.organization_id` es la organización propietaria **permanente**. La unicidad `(id, organization_id)` ya existe desde `0002` y permite la FK compuesta del binding. Un cambio de tenant no se realiza por solicitud del cliente: exige un procedimiento administrativo explícito (PENDIENTE) y probablemente una nueva identidad.
 
 ### 4.2 `installation_identity` (nueva)
 
@@ -83,11 +85,13 @@ erDiagram
 | `key_version` | `SMALLINT` | No | `CHECK (key_version >= 1)` | Versionado del formato. |
 | `created_at` | `TIMESTAMPTZ` | No | — | Alta. |
 | `retired_at` | `TIMESTAMPTZ` | Sí | `CHECK (retired_at IS NULL OR retired_at >= created_at)` | Rotación/revocación. |
+| `generation` | `SMALLINT` | No | `DEFAULT 1`, `CHECK (generation >= 1)` | Secuencia de rotación para detectar anomalías; no es prueba física. |
 
 Índices:
 
 - `UNIQUE (fingerprint) WHERE retired_at IS NULL` — una clave activa no puede pertenecer a dos instalaciones.
 - `UNIQUE (installation_id) WHERE retired_at IS NULL` — una clave activa por instalación.
+- `UNIQUE (installation_id, generation)` — secuencia de rotación sin repetir generación.
 - `INDEX (installation_id, created_at DESC)` — historial de rotación.
 
 Ciclo de vida: `active` (`retired_at IS NULL`) → `retired` (`retired_at` no nulo). Nunca se borra.
@@ -128,10 +132,11 @@ Retención: permanente mientras exista la instalación; conserva evidencia de ro
 
 Reglas de transición (aplicadas por SQL, no solo en Rust):
 
-- `pending → approved` solo con `approved_by_account_id` y `organization_id` no nulos.
-- `approved → completed` solo con `consumed_at` fijado y en la misma transacción que la vinculación.
+- `pending → approved` solo con `approved_by_account_id` y `organization_id` no nulos, y con `owner` activo verificado en la misma transacción.
+- `approved → completed` solo con `consumed_at` fijado, firma válida y **revalidación vigente** de organización activa, cuenta activa, membresía activa y rol `owner`; todo en la misma transacción que el binding.
 - `pending|approved → expired|cancelled` sin consumo.
 - `completed`, `expired`, `cancelled` son terminales.
+- Si la revalidación falla, no hay transición: la solicitud permanece `approved` hasta expirar y se registra un evento de seguridad.
 
 Retención propuesta: 90 días tras el estado terminal, salvo obligación de auditoría; los eventos de auditoría asociados se conservan.
 
@@ -141,21 +146,22 @@ Retención propuesta: 90 días tras el estado terminal, salvo obligación de aud
 |---|---|---|---|---|
 | `id` | `UUID` | No | `PRIMARY KEY` | Identificador del vínculo. |
 | `organization_id` | `UUID` | No | `FK organization(id) ON DELETE RESTRICT` | Tenant. |
-| `installation_id` | `UUID` | No | `FK installation(id) ON DELETE RESTRICT` | Instalación. |
+| `installation_id` | `UUID` | No | FK compuesta `(installation_id, organization_id)` → `installation(id, organization_id)` | Instalación y tenant coherentes. |
 | `enrollment_request_id` | `UUID` | No | `FK enrollment_request(id) ON DELETE RESTRICT`, `UNIQUE` | Origen del vínculo. |
+| `installation_identity_id` | `UUID` | No | `FK installation_identity(id) ON DELETE RESTRICT` | Clave vigente al vincular; el historial de rotación queda en `installation_identity`. |
 | `approved_by_account_id` | `UUID` | No | `FK commercial_account(id) ON DELETE RESTRICT` | Actor. |
-| `public_key_fingerprint` | `BYTEA` | No | `CHECK (octet_length(...) = 32)` | Evidencia de la clave. |
 | `bound_at` | `TIMESTAMPTZ` | No | — | Alta. |
 | `revoked_at` | `TIMESTAMPTZ` | Sí | `CHECK (revoked_at IS NULL OR revoked_at >= bound_at)` | Rehost/revocación. |
 | `revoke_reason` | `TEXT` | Sí | — | Trazabilidad. |
 
-Índices:
+Índices y reglas:
 
-- `UNIQUE (installation_id) WHERE revoked_at IS NULL` — una organización activa por instalación.
-- `UNIQUE (organization_id, installation_id)` — sin duplicados en el mismo tenant.
+- `UNIQUE (installation_id) WHERE revoked_at IS NULL` — **un único binding activo por instalación**.
 - `INDEX (organization_id, bound_at DESC)` — listado.
-
-No se permite cambiar `organization_id`; un cambio de tenant exige revocar y crear un nuevo binding auditado.
+- No existe un `UNIQUE(organization_id, installation_id)` permanente: impediría revincular la misma pareja tras un rehost o una rotación dentro de la misma organización. Las filas históricas pueden repetir la pareja y se distinguen por `bound_at`/`revoked_at`.
+- `installation.organization_id` es la organización propietaria permanente y debe coincidir con la del binding; la FK compuesta lo garantiza. No se actualiza por solicitud del cliente.
+- Los bindings no se borran ni se reescriben: se cierran con `revoked_at` y `revoke_reason` (historial append-only por cierre de vigencia).
+- Un cambio de tenant exige un procedimiento administrativo explícito, fuera del enrolamiento; probablemente con nueva identidad de instalación (PENDIENTE).
 
 ### 4.5 `trial_entitlement` (nueva)
 
@@ -182,9 +188,17 @@ Regla: una fila por organización; `consumed` es terminal. La política exacta d
 | `key` | `TEXT` | No | `PRIMARY KEY` parte | `Idempotency-Key`. |
 | `request_hash` | `BYTEA` | No | — | Detección de payload distinto. |
 | `response_status` | `SMALLINT` | No | — | Respuesta previa. |
-| `response_body` | `JSONB` | No | — | Cuerpo previo. |
+| `response_body` | `JSONB` | Sí | `CHECK (NOT (secrets_delivered AND response_body IS NOT NULL))` | Solo respuestas **sin** material bearer. |
+| `secrets_delivered` | `BOOLEAN` | No | `DEFAULT false` | Marca respuestas cuyo cuerpo contenía códigos bearer y no se almacena. |
 | `created_at` | `TIMESTAMPTZ` | No | — | Alta. |
 | `expires_at` | `TIMESTAMPTZ` | No | `CHECK (expires_at > created_at)` | Limpieza. |
+
+Reglas:
+
+- Para `/enrollment-requests` (inicio), `response_body` es `NULL` y `secrets_delivered = true`; el `CHECK` impide guardar la respuesta con secretos.
+- `response_body` solo se usa en respuestas no secretas (aprobación, consulta, error normalizado).
+- La semántica de reintento está en [protocolo §7](g42-enrollment-protocol.md#7-idempotencia-secretos-y-reintentos).
+- Nunca se almacena `device_code`, `user_code` ni `nonce` en claro.
 
 Retención propuesta: 7 días.
 
@@ -193,7 +207,7 @@ Retención propuesta: 7 días.
 | Columna | Tipo | Nulo | Restricción / índice | Justificación |
 |---|---|---|---|---|
 | `id` | `UUID` | No | `PRIMARY KEY` | Evento. |
-| `kind` | `TEXT` | No | `CHECK IN ('enrollment_conflict','duplicate_key','tenant_change_attempt','replay_rejected','rehost_performed','identity_revoked')` | Taxonomía inicial. |
+| `kind` | `TEXT` | No | `CHECK IN ('enrollment_conflict','duplicate_key','tenant_change_attempt','replay_rejected','rehost_performed','identity_revoked','authorization_revoked_during_proof','idempotency_conflict','clone_suspected')` | Taxonomía inicial. |
 | `account_id` | `UUID` | Sí | `FK commercial_account(id) ON DELETE RESTRICT` | Actor si existe. |
 | `organization_id` | `UUID` | Sí | `FK organization(id) ON DELETE RESTRICT` | Tenant si existe. |
 | `installation_id` | `UUID` | Sí | — | Referencia no FK para conservar evidencia si se revoca. |
@@ -241,18 +255,20 @@ enrollment_request(id PK, installation_id, public_key, fingerprint,
                    created_at, expires_at, approved_at, consumed_at,
                    cancelled_at, idempotency_scope, idempotency_key, request_hash)
 
-installation_binding(id PK, organization_id FK, installation_id FK,
-                     enrollment_request_id FK UNIQUE, approved_by_account_id FK,
-                     public_key_fingerprint, bound_at, revoked_at, revoke_reason)
+installation_binding(id PK, organization_id FK, installation_id,
+                     enrollment_request_id FK UNIQUE, installation_identity_id FK,
+                     approved_by_account_id FK, bound_at, revoked_at, revoke_reason)
+  FK (installation_id, organization_id) -> installation(id, organization_id)
   UNIQUE(installation_id) WHERE revoked_at IS NULL
-  UNIQUE(organization_id, installation_id)
 
 trial_entitlement(organization_id PK, status, started_at, ends_at, source,
                   consumed_by_installation_id FK, first_seen_account_id FK,
                   created_at, updated_at)
 
 idempotency_record(scope, endpoint, key, request_hash, response_status,
-                   response_body, created_at, expires_at) PK(scope, endpoint, key)
+                   response_body, secrets_delivered, created_at, expires_at)
+  PK(scope, endpoint, key)
+  CHECK (NOT (secrets_delivered AND response_body IS NOT NULL))
 
 commercial_security_event(id PK, kind, account_id FK, organization_id FK,
                           installation_id, occurred_at, ip_hash, metadata)
@@ -264,11 +280,14 @@ commercial_security_event(id PK, kind, account_id FK, organization_id FK,
 |---|---|
 | Una clave activa por instalación | Índice único parcial. |
 | Una clave activa en una sola instalación | Índice único parcial por fingerprint. |
-| Una organización activa por instalación | Índice único parcial en binding. |
-| Sin cambio silencioso de tenant | `organization_id` inmutable; rehost explícito. |
+| Un binding activo por instalación | Índice único parcial en binding. |
+| Binding coherente con la organización propietaria | FK compuesta a `installation(id, organization_id)`. |
+| Revinculación tras rehost sin perder historia | Cierre con `revoked_at`; el `UNIQUE` permanente no existe. |
+| Sin cambio silencioso de tenant | `installation.organization_id` inmutable; migración administrativa explícita. |
 | Consumo único de challenge | `consumed_at` + transición condicional. |
 | Trial único por organización | PK en `trial_entitlement`. |
 | Idempotencia persistente | PK compuesta y hash de payload. |
+| Sin secretos bearer en idempotencia | `response_body NULL` cuando `secrets_delivered = true`. |
 | Auditoría inmutable | Trigger existente y nuevo. |
 
 ## 7. Compatibilidad y migración

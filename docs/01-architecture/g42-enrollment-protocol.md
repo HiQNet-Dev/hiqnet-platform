@@ -86,7 +86,7 @@ Respuesta `201`:
 - `device_code` y `nonce` se devuelven **una vez**; el servidor guarda sus hashes y el nonce asociado a la solicitud.
 - `user_code` es legible y de un solo uso.
 - Expiración propuesta: 10 minutos (PENDIENTE de aprobación).
-- `Idempotency-Key` opcional: misma clave + mismo payload → misma respuesta; distinto payload → `409`.
+- `Idempotency-Key` opcional. La respuesta contiene material bearer y **no** se almacena en claro: un reintento con la misma clave y payload devuelve `409 enrollment_restart_required` sin secretos. El POS debe iniciar una solicitud nueva con otra clave (ver §7).
 
 ### 4.2 Aprobación — `POST /api/v1/enrollment-requests/{user_code}/approve`
 
@@ -114,7 +114,7 @@ Público, rate-limited.
 }
 ```
 
-- El POS reenvía el `nonce` recibido en el inicio; el servidor comprueba `sha256(nonce)` contra `nonce_hash` antes de verificar la firma. El nonce no es un secreto: la autoridad la aporta la firma.
+- El POS reenvía el `nonce` recibido en el inicio; el servidor comprueba `sha256(nonce)` contra `nonce_hash` antes de verificar la firma. El nonce no concede autoridad por sí mismo, pero no se recupera en reintentos.
 
 Firma canónica sobre bytes UTF-8 de:
 
@@ -128,7 +128,17 @@ nonce=<nonce>
 
 - Se usa el `device_code` recibido, no su hash.
 - La firma cubre la clave y la instalación para impedir sustitución.
-- El servidor verifica: solicitud existente, `approved`, no expirada, no consumida, `installation_id` y `public_key` idénticos a los del inicio, `sha256(nonce)` coincide con el hash persistido y firma válida.
+- La verificación inicial comprueba: solicitud existente, `approved`, no expirada, no consumida, `installation_id` y `public_key` idénticos a los del inicio, `sha256(nonce)` coincide con el hash persistido y firma válida.
+- Antes de confirmar el binding, la transacción **revalida la autoridad vigente** (no confía en la aprobación previa):
+  1. Solicitud `approved`, vigente y no consumida.
+  2. Organización `active`.
+  3. Cuenta aprobadora `active`.
+  4. Membresía activa del aprobador (`revoked_at IS NULL`).
+  5. Rol `owner` vigente (`role_version = 1`).
+  6. Instalación sin binding activo en otro tenant.
+  7. Clave pública sin conflicto con otra identidad activa.
+  8. Consumo, vinculación y auditoría en la misma transacción.
+- Si la autoridad cambió entre `/approve` y `/proof`, el binding se rechaza con `409 enrollment_invalid` y se registra un evento de seguridad; no se revela si fue revocación, archivado o conflicto.
 - Respuesta `201`:
 
 ```json
@@ -140,7 +150,7 @@ nonce=<nonce>
 }
 ```
 
-- Errores: `400` payload/canonicalización; `404` solicitud desconocida (neutral); `409` ya consumida/clon/duplicado; `410` expirada/cancelada; `429`; `503`.
+- Errores: `400` payload/canonicalización/firma inválida; `404` solicitud desconocida (neutral); `409` estado/autorización/conflicto (`enrollment_invalid`); `410` expirada/cancelada; `429`; `503`.
 
 ### 4.4 Consulta de instalaciones (fase posterior)
 
@@ -176,42 +186,114 @@ Estados persistidos: `pending`, `approved`, `completed`, `expired`, `cancelled`.
 | Clave pública no Ed25519 o longitud incorrecta | 400 |
 | `device_label` vacío o > 120 | 400 |
 | Código desconocido | 404 neutral |
-| Organización ajena o inexistente | 404 neutral |
-| Actor sin `owner` | 403 si pertenece a la org |
-| Solicitud expirada | 410 |
+| Organización ajena o inexistente en approve | 404 neutral |
+| Actor sin `owner` en approve | 403 si pertenece a la org |
+| Revocación/archivado/deshabilitación durante proof | 409 `enrollment_invalid` neutral |
+| Solicitud expirada o cancelada | 410 |
 | Solicitud ya consumida | 409 |
-| Firma inválida | 401 o 400 (sin revelar detalle) |
-| Clave ya vinculada a otra instalación activa | 409 + evento de seguridad |
+| Firma inválida | 400 (sin revelar detalle) |
+| Reintento de inicio sin secretos recuperables | 409 `enrollment_restart_required` |
+| Misma clave con distinto `installation_id` activo | 409 + evento de seguridad |
 | Instalación ya vinculada a otra organización | 409 + evento de seguridad |
+| Misma clave y mismo `installation_id` | No detectable; sin 409 garantizado |
 | Etiqueta duplicada en la organización | 409 |
 | PostgreSQL no disponible | 503 |
 | Rate limit | 429 |
 
 Mensajes de error normalizados, sin SQL, claves ni trazas.
 
-## 7. Idempotencia y reintentos
+## 7. Idempotencia, secretos y reintentos
 
-- Inicio: `Idempotency-Key` por actor/IP y payload; persistida con hash.
-- Aprobación: repetir sobre `approved` devuelve el estado actual sin duplicar.
-- Prueba: el consumo es única vez; repetir tras `completed` devuelve el resultado previo si coincide `Idempotency-Key` y payload; si no, `409`.
-- Timeout después de commit: el cliente reintenta con la misma clave; el servidor devuelve el resultado persistido.
-- Reintento con payload distinto: `409` y evento de seguridad.
+### 7.1 Decisión propuesta: entrega única (A)
+
+El inicio devuelve `device_code`, `user_code` y `nonce`, que son material de enrolamiento sensible. Se recomienda **no recuperarlos** en reintentos:
+
+- PostgreSQL guarda hashes y estado, nunca los códigos crudos.
+- `idempotency_record` puede almacenar respuestas **sin secretos**; para el inicio, `response_body` queda `NULL` y `secrets_delivered = true`.
+- Si el POS pierde la respuesta, reinicia el flujo con una `Idempotency-Key` nueva y una solicitud nueva.
+
+Alternativa B (respuesta recuperable cifrada) se difiere: exige una clave de servicio, rotación, control de acceso y una ventana de exposición; añade infraestructura y superficie para un POS sencillo. Podrá reevaluarse si la operación demuestra que el reinicio es costoso.
+
+### 7.2 Semántica por escenario
+
+| # | Escenario | Comportamiento | HTTP |
+|---|---|---|---|
+| 1 | Primer inicio | Crea solicitud, persiste hashes, devuelve secretos una vez | `201` |
+| 2 | Reintento antes de recibir respuesta | No recupera secretos; indica reiniciar | `409 enrollment_restart_required` |
+| 3 | Timeout después de persistir | Igual que 2; la solicitud queda `pending` hasta expirar | `409` |
+| 4 | Misma `Idempotency-Key` y mismo payload | Devuelve el resultado **no secreto** previo (estado/`restart_required`), sin secretos | `409`/`200` según endpoint |
+| 5 | Misma clave y payload distinto | Conflicto estable, evento de seguridad | `409 idempotency_conflict` |
+| 6 | Código expirado | No se acepta; se requiere flujo nuevo | `410` |
+| 7 | Código consumido | No se repite el efecto; replay idempotente solo devuelve datos no secretos del binding si coinciden clave y payload | `409` o `201` idempotente |
+| 8 | Solicitud cancelada | Terminal | `410` |
+| 9 | Reinicio del POS antes de completar | Secretos perdidos; nueva solicitud; la anterior se cancela o expira | `409` + flujo nuevo |
+
+### 7.3 Reglas adicionales
+
+- Aprobación: respuesta sin secretos; repetir sobre `approved` devuelve el estado actual sin duplicar.
+- Prueba: el consumo es único; el resultado (IDs y fecha) no es secreto y puede devolverse de forma idempotente si coinciden clave y payload.
+- Una solicitud nueva para el mismo `installation_id` cancela las solicitudes `pending`/`approved` anteriores de ese dispositivo (o las deja expirar), para evitar acumulación.
 - No se depende de memoria para idempotencia.
+- Ningún código bearer recuperable se guarda como JSON en claro. Si en el futuro se adopta la alternativa B, se hará con cifrado de servicio, expiración y borrado controlado, y seguirá prohibido el texto claro.
 
-## 8. Concurrencia y atomicidad
+## 8. Concurrencia, bloqueos y atomicidad
 
-- La prueba usa `SELECT ... FOR UPDATE` sobre la solicitud o un `UPDATE ... WHERE status = 'approved' AND consumed_at IS NULL` con `RETURNING`.
-- En la misma transacción: consumo del challenge, creación/validación de instalación, identidad, vinculación y auditoría.
-- Dos pruebas concurrentes: exactamente una `201`; la otra `409`.
-- Aprobación concurrente: exactamente una transición a `approved`.
+Orden de bloqueos (compatible con P02.3):
+
+1. `enrollment_request` de la solicitud, `FOR UPDATE`.
+2. `organization` de la organización aprobada, `FOR UPDATE` (mismo recurso que bloquea P02.3 al administrar membresías).
+3. Relectura de `commercial_account` y `organization_membership` del aprobador.
+4. Verificación de índices únicos de `installation_identity` y `installation_binding`.
+
+Ninguna ruta bloquea la organización y después la solicitud, por lo que no se crea un ciclo con la administración de membresías.
+
+Predicados mínimos de la transacción de `/proof`:
+
+```sql
+-- 1) solicitud
+SELECT id, organization_id, approved_by_account_id
+FROM enrollment_request
+WHERE id = $1
+  AND status = 'approved'
+  AND consumed_at IS NULL
+  AND expires_at > clock_timestamp()
+FOR UPDATE;
+
+-- 2) organización + autoridad vigente del aprobador
+SELECT o.id
+FROM organization o
+JOIN organization_membership m
+  ON m.organization_id = o.id
+ AND m.account_id = $2
+ AND m.revoked_at IS NULL
+ AND m.role = 'owner'
+ AND m.role_version = 1
+JOIN commercial_account a
+  ON a.id = m.account_id
+ AND a.status = 'active'
+WHERE o.id = $3
+  AND o.status = 'active'
+FOR UPDATE OF o;
+```
+
+Si la relectura no devuelve fila, se revierte todo y se responde `409 enrollment_invalid`.
+
+Semántica de carreras:
+
+- Dos pruebas concurrentes: la primera adquiere el bloqueo de solicitud y consume; la segunda, al esperar y releer, ve `consumed_at` no nulo y recibe `409`.
+- Revocación mientras `/proof` espera el bloqueo de organización: al obtenerlo, la siguiente sentencia usa una instantánea nueva (READ COMMITTED) y la relectura de membresía falla; se revierte y se registra `authorization_revoked_during_proof`.
+- Si `/proof` confirma antes del commit de la revocación, el binding queda; la revocación posterior no reescribe el historial y las consultas/licencias futuras vuelven a comprobar la autoridad.
 - Cancelación concurrente con prueba: gana quien confirme primero; el otro recibe `409`/`410`.
+- Aprobación concurrente: exactamente una transición a `approved`.
+
+Atomicidad: consumo del challenge, validación de identidad, creación/actualización de binding y auditoría se confirman o revierten juntos.
 
 ## 9. Cancelación e interrupciones
 
 - `POST /enrollment-requests/{device_code}/cancel` (opcional) o expiración por tiempo.
-- Si el POS se cierra tras el inicio: la solicitud expira y no vincula nada.
+- Si el POS se cierra tras el inicio: los secretos se pierden y la solicitud expira; para continuar se inicia un flujo nuevo.
 - Si se cierra tras la aprobación y antes de la prueba: el owner puede reintentar dentro de la vigencia; pasado el plazo, se repite el flujo.
-- Si se interrumpe la respuesta después del commit: el reintento idempotente devuelve la vinculación existente.
+- Si se interrumpe la respuesta de proof después del commit: el reintento idempotente devuelve la vinculación existente (datos no secretos).
 
 ## 10. Flujo de error y recuperación
 

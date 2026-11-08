@@ -65,9 +65,9 @@ ed25519:v1:<base64url(32 bytes)>
 
 | Evento | Acción |
 |---|---|
-| Reinstalación con clave nueva | Nuevo `installation_identity`; el anterior se marca `retired_at`. |
-| Pérdida de clave | Rehost con nueva clave y revocación del binding anterior. |
-| Sospecha de compromiso | Revocar identidad, revocar binding y evento `identity_revoked`. |
+| Reinstalación con clave nueva | Nuevo `installation_identity` con `generation + 1`; el anterior se marca `retired_at`. |
+| Pérdida de clave | Rehost con nueva clave y cierre del binding anterior. |
+| Sospecha de compromiso | Revocar identidad, cerrar binding y evento `identity_revoked`. |
 | Rotación de clave de emisión | Publicar nueva clave pública, mantener la anterior para grants vigentes, documentar ventana. |
 | Revocación de licencia | Fuera de G4.2-A; requiere diseño de licenciamiento. |
 
@@ -76,6 +76,8 @@ Invariantes:
 - Una clave activa pertenece a una sola instalación.
 - Una instalación activa tiene una sola clave activa.
 - Las claves retiradas no se reutilizan.
+
+Límite de clonación: si dos equipos comparten clave **y** `installation_id`, son criptográficamente indistinguibles; `generation` y las señales de reconexión ayudan a detectar anomalías, pero no prueban unicidad física.
 
 ## 6. Separación de entornos
 

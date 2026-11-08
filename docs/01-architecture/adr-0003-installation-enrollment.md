@@ -181,6 +181,43 @@ flowchart LR
 - PostgreSQL conserva **estado y auditoría**.
 - Ningún canal aislado concede acceso por sí solo.
 
+### 7.5 Revalidación final y orden de bloqueos
+
+La aprobación no es una autorización permanente. Antes de confirmar el binding, `/proof` revalida en la misma transacción:
+
+1. Solicitud `approved`, vigente y no consumida.
+2. Nonce válido y firma Ed25519 correcta.
+3. Organización `active`.
+4. Cuenta aprobadora `active`.
+5. Membresía activa del aprobador.
+6. Rol `owner` vigente (`role_version = 1`).
+7. Instalación sin binding activo en otro tenant.
+8. Clave pública sin conflicto con otra identidad activa.
+9. Consumo, vinculación y auditoría atómicos.
+
+Orden de bloqueos: `enrollment_request` → `organization` → revalidación de cuenta/membresía → verificación de índices de identidad/binding. Coincide con el orden de P02.3, que bloquea la organización antes de leer la membresía; ninguna ruta bloquea la organización y después la solicitud, por lo que no se introduce un ciclo.
+
+Punto de linearización: la transacción de `/proof` decide después de adquirir los bloqueos y releer la autoridad. Si una revocación se confirmó antes de esa relectura, el binding se rechaza; si `/proof` confirma primero, la revocación posterior no borra el binding histórico, pero las consultas y licencias futuras vuelven a comprobar el estado. El resultado es determinista según el orden de commit.
+
+### 7.6 Clonación: límites reales
+
+Una clave privada copiada produce firmas válidas en ambos equipos. El diseño distingue:
+
+| Escenario | Detección | Límite |
+|---|---|---|
+| Misma clave, distinto `installation_id` | Índice único de fingerprint activo → 409 + evento. | Prevención efectiva si el segundo intento pasa por Platform. |
+| Misma clave, mismo `installation_id` | Criptográficamente indistinguible. | No se promete detección en el enrolamiento. |
+| Clonación offline | No observable en tiempo real. | Solo detección diferida por señales al reconectar. |
+
+Mitigaciones proporcionadas: registro de conexiones/renovaciones, `generation` de identidad, secuencias monotónicas cuando sean verificables, anomalías al reconectar, rehost explícito, revocación y TPM opcional. No se exige fingerprinting invasivo ni se promete unicidad física.
+
+| Fase | Acción |
+|---|---|
+| Prevención | Índice único de clave activa, custodia de clave, TPM opcional, rehost autorizado. |
+| Detección | Conflictos de fingerprint, generaciones, conexiones/renovaciones anómalas y revisión. |
+| Respuesta | Revocar identidad, cerrar binding, evento `clone_suspected`, soporte. |
+| Recuperación | Rehost a la instalación legítima; el Trial consumido no se reinicia. |
+
 ## 8. Invariantes de seguridad
 
 | ID | Invariante |
@@ -194,17 +231,22 @@ flowchart LR
 | I-07 | Un `installation_id` no puede cambiar de organización por solicitud del cliente. |
 | I-08 | Una clave pública activa no puede pertenecer a dos instalaciones activas. |
 | I-09 | Las mutaciones de enrolamiento y su auditoría se confirman en la misma transacción. |
-| I-10 | Reintentos con la misma `Idempotency-Key` y mismo payload devuelven el resultado previo; distinto payload devuelve 409. |
+| I-10 | Reintentos con la misma `Idempotency-Key` y mismo payload devuelven el resultado previo **no secreto**; distinto payload devuelve 409. |
 | I-11 | La elegibilidad del Trial es estatal y persistente; no depende solo de memoria ni del reloj local. |
 | I-12 | La clave de emisión de licencias no se usa para identidad de dispositivo ni viceversa. |
 | I-13 | Toda respuesta cross-tenant es 404 neutral; el rol insuficiente es 403 solo si el actor ya pertenece al recurso. |
 | I-14 | Los eventos de auditoría y seguridad son append-only. |
 | I-15 | Las rutas DEV no se reutilizan para flujos comerciales. |
+| I-16 | Ningún código de enrolamiento (`device_code`, `user_code`, `nonce`) se persiste en claro ni dentro de una respuesta idempotente; la entrega es única por defecto. |
+| I-17 | La confirmación final del binding revalida organización activa, cuenta activa, membresía activa y rol `owner` vigente del aprobador dentro de la misma transacción. |
+| I-18 | Una instalación mantiene una sola organización propietaria durante su vida; solo existe un binding activo y el historial se conserva por cierre de vigencia. |
 
 ## 9. Consecuencias técnicas
 
 - Nuevas tablas y columnas en migraciones incrementales (`0004+`), sin tocar las publicadas.
 - Nuevo servicio de aplicación `EnrollmentService` y repositorio PostgreSQL; el handler permanece delgado.
+- La idempotencia del inicio no recupera códigos bearer: el POS reinicia el flujo si pierde la respuesta.
+- La transacción de proof revalida la autoridad vigente y serializa con el bloqueo de organización de P02.3.
 - El POS necesitará custodia de clave y un comando de enrolamiento en G4.2-D.
 - El contrato `LicenseGrant` v1 no cambia en G4.2-A; cualquier cambio exige v2 y compatibilidad.
 - La emisión de licencias deberá consultar identidad y elegibilidad antes de firmar.
@@ -224,9 +266,10 @@ flowchart LR
 | Riesgo | Residual |
 |---|---|
 | Usuario con control total del equipo y offline manipula reloj o copia claves | No eliminable; se acota con validez de grants y detección al reconectar. |
-| Clonación de clave privada | Se detecta al coincidir clave en dos instalaciones activas; no se impide criptográficamente sin hardware seguro. |
+| Clonación de clave privada | Se detecta si la clave aparece en otra identidad activa; si comparte `installation_id` o está offline, no se distingue criptográficamente. Se acota con señales al reconectar y revocación. |
 | Trials repetidos con cuentas/organizaciones nuevas | Solo mitigable con verificación de identidad y abuso; no hay identificación personal infalible. |
 | Compromiso de cuenta `owner` | Permite enrolar y rehost; se mitiga con sesión, CSRF, rate limit y auditoría. |
+| Filtración de códigos bearer por persistencia idempotente | Entrega única y prohibición de guardar secretos en `response_body`; reinicio del flujo si se pierden. |
 | Restauración de backup antiguo | El POS ya preserva el estado comercial actual; el diseño no debe relajarlo. |
 | Revocación diferida en offline | El grant sigue válido hasta `valid_until`; lease/gracia está pendiente. |
 
@@ -242,6 +285,8 @@ flowchart LR
 8. Verificación de correo o identidad para reducir abuso de Trials.
 9. Formato público de `key_id` y rotación de la clave de emisión.
 10. Retención de solicitudes, challenges y eventos de seguridad.
+11. Recuperación idempotente de secretos de enrolamiento: entrega única (recomendada) vs respuesta cifrada recuperable.
+12. Señales de detección de clonación que se adoptarán sin fingerprinting invasivo.
 
 ## 13. Criterios de aceptación del diseño
 

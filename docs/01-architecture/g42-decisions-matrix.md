@@ -45,21 +45,24 @@
 
 | Escenario | Resultado propuesto | Mecanismo | Evento |
 |---|---|---|---|
-| Mismo `installation_id`, misma organización, mismo payload | Devolver resultado previo | `Idempotency-Key` + hash | Ninguno |
+| Mismo `installation_id`, misma organización, mismo payload (inicio) | No recupera secretos; reiniciar con clave nueva | Entrega única + `secrets_delivered` | `enrollment_restart_required` |
 | Mismo `installation_id`, organización diferente | `409` + evento | Binding activo inmutable | `tenant_change_attempt` |
 | Misma clave pública, `installation_id` distinto | `409` + evento | Índice único de fingerprint activo | `duplicate_key` |
+| Misma clave y mismo `installation_id` | No distinguible criptográficamente | Sin señal adicional | `clone_suspected` solo si hay evidencia |
 | Misma etiqueta, instalación distinta | `409` | `UNIQUE(organization_id, device_label)` existente | Ninguno |
 | Dos solicitudes simultáneas de prueba | Una `201`, otra `409` | Consumo condicional/`FOR UPDATE` | `replay_rejected` si aplica |
-| Timeout tras commit | Reintento devuelve resultado | Registro de idempotencia | Ninguno |
-| Reintento misma clave, payload distinto | `409` | Hash distinto | `enrollment_conflict` |
-| Clonación de instalación | `409` + revisión | Fingerprint duplicado | `duplicate_key` |
+| Timeout tras commit (inicio) | No recupera secretos; reiniciar flujo | Registro de idempotencia sin cuerpo | `enrollment_restart_required` |
+| Timeout tras commit (proof) | Devuelve binding no secreto | Registro de idempotencia | Ninguno |
+| Reintento misma clave, payload distinto | `409` | Hash distinto | `idempotency_conflict` |
+| Clonación con misma clave e `installation_id` | No detectable criptográficamente; sin 409 garantizado | Señales de reconexión/generación | `clone_suspected` solo con evidencia |
 | Restauración de backup antiguo | Sin extensión de Trial | Estado comercial preservado | Ninguno |
-| Rehost explícito | `201` nuevo binding + revocación | Transacción | `rehost_performed` |
+| Rehost dentro de la misma organización | `201` nuevo binding + cierre del anterior | Transacción; `UNIQUE` parcial | `rehost_performed` |
 
 **Reglas:**
 
 - La idempotencia es persistente, nunca solo en memoria.
 - El hash cubre método, ruta lógica y cuerpo canónico.
+- La respuesta de inicio contiene material bearer y no se almacena; los reintentos no lo recuperan.
 - El consumo de challenge es único por transición condicional.
 - Un conflicto de identidad no se resuelve automáticamente: requiere rehost o soporte.
 
@@ -94,7 +97,7 @@ Ninguna ruta está aprobada ni implementada. Todas usan HTTPS y respuestas de er
 | Errores | 400, 409, 429, 503 |
 | Estado previo | Sin solicitud |
 | Estado posterior | `pending` |
-| Idempotencia | `Idempotency-Key` opcional |
+| Idempotencia | `Idempotency-Key` opcional; reintento con la misma clave y payload devuelve `409 enrollment_restart_required` sin secretos |
 | CSRF | No aplica (sin cookies) |
 | Rate limit | Sí |
 | Prueba de posesión | No en este paso; se exige en proof |
@@ -124,10 +127,10 @@ Ninguna ruta está aprobada ni implementada. Todas usan HTTPS y respuestas de er
 | Campo | Valor |
 |---|---|
 | Actor | Dispositivo (prueba criptográfica) |
-| Autorización | Solicitud aprobada + firma válida |
+| Autorización | Solicitud aprobada + firma válida + **revalidación vigente** de organización, cuenta, membresía y rol `owner` en la transacción final |
 | Request | `installation_id`, `public_key`, `signature` |
 | Response | `201` con instalación y binding |
-| Errores | 400, 404 neutral, 401, 409, 410, 429, 503 |
+| Errores | 400, 404 neutral, 409 `enrollment_invalid`, 410, 429, 503 |
 | Estado previo | `approved` |
 | Estado posterior | `completed` + instalación vinculada |
 | Idempotencia | Consumo único; reintento con misma clave devuelve resultado |
@@ -207,10 +210,12 @@ Regla: una ruta DEV no puede aceptar cookie comercial para actuar como cuenta, y
 | D-H | Verificación de correo | sí / no / fase posterior | sí antes de abuso masivo | Trials múltiples | PENDIENTE |
 | D-I | Custodia de clave | keystore / archivo | keystore con fallback | Robo local | PENDIENTE |
 | D-J | Retención de eventos | 90d / 1a / indefinido | 1 año para seguridad | Crecimiento | PENDIENTE |
+| D-K | Recuperación de secretos de enrolamiento | entrega única / respuesta cifrada | entrega única | Reinicio del flujo | PENDIENTE |
+| D-L | Señales de clonación | generación / conexiones / anomalías | generación + anomalías sin fingerprinting | Detección parcial | PENDIENTE |
 
 ## 7. Dependencias y riesgos
 
-- **Depende de:** ADR-0003 y de las aprobaciones D-A…D-J.
+- **Depende de:** ADR-0003 y de las aprobaciones D-A…D-L.
 - **Riesgo principal:** tomar una decisión operativa (por ejemplo, rehost automático) sin umbral aprobado.
 - **Riesgo de contrato:** publicar rutas candidatas como si fueran definitivas antes de la revisión.
 - **Mitigación:** toda decisión permanece PENDIENTE hasta aprobación expresa del titular.

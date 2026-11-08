@@ -294,14 +294,14 @@ flowchart LR
 | Campo | T-19 Clonación de instalación |
 |---|---|
 | Activo | A-05, A-06, A-10 |
-| Escenario | Dos equipos usan la misma clave/instalación. |
+| Escenario | Dos equipos usan la misma clave/instalación. Se distinguen tres casos: (1) misma clave con distinto `installation_id`; (2) misma clave y mismo `installation_id`; (3) clonación con ambos equipos offline. |
 | Precondiciones | Copia de clave privada o del perfil. |
 | Impacto | Uso simultáneo no autorizado. |
 | Probabilidad | Media |
 | Severidad | Alta |
-| Mitigación | Detección de clave pública duplicada en instalación activa distinta → 409 y evento; futura telemetría/heartbeat opcional. |
-| Evidencia | Prueba de misma clave con distinto `installation_id`. |
-| Riesgo residual | Alto sin hardware seguro o heartbeat. |
+| Mitigación | Caso 1: índice único de fingerprint activo → 409 y evento. Caso 2: no es detectable criptográficamente en el enrolamiento; se usan `generation`, registro de conexiones/renovaciones, anomalías al reconectar y revisión operativa. Caso 3: detección diferida; rehost/revocación como respuesta. TPM opcional. |
+| Evidencia | Caso 1 automatizable; casos 2 y 3 requieren prueba física/E2E y aceptación de límite. |
+| Riesgo residual | **Alto** en casos 2 y 3; no se promete identificación física infalible. |
 
 | Campo | T-20 Rehost malicioso |
 |---|---|
@@ -359,16 +359,28 @@ flowchart LR
 | Impacto | Vinculación con un actor que ya perdió autoridad. |
 | Probabilidad | Media |
 | Severidad | Alta |
-| Mitigación | Revalidar membresía activa y organización activa dentro de la misma transacción que consume la prueba; bloquear la fila relevante. |
-| Evidencia | Prueba concurrente de revocación y proof. |
+| Mitigación | Revalidar organización activa, cuenta activa, membresía activa y rol `owner` vigente **después** de bloquear solicitud y organización, dentro de la misma transacción que consume la prueba. Si la revocación se confirmó antes de la relectura, el binding se rechaza (409 neutral) y se registra `authorization_revoked_during_proof`. |
+| Evidencia | Prueba concurrente de revocación y proof con dos conexiones; orden de bloqueos `request → organization`. |
 | Riesgo residual | Bajo. |
+
+| Campo | T-25 Secretos bearer persistidos en la respuesta idempotente |
+|---|---|
+| Activo | A-08, A-05 |
+| Escenario | `device_code`, `user_code` o `nonce` quedan guardados en `idempotency_record.response_body` y un reintento o una lectura de base los recupera. |
+| Precondiciones | Diseño que persiste la respuesta 201 completa. |
+| Impacto | Reutilización de códigos de enrolamiento y secuestro de la vinculación. |
+| Probabilidad | Media sin control explícito. |
+| Severidad | Alta |
+| Mitigación | Entrega única; `response_body` nulo cuando `secrets_delivered = true`; `CHECK` en base; reintento devuelve `409 enrollment_restart_required`. |
+| Evidencia | Prueba de que la tabla no contiene los códigos y de que el reintento no los revela. |
+| Riesgo residual | Bajo con la política de entrega única. |
 
 ## 4. Prioridad
 
 | Prioridad | Amenazas |
 |---|---|
 | Crítica | T-01, T-10, T-21 |
-| Alta | T-02, T-03, T-04, T-05 (residual), T-13, T-14, T-15, T-16, T-17, T-18, T-19, T-22, T-23, T-24 |
+| Alta | T-02, T-03, T-04, T-05 (residual), T-13, T-14, T-15, T-16, T-17, T-18, T-19, T-22, T-23, T-24, T-25 |
 | Media | T-06, T-07, T-08, T-09, T-11, T-20 |
 | Baja | T-12 |
 
@@ -379,7 +391,9 @@ flowchart LR
 | Aislamiento cross-tenant | Automática (HTTP + PostgreSQL). |
 | Consumo único de challenge | Automática (concurrencia). |
 | Replay e idempotencia | Automática. |
-| Conflicto de clave/instalación | Automática. |
+| Conflicto de clave/instalación | Automática para clave con distinta identidad; no para misma clave+id. |
+| Secretos no persistidos en idempotencia | Automática (consulta SQL + reintento HTTP). |
+| Revalidación de owner en proof | Automática con dos conexiones. |
 | Rollback de auditoría | Automática. |
 | Manipulación de grant | Automática (POS). |
 | Clonación real con copia de perfil | Requiere prueba física/E2E. |

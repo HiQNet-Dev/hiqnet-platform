@@ -25,14 +25,14 @@ Ningún PR de implementación comienza hasta:
 
 | Campo | Contenido |
 |---|---|
-| Alcance | Migraciones 0004+, identidad de instalación, `enrollment_request`, binding, idempotencia, auditoría, API de enrolamiento (inicio, aprobación, proof) y consulta de instalaciones. |
+| Alcance | Migraciones 0004+, identidad de instalación, `enrollment_request`, binding, idempotencia sin secretos, revalidación de autoridad en proof, auditoría y API de enrolamiento (inicio, aprobación, proof) y consulta de instalaciones. |
 | Dependencias | G-1…G-5. |
 | Módulos | `platform-core` (tipos de identidad y estados), `platform-application` (`EnrollmentService`, puertos), `platform-storage-postgres` (repositorio y SQL), `apps/api` (DTOs, handlers, OpenAPI), `openapi/`. |
 | Migraciones | `0004_installation_identity.sql`, `0005_enrollment.sql`, `0006_audit_security_events.sql` (nombres tentativos). |
 | Contratos | `POST /enrollment-requests`, `.../approve`, `.../proof`, `GET /organizations/{id}/installations` (y detalle si se aprueba). |
-| Pruebas | Ver sección 4, grupos 1–4 y 5 parcial. |
+| Pruebas | Sección 6: 6.1–6.4 y 6.8. |
 | Riesgos | Autorización incorrecta, replay, conflictos de identidad, crecimiento de solicitudes. |
-| Aceptación | Owner enrola; admin/member no; tenant ajeno 404; replay 409/410; duplicados 409; auditoría transaccional; OpenAPI 3.1; snapshot. |
+| Aceptación | Owner enrola; admin/member no; tenant ajeno 404; replay 409/410; duplicados 409 cuando son detectables; reintento sin secretos; revalidación de owner en proof; auditoría transaccional; OpenAPI 3.1; snapshot. |
 
 ## 3. G4.2-C — Elegibilidad y activación Trial
 
@@ -43,7 +43,7 @@ Ningún PR de implementación comienza hasta:
 | Módulos | `platform-application` (política), PostgreSQL, API, OpenAPI, docs. |
 | Migraciones | `0007_trial_entitlement.sql` y ajustes de auditoría. |
 | Contratos | `POST /organizations/{id}/installations/{installation_id}/trial`. |
-| Pruebas | Sección 4, grupos 3–6. |
+| Pruebas | Sección 6: 6.2, 6.3 y 6.8. |
 | Riesgos | Concurrencia de activación, Trials heredados, abuso multi-cuenta. |
 | Aceptación | Una activación por organización; repetir es idempotente; reinstalar no reinicia; eventos auditados. |
 
@@ -55,7 +55,7 @@ Ningún PR de implementación comienza hasta:
 | Dependencias | G4.2-C aprobado y desplegado en un entorno de pruebas. |
 | Módulos POS | `pos-licensing`, `pos-application`, `pos-storage-sqlite`, `apps/pos-desktop`, migración local incremental. |
 | Contratos | Consumo de los endpoints de G4.2-B/C; sin cambios de `LicenseGrant` v1 salvo decisión v2. |
-| Pruebas | Sección 4, grupos 5–7. |
+| Pruebas | Sección 6: 6.1–6.7. |
 | Riesgos | Custodia de clave por plataforma, migración del Trial local, compatibilidad Windows/Linux/Android. |
 | Aceptación | Enrolamiento real desde POS; operación offline tras grant; reinstalación y restore no extienden Trial; clave privada nunca sale. |
 
@@ -68,7 +68,7 @@ Ningún PR de implementación comienza hasta:
 | Módulos | Ambos repositorios. |
 | Migraciones | Solo si el endurecimiento exige nuevas columnas aprobadas. |
 | Contratos | Versión compatible; sin romper clientes anteriores. |
-| Pruebas | Sección 4, grupos 4–7 completos. |
+| Pruebas | Sección 6: 6.4–6.8 completos. |
 | Riesgos | Falsos positivos de clonación, soporte operativo, deriva de versiones. |
 | Aceptación | Matriz de amenazas verificada; rehost y clonación demostrados; E2E real estable. |
 
@@ -92,9 +92,9 @@ Ningún PR de implementación comienza hasta:
 - Challenge reutilizado → 409.
 - Firma incorrecta → 400/401.
 - Clave sustituida → 409.
-- Registro duplicado (UUID/clave/etiqueta) → 409.
+- Registro duplicado detectable (UUID/clave con distinta identidad/etiqueta) → 409; misma clave+id no es distinguible.
 - Dos solicitudes concurrentes → una sola vinculación.
-- Timeout tras commit + reintento idempotente.
+- Timeout tras commit: inicio reinicia sin secretos; proof devuelve binding no secreto.
 - Rollback si falla la auditoría.
 - Activación de Trial concurrente → una sola.
 - Reinstalación en la misma organización → sin Trial nuevo.
@@ -143,6 +143,26 @@ Ningún PR de implementación comienza hasta:
 - Pérdida de clave → rehost.
 - Restore en el mismo equipo.
 - Restore en equipo distinto.
+
+### 6.8 Casos obligatorios del gate G4.2-A
+
+| # | Caso | Tipo |
+|---|---|---|
+| 1 | Reintento idempotente sin exponer `device_code`/`user_code`/`nonce` | Automatizable |
+| 2 | Timeout después del commit y reintento | Automatizable |
+| 3 | Payload distinto con la misma `Idempotency-Key` | Automatizable |
+| 4 | Revocación de `owner` entre approve y proof | Automatizable (dos conexiones) |
+| 5 | Cuenta deshabilitada durante proof | Automatizable |
+| 6 | Organización archivada durante proof | Automatizable |
+| 7 | Dos proof concurrentes | Automatizable |
+| 8 | Binding duplicado | Automatizable |
+| 9 | Rehost dentro de la misma organización | Automatizable |
+| 10 | Cambio de tenant bloqueado | Automatizable |
+| 11 | Misma clave con distinto `installation_id` | Automatizable |
+| 12 | Misma clave y mismo `installation_id` en dos equipos | Físico/E2E; límite documentado |
+| 13 | Clonación completamente offline | Físico; detección diferida |
+| 14 | Rollback ante fallo de auditoría | Automatizable |
+| 15 | Pérdida y recuperación de claves | E2E + físico |
 
 ## 7. Automatización
 

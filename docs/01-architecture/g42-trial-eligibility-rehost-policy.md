@@ -90,9 +90,12 @@ La activación no emite todavía un grant comercial; prepara el estado para G4.2
 ### Escenario 5 — Clonación
 
 - **Situación:** dos equipos usan la misma identidad/clave.
-- **Detección propuesta:** al iniciar enrolamiento o al reconectar, si la clave activa ya pertenece a otra instalación activa → `409` y evento `duplicate_key`. Si el `installation_id` ya está vinculado con otra clave → `409` y evento `installation_conflict`.
-- **Respuesta:** la instalación legítima conserva el vínculo; la nueva debe resolverse por rehost o soporte.
-- **Límite:** sin hardware seguro o heartbeat no se detecta actividad simultánea offline.
+- **Detección propuesta por caso:**
+  - Misma clave con distinto `installation_id`: el índice único de fingerprint activo produce `409` y `duplicate_key`.
+  - Misma clave y mismo `installation_id`: ambos equipos son criptográficamente indistinguibles; no se promete detección en el enrolamiento.
+  - Clonación offline: no observable en tiempo real; se detecta al reconectar por generaciones, conexiones/renovaciones anómalas y revisión operativa.
+- **Respuesta:** revocar la identidad comprometida, cerrar el binding y exigir rehost.
+- **Límite:** sin hardware seguro o señales adicionales no hay identificación física infalible.
 
 ### Escenario 6 — Múltiples cuentas
 
@@ -118,12 +121,14 @@ La activación no emite todavía un grant comercial; prepara el estado para G4.2
 | Aspecto | Propuesta |
 |---|---|
 | Quién | `owner` activo (decisión A). |
-| Cómo | Enrolamiento de la nueva instalación + revocación explícita del binding anterior. |
+| Cómo | Enrolamiento de la nueva instalación + cierre del binding anterior (`revoked_at`, `revoke_reason`). |
+| Historial | Un único binding activo por `installation_id` (`UNIQUE` parcial); las filas históricas no se borran ni se reescriben. |
+| Organización | `installation.organization_id` es propietaria permanente; el binding se valida con FK compuesta. |
 | Auditoría | `installation_rehosted` con actor, organización, instalación antigua/nueva y motivo. |
 | Límite numérico | **No definido**; PENDIENTE. |
 | Revisión manual | Opcional si se aprueba un umbral operativo. |
-| Clave anterior | Se retira (`retired_at`); no se reutiliza. |
-| Tenant | Inmutable; un cambio de tenant exige rehost a otra organización y auditoría, nunca un UUID del cliente. |
+| Clave anterior | Se retira (`retired_at`) e incrementa `generation`; no se reutiliza. |
+| Tenant | Inmutable; una transferencia legítima exige procedimiento administrativo explícito y probablemente nueva identidad. |
 
 ## 7. Recuperación sin hardware seguro
 
@@ -165,7 +170,7 @@ Opciones:
 - Reinstalar en la misma organización no concede otro Trial.
 - Restaurar un backup no extiende el Trial.
 - Un rehost autorizado queda auditado y no reinicia el Trial.
-- Una clave duplicada genera conflicto y evento de seguridad.
+- Una clave duplicada con distinto `installation_id` genera conflicto y evento; el mismo `installation_id` no es distinguible y se documenta como límite.
 - Repetir la activación es idempotente.
 - El estado es consultable y explicable para soporte.
 
