@@ -173,3 +173,40 @@ openapi-spec-validator --schema 3.1 openapi/openapi.json
 ```
 
 En Windows PowerShell 5, `>` puede alterar la codificación. Usa `python -c "import subprocess,pathlib; pathlib.Path('openapi/openapi.json').write_bytes(subprocess.check_output(['cargo','run','--quiet','-p','hiqnet-platform-api','--bin','generate-openapi']))"`. Instala `openapi-spec-validator==0.9.0` en un entorno Python aislado para validar. CI compara el JSON byte a byte con el generado, comprueba sintaxis OpenAPI 3.1 y ejecuta tests del router/snapshot, seguridad, Swagger y PostgreSQL. Cada endpoint nuevo debe aportar **en el mismo PR** ruta y anotación (`operation_id` estable), DTO/esquemas y ejemplos, respuestas y errores reales, seguridad aplicada, pruebas HTTP y documentación actualizada; no añadas rutas Axum fuera de `OpenApiRouter` salvo `/docs` y su documento opcionales.
+
+
+## Enrolamiento seguro de instalaciones (G4.2-B)
+
+La sección **Enrollment** de Swagger expone el flujo device-code + aprobación owner + proof Ed25519. El POS inicia el challenge sin cookie comercial; el owner aprueba desde el navegador; el dispositivo firma el mensaje canónico exacto y Platform crea la instalación, la identidad y el binding.
+
+| Método | Ruta | Seguridad | Resultado |
+| --- | --- | --- | --- |
+| POST | `/api/v1/enrollment-requests` | Pública + rate limit | 201 con secretos de entrega única |
+| POST | `/api/v1/enrollment-requests/{user_code}/approve` | Cookie comercial + `Origin` + owner | 200 |
+| POST | `/api/v1/enrollment-requests/{device_code}/proof` | Firma Ed25519 | 201 |
+| GET | `/api/v1/organizations/{id}/installations` | Cookie comercial + cualquier membresía | 200 |
+
+La cabecera `Idempotency-Key` del inicio es opcional y tiene un máximo de 128 caracteres ASCII visibles. Si se repite con el mismo payload después de entregar secretos, la respuesta es `409 enrollment_restart_required`; con payload distinto es `409 idempotency_conflict`. Los códigos, el nonce y las claves privadas no se persisten ni se devuelven en endpoints posteriores.
+
+Mensaje firmado exacto (UTF-8, sin JSON):
+
+```text
+hiqnet-enrollment-proof:v1
+request=<device_code>
+installation=<installation_id>
+key=<public_key>
+nonce=<nonce>
+```
+
+TTL por defecto: 600 segundos (`HIQNET_PLATFORM_ENROLLMENT_TTL_SECONDS`, 60–3600). El rate limit de enrolamiento es independiente del login y de organizaciones; sigue siendo memoria local por instancia (`HIQNET_PLATFORM_ENROLLMENT_RATE_LIMIT`, por defecto 30 por minuto). No es una cuota comercial.
+
+Prueba real en local (sustituye los valores por los sintéticos de tu ejecución; no publiques secretos):
+
+```sh
+curl -sS -X POST http://127.0.0.1:8080/api/v1/enrollment-requests \
+  -H 'Content-Type: application/json' \
+  -H 'Idempotency-Key: prueba-local-1' \
+  -d '{"installation_id":"<UUID>","public_key":"ed25519:v1:<BASE64URL>","device_label":"Caja local","app_version":"0.1.0","platform":"linux"}'
+```
+
+El mensaje canónico se firma con la clave privada local; Platform sólo almacena la clave pública, el fingerprint SHA-256 y hashes de los códigos/nonce. Los secretos no aparecen en Swagger, auditoría ni logs.

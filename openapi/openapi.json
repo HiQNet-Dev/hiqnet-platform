@@ -285,6 +285,293 @@
         ]
       }
     },
+    "/api/v1/enrollment-requests": {
+      "post": {
+        "tags": [
+          "Enrollment"
+        ],
+        "summary": "Inicia un challenge de enrolamiento público; los secretos se entregan una sola vez.",
+        "operationId": "beginEnrollment",
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "description": "Clave de idempotencia; máximo 128 caracteres ASCII visibles",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
+        ],
+        "requestBody": {
+          "description": "Identidad pública de la instalación y metadatos no secretos",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BeginEnrollmentBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Challenge creado; secretos entregados una sola vez",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EnrollmentChallengeResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Payload, clave pública, plataforma o Idempotency-Key inválidos",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Reinicio requerido o conflicto de idempotencia",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit técnico de enrolamiento",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "PostgreSQL no disponible",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/enrollment-requests/{device_code}/proof": {
+      "post": {
+        "tags": [
+          "Enrollment"
+        ],
+        "summary": "Verifica la firma Ed25519 del dispositivo y consume el challenge una sola vez.",
+        "operationId": "proveEnrollment",
+        "parameters": [
+          {
+            "name": "device_code",
+            "in": "path",
+            "description": "Código largo entregado al POS",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "description": "Firma sobre el mensaje canónico hiqnet-enrollment-proof:v1",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProofBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Instalación vinculada",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EnrollmentCompletedResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Firma o payload inválidos",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Challenge inexistente",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Replay, conflicto o autoridad revocada",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "Challenge expirado o consumido",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "PostgreSQL no disponible",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/enrollment-requests/{user_code}/approve": {
+      "post": {
+        "tags": [
+          "Enrollment"
+        ],
+        "summary": "Aprueba un challenge desde una sesión comercial; sólo el owner fija el tenant.",
+        "operationId": "approveEnrollment",
+        "parameters": [
+          {
+            "name": "user_code",
+            "in": "path",
+            "description": "Código de usuario mostrado al POS",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "description": "Organización propietaria elegida por el owner",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ApproveEnrollmentBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Solicitud aprobada",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApprovedEnrollmentResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Código, organización o JSON inválidos",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sesión inválida",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Origen no permitido o rol distinto de owner",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Código, organización o membresía inexistente (neutral)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "Challenge expirado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "PostgreSQL no disponible",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "commercialSession": []
+          }
+        ]
+      }
+    },
     "/api/v1/installations": {
       "post": {
         "tags": [
@@ -997,6 +1284,114 @@
         ]
       }
     },
+    "/api/v1/organizations/{id}/installations": {
+      "get": {
+        "tags": [
+          "Installations"
+        ],
+        "summary": "Lista installations de una organización con aislamiento en SQL y cursor keyset.",
+        "operationId": "listOrganizationInstallations",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Identificador UUID de la organización",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "Tamaño de página, 1–100 (default 50)",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "minimum": 0
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "description": "Cursor opaco keyset ligado a la organización",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Listado de installations visibles para el actor",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InstallationsResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "UUID, cursor o límite inválidos",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sesión inválida",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Origen no permitido",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Organización ajena o inexistente (neutral)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "PostgreSQL no disponible",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "commercialSession": []
+          }
+        ]
+      }
+    },
     "/api/v1/organizations/{id}/members": {
       "get": {
         "tags": [
@@ -1549,6 +1944,81 @@
         },
         "additionalProperties": false
       },
+      "ApproveEnrollmentBody": {
+        "type": "object",
+        "required": [
+          "organization_id"
+        ],
+        "properties": {
+          "organization_id": {
+            "type": "string",
+            "format": "uuid",
+            "example": "123e4567-e89b-42d3-a456-426614174010"
+          }
+        },
+        "additionalProperties": false
+      },
+      "ApprovedEnrollmentResponse": {
+        "type": "object",
+        "required": [
+          "enrollment_request_id",
+          "installation_id",
+          "organization_id",
+          "status"
+        ],
+        "properties": {
+          "enrollment_request_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "installation_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "organization_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "status": {
+            "type": "string",
+            "example": "approved"
+          }
+        }
+      },
+      "BeginEnrollmentBody": {
+        "type": "object",
+        "required": [
+          "installation_id",
+          "public_key",
+          "device_label",
+          "app_version",
+          "platform"
+        ],
+        "properties": {
+          "app_version": {
+            "type": "string",
+            "example": "0.1.0"
+          },
+          "device_label": {
+            "type": "string",
+            "example": "Caja mostrador"
+          },
+          "installation_id": {
+            "type": "string",
+            "format": "uuid",
+            "example": "123e4567-e89b-42d3-a456-426614174000"
+          },
+          "platform": {
+            "type": "string",
+            "example": "windows"
+          },
+          "public_key": {
+            "type": "string",
+            "example": "ed25519:v1:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+          }
+        },
+        "additionalProperties": false
+      },
       "ChangeMemberRoleRequest": {
         "type": "object",
         "required": [
@@ -1594,6 +2064,82 @@
         },
         "additionalProperties": false
       },
+      "EnrollmentChallengeResponse": {
+        "type": "object",
+        "required": [
+          "device_code",
+          "user_code",
+          "verification_uri",
+          "nonce",
+          "expires_in"
+        ],
+        "properties": {
+          "device_code": {
+            "type": "string",
+            "example": "sintetico-device-code"
+          },
+          "expires_in": {
+            "type": "integer",
+            "format": "int64",
+            "example": 600,
+            "minimum": 0
+          },
+          "nonce": {
+            "type": "string",
+            "example": "sintetico-nonce"
+          },
+          "user_code": {
+            "type": "string",
+            "example": "ABCD-EFGH"
+          },
+          "verification_uri": {
+            "type": "string",
+            "example": "http://127.0.0.1:8080/device"
+          }
+        }
+      },
+      "EnrollmentCompletedResponse": {
+        "type": "object",
+        "required": [
+          "enrollment_request_id",
+          "installation_id",
+          "organization_id",
+          "installation_identity_id",
+          "installation_binding_id",
+          "bound_at",
+          "status"
+        ],
+        "properties": {
+          "bound_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "enrollment_request_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "installation_binding_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "installation_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "installation_identity_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "organization_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "status": {
+            "type": "string",
+            "example": "completed"
+          }
+        }
+      },
       "ErrorResponse": {
         "type": "object",
         "required": [
@@ -1625,6 +2171,44 @@
           "version": {
             "type": "string",
             "example": "0.1.0"
+          }
+        }
+      },
+      "InstallationListItemResponse": {
+        "type": "object",
+        "required": [
+          "installation_id",
+          "device_label",
+          "status",
+          "identity_status"
+        ],
+        "properties": {
+          "bound_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "device_label": {
+            "type": "string"
+          },
+          "identity_status": {
+            "type": "string"
+          },
+          "installation_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "last_seen_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "status": {
+            "type": "string"
           }
         }
       },
@@ -1673,6 +2257,26 @@
               "null"
             ],
             "format": "date-time"
+          }
+        }
+      },
+      "InstallationsResponse": {
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/InstallationListItemResponse"
+            }
+          },
+          "next_cursor": {
+            "type": [
+              "string",
+              "null"
+            ]
           }
         }
       },
@@ -1956,6 +2560,35 @@
             "example": "trial"
           }
         }
+      },
+      "ProofBody": {
+        "type": "object",
+        "required": [
+          "installation_id",
+          "public_key",
+          "nonce",
+          "signature"
+        ],
+        "properties": {
+          "installation_id": {
+            "type": "string",
+            "format": "uuid",
+            "example": "123e4567-e89b-42d3-a456-426614174000"
+          },
+          "nonce": {
+            "type": "string",
+            "example": "sintetico-nonce"
+          },
+          "public_key": {
+            "type": "string",
+            "example": "ed25519:v1:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+          },
+          "signature": {
+            "type": "string",
+            "example": "firma-sintetica-base64url"
+          }
+        },
+        "additionalProperties": false
       },
       "ReadinessResponse": {
         "type": "object",

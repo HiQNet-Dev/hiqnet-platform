@@ -14,6 +14,7 @@ use axum::{
 };
 mod auth;
 mod contract;
+mod enrollment;
 use auth::{AuthContext, AuthState};
 use contract::{
     ErrorResponse, HealthResponse, InstallationResponse, IssueLicenseBody, IssuedLicenseResponse,
@@ -22,11 +23,14 @@ use contract::{
 use platform_application::{
     AppError, PlatformService, SharedRepository, SharedSigner,
     commercial::{CommercialService, DEFAULT_PAGE_LIMIT, MAX_PAGE_LIMIT, OrganizationView},
+    enrollment::EnrollmentService,
 };
 use platform_core::DomainError;
 use platform_core::commercial::{CommercialError, OrganizationMembership, OrganizationRole};
 use platform_core::ids::{CommercialAccountId, InstallationId, OrganizationId};
-use platform_storage_postgres::{PgCommercialRepository, is_ready, open, pool_repository};
+use platform_storage_postgres::{
+    PgCommercialRepository, PgEnrollmentRepository, is_ready, open, pool_repository,
+};
 use sqlx::PgPool;
 use std::sync::Arc;
 use utoipa::openapi::{
@@ -41,7 +45,9 @@ use uuid::Uuid;
 pub struct AppState {
     pub service: Arc<PlatformService>,
     pub commercial: Arc<CommercialService<PgCommercialRepository>>,
+    pub enrollment: Arc<EnrollmentService<PgEnrollmentRepository>>,
     pub organization_limiter: Arc<auth::LoginLimiter>,
+    pub enrollment_limiter: Arc<auth::LoginLimiter>,
     pub admin_token: Option<String>,
     pub licensing_enabled: bool,
     pub db_pool: PgPool,
@@ -142,6 +148,10 @@ fn api_routes() -> (Router<AppState>, OpenApiDocument) {
         .routes(routes!(get_organization))
         .routes(routes!(list_members, add_member))
         .routes(routes!(change_member_role, revoke_member))
+        .routes(routes!(enrollment::begin_enrollment))
+        .routes(routes!(enrollment::approve_enrollment))
+        .routes(routes!(enrollment::prove_enrollment))
+        .routes(routes!(enrollment::list_installations))
         .split_for_parts();
     document.info = Info::new("HiQNet Platform API", env!("CARGO_PKG_VERSION"));
     document.info.description = Some("Plano de control técnico con identidad comercial y sesiones; sin facturación, suscripciones ni sincronización productivas. El token administrativo es temporal y exclusivo de desarrollo.".into());
@@ -1210,11 +1220,33 @@ pub async fn run() -> anyhow::Result<()> {
     let commercial = Arc::new(CommercialService::new(PgCommercialRepository::new(
         pool.clone(),
     )));
+    let enrollment_ttl = std::env::var("HIQNET_PLATFORM_ENROLLMENT_TTL_SECONDS")
+        .ok()
+        .and_then(|value| value.parse::<u64>().ok())
+        .unwrap_or(platform_core::enrollment::DEFAULT_CHALLENGE_TTL_SECONDS)
+        .clamp(60, 3600);
+    let verification_uri = std::env::var("HIQNET_PLATFORM_ENROLLMENT_VERIFICATION_URI")
+        .unwrap_or_else(|_| "http://127.0.0.1:8080/device".into());
+    let enrollment = Arc::new(EnrollmentService::new(
+        PgEnrollmentRepository::new(pool.clone()),
+        enrollment_ttl,
+        verification_uri,
+    ));
+    let enrollment_rate_limit = std::env::var("HIQNET_PLATFORM_ENROLLMENT_RATE_LIMIT")
+        .ok()
+        .and_then(|value| value.parse::<usize>().ok())
+        .unwrap_or(30)
+        .clamp(1, 1000);
     let state = AppState {
         service,
         commercial,
+        enrollment,
         organization_limiter: Arc::new(auth::LoginLimiter::new(
             5,
+            std::time::Duration::from_secs(60),
+        )),
+        enrollment_limiter: Arc::new(auth::LoginLimiter::new(
+            enrollment_rate_limit,
             std::time::Duration::from_secs(60),
         )),
         admin_token,
@@ -1280,8 +1312,17 @@ mod tests {
             commercial: Arc::new(CommercialService::new(PgCommercialRepository::new(
                 pool.clone(),
             ))),
+            enrollment: Arc::new(EnrollmentService::new(
+                PgEnrollmentRepository::new(pool.clone()),
+                platform_core::enrollment::DEFAULT_CHALLENGE_TTL_SECONDS,
+                "http://127.0.0.1:8080/device".into(),
+            )),
             organization_limiter: Arc::new(auth::LoginLimiter::new(
                 5,
+                std::time::Duration::from_secs(60),
+            )),
+            enrollment_limiter: Arc::new(auth::LoginLimiter::new(
+                1000,
                 std::time::Duration::from_secs(60),
             )),
             admin_token: None,
@@ -1326,8 +1367,17 @@ mod tests {
             commercial: Arc::new(CommercialService::new(PgCommercialRepository::new(
                 pool.clone(),
             ))),
+            enrollment: Arc::new(EnrollmentService::new(
+                PgEnrollmentRepository::new(pool.clone()),
+                platform_core::enrollment::DEFAULT_CHALLENGE_TTL_SECONDS,
+                "http://127.0.0.1:8080/device".into(),
+            )),
             organization_limiter: Arc::new(auth::LoginLimiter::new(
                 5,
+                std::time::Duration::from_secs(60),
+            )),
+            enrollment_limiter: Arc::new(auth::LoginLimiter::new(
+                1000,
                 std::time::Duration::from_secs(60),
             )),
             admin_token: Some("token-sintetico-p01".into()),
@@ -1414,6 +1464,10 @@ mod tests {
             ("/api/v1/organizations/{id}/members", "post"),
             ("/api/v1/organizations/{id}/members/{account_id}", "patch"),
             ("/api/v1/organizations/{id}/members/{account_id}", "delete"),
+            ("/api/v1/enrollment-requests", "post"),
+            ("/api/v1/enrollment-requests/{user_code}/approve", "post"),
+            ("/api/v1/enrollment-requests/{device_code}/proof", "post"),
+            ("/api/v1/organizations/{id}/installations", "get"),
         ];
         let actual: Vec<(&str, &str)> = current["paths"]
             .as_object()
@@ -1440,7 +1494,10 @@ mod tests {
             );
             if path.starts_with("/api/v1/installations") {
                 assert_eq!(operation["security"], json!([{"devAdminToken": []}]));
-            } else if path == "/api/v1/auth/login" {
+            } else if path == "/api/v1/auth/login"
+                || path == "/api/v1/enrollment-requests"
+                || path.ends_with("/proof")
+            {
                 assert!(operation.get("security").is_none());
             } else if matches!(
                 path,
@@ -1448,6 +1505,7 @@ mod tests {
                     | "/api/v1/auth/me"
                     | "/api/v1/auth/password/change"
                     | "/api/v1/auth/sessions/revoke"
+                    | "/api/v1/enrollment-requests/{user_code}/approve"
             ) || path.starts_with("/api/v1/organizations")
             {
                 assert_eq!(operation["security"], json!([{"commercialSession": []}]));
@@ -3174,5 +3232,221 @@ mod tests {
                 send_method(&router, Method::GET, uri, Some(&owner_cookie), None, None).await;
             assert_eq!(status, StatusCode::BAD_REQUEST, "{uri}");
         }
+    }
+
+    #[tokio::test]
+    async fn enrollment_begin_is_rate_limited() {
+        let pool = open(&isolated_test_url()).await.unwrap();
+        let mut app_state = state(pool.clone());
+        app_state.enrollment_limiter = Arc::new(auth::LoginLimiter::new(
+            1,
+            std::time::Duration::from_secs(60),
+        ));
+        let router = build_router(app_state, false, test_auth_state(pool));
+        let signing_key = ed25519_dalek::SigningKey::generate(&mut rand_core::OsRng);
+        let body = json!({
+            "installation_id": Uuid::new_v4(),
+            "public_key": format!("ed25519:v1:{}", base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(signing_key.verifying_key().as_bytes())),
+            "device_label": "Caja rate",
+            "app_version": "0.1.0",
+            "platform": "linux"
+        });
+        let (status, _, _) = send_method(
+            &router,
+            Method::POST,
+            "/api/v1/enrollment-requests",
+            None,
+            None,
+            Some(body.clone()),
+        )
+        .await;
+        assert_eq!(status, StatusCode::CREATED);
+        let (status, _, response) = send_method(
+            &router,
+            Method::POST,
+            "/api/v1/enrollment-requests",
+            None,
+            None,
+            Some(body),
+        )
+        .await;
+        assert_eq!(status, StatusCode::TOO_MANY_REQUESTS);
+        assert_eq!(response["code"], "rate_limited");
+    }
+
+    #[tokio::test]
+    async fn enrollment_http_flow_rbac_and_cross_tenant() {
+        use ed25519_dalek::Signer as _;
+        use platform_core::enrollment::canonical_proof_message;
+
+        let pool = open(&isolated_test_url()).await.unwrap();
+        let email = format!("enroll-{}@example.test", Uuid::new_v4());
+        let other_email = format!("other-{}@example.test", Uuid::new_v4());
+        let password = "contraseña-inicial-1";
+        seed_credential(&pool, &email, password).await;
+        seed_credential(&pool, &other_email, password).await;
+        let router = build_router(state(pool.clone()), false, test_auth_state(pool.clone()));
+        let origin = Some("http://127.0.0.1:8080");
+
+        let (status, headers, _) = send_auth(
+            &router,
+            "/api/v1/auth/login",
+            None,
+            origin,
+            Some(json!({"email": email, "password": password})),
+        )
+        .await;
+        assert_eq!(status, StatusCode::NO_CONTENT);
+        let owner_cookie = session_from(&headers);
+
+        let (status, _, organization) = send_method(
+            &router,
+            Method::POST,
+            "/api/v1/organizations",
+            Some(&owner_cookie),
+            origin,
+            Some(json!({"display_name": "Org enrollment HTTP"})),
+        )
+        .await;
+        assert_eq!(status, StatusCode::CREATED);
+        let organization_id = organization["id"].as_str().unwrap().to_owned();
+
+        let installation_id = Uuid::new_v4();
+        let signing_key = ed25519_dalek::SigningKey::generate(&mut rand_core::OsRng);
+        let public_key = format!(
+            "ed25519:v1:{}",
+            base64::engine::general_purpose::URL_SAFE_NO_PAD
+                .encode(signing_key.verifying_key().as_bytes())
+        );
+        let (status, _, challenge) = send_method(
+            &router,
+            Method::POST,
+            "/api/v1/enrollment-requests",
+            None,
+            None,
+            Some(json!({
+                "installation_id": installation_id,
+                "public_key": public_key,
+                "device_label": "Caja HTTP",
+                "app_version": "0.1.0",
+                "platform": "windows"
+            })),
+        )
+        .await;
+        assert_eq!(status, StatusCode::CREATED);
+        let device_code = challenge["device_code"].as_str().unwrap().to_owned();
+        let user_code = challenge["user_code"].as_str().unwrap().to_owned();
+        let nonce = challenge["nonce"].as_str().unwrap().to_owned();
+        assert_eq!(challenge["expires_in"], 600);
+
+        let (status, _, _) = send_auth(
+            &router,
+            &format!("/api/v1/enrollment-requests/{user_code}/approve"),
+            Some(&owner_cookie),
+            Some("http://evil.example"),
+            Some(json!({"organization_id": organization_id})),
+        )
+        .await;
+        assert_eq!(status, StatusCode::FORBIDDEN);
+        let (status, _, _) = send_method(
+            &router,
+            Method::GET,
+            "/api/v1/installations/123e4567-e89b-42d3-a456-4266141740b2",
+            Some(&owner_cookie),
+            None,
+            None,
+        )
+        .await;
+        assert_eq!(
+            status,
+            StatusCode::UNAUTHORIZED,
+            "una cookie comercial no sustituye devAdminToken"
+        );
+        let (status, _, approved) = send_auth(
+            &router,
+            &format!("/api/v1/enrollment-requests/{user_code}/approve"),
+            Some(&owner_cookie),
+            origin,
+            Some(json!({"organization_id": organization_id})),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(approved["status"], "approved");
+
+        let message = canonical_proof_message(
+            &device_code,
+            InstallationId::from_uuid(installation_id),
+            &public_key,
+            &nonce,
+        );
+        let signature = signing_key.sign(&message);
+        let proof = json!({
+            "installation_id": installation_id,
+            "public_key": public_key,
+            "nonce": nonce,
+            "signature": base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(signature.to_bytes())
+        });
+        let (status, _, completed) = send_method(
+            &router,
+            Method::POST,
+            &format!("/api/v1/enrollment-requests/{device_code}/proof"),
+            None,
+            None,
+            Some(proof.clone()),
+        )
+        .await;
+        assert_eq!(status, StatusCode::CREATED);
+        assert_eq!(completed["installation_id"], installation_id.to_string());
+
+        let (status, _, list) = send_method(
+            &router,
+            Method::GET,
+            &format!("/api/v1/organizations/{organization_id}/installations"),
+            Some(&owner_cookie),
+            None,
+            None,
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        assert!(
+            list["items"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|item| item["installation_id"] == installation_id.to_string())
+        );
+
+        let (status, _, replay) = send_method(
+            &router,
+            Method::POST,
+            &format!("/api/v1/enrollment-requests/{device_code}/proof"),
+            None,
+            None,
+            Some(proof),
+        )
+        .await;
+        assert_eq!(status, StatusCode::CREATED);
+        assert_eq!(replay["installation_id"], installation_id.to_string());
+
+        let (status, other_headers, _) = send_auth(
+            &router,
+            "/api/v1/auth/login",
+            None,
+            origin,
+            Some(json!({"email": other_email, "password": password})),
+        )
+        .await;
+        assert_eq!(status, StatusCode::NO_CONTENT);
+        let other_cookie = session_from(&other_headers);
+        let (status, _, _) = send_method(
+            &router,
+            Method::GET,
+            &format!("/api/v1/organizations/{organization_id}/installations"),
+            Some(&other_cookie),
+            None,
+            None,
+        )
+        .await;
+        assert_eq!(status, StatusCode::NOT_FOUND);
     }
 }

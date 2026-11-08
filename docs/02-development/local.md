@@ -53,3 +53,16 @@ Crea `.dev-data` manualmente antes de `docker cp` (`New-Item -ItemType Directory
 ## Release y gobierno
 
 El workflow `release-platform.yml` sólo publica tras un **push de tag válido** `platform-v<SemVer>` correspondiente a versión del workspace (sin metadata `+build`, incompatible con tags de imagen Docker). `workflow_dispatch` valida/build sin publicar (dry-run); ejecutar manualmente en `main` no crea release. Protección de `main`/tags y GitHub secret scanning requieren autorización administrativa; CI sola no impide push directo ni creación de tags maliciosos por quien tenga permisos. No se publicó tag ni release en P00.
+
+
+## Levantar Platform local (G4.2-B)
+
+1. Copia `.env.example` a `.env` y define una contraseña local; no publiques `.env`.
+2. `docker compose up -d postgres`
+3. `docker compose up --build -d api` (o `cargo run -p hiqnet-platform-api --bin hiqnet-platform-api` con el puerto libre).
+4. Swagger: <http://127.0.0.1:8080/docs/> y OpenAPI: <http://127.0.0.1:8080/api-docs/openapi.json>.
+5. PostgreSQL local: `127.0.0.1:5432`, usuario/BD de `.env`.
+6. UI de base de datos opcional: `docker compose --profile db-ui up -d adminer` y abre <http://127.0.0.1:8081/>. Usa `postgres` como servidor, y el usuario, contraseña y base de tu `.env`/entorno de pruebas. Está bindeada sólo a `127.0.0.1` y no forma parte de la imagen ni del despliegue de la API.
+7. Apagado: `docker compose --profile db-ui down` (o `docker compose stop adminer` para conservar el resto).
+
+El flujo sintético completo (`login → organización → begin enrollment → approve → proof firmado → list installations`) se documenta en [API y Swagger](api.md#enrolamiento-seguro-de-instalaciones-g42b). Para el E2E de este incremento se usó una base aislada `hiqnet_g42b`; no se modifican datos de otras bases.
