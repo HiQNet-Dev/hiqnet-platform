@@ -1,7 +1,7 @@
 use platform_application::commercial::CommercialService;
 use platform_core::{
     commercial::{CommercialError, OrganizationRole},
-    ids::{CommercialAccountId, InstallationId},
+    ids::{CommercialAccountId, InstallationId, OrganizationId},
 };
 use platform_storage_postgres::{PgCommercialRepository, open};
 use sqlx::{PgPool, Row};
@@ -225,6 +225,242 @@ async fn isolates_organizations_and_audits_membership_mutations() {
         .execute(&pool)
         .await
         .unwrap();
+}
+
+#[tokio::test]
+async fn lists_and_gets_only_active_actor_memberships() {
+    let pool = open(&isolated_url("TEST_DATABASE_URL")).await.unwrap();
+    let service = CommercialService::new(PgCommercialRepository::new(pool.clone()));
+    let now = OffsetDateTime::now_utc();
+    let account = service
+        .create_account(
+            &format!("p023-{}@example.test", Uuid::new_v4()),
+            "Actor P023",
+            now,
+        )
+        .await
+        .unwrap();
+    let other = service
+        .create_account(
+            &format!("p023-other-{}@example.test", Uuid::new_v4()),
+            "Otro P023",
+            now,
+        )
+        .await
+        .unwrap();
+    let first = service
+        .create_organization(account.id, "Alfa", now)
+        .await
+        .unwrap();
+    let second = service
+        .create_organization(account.id, "Beta", now)
+        .await
+        .unwrap();
+    let foreign = service
+        .create_organization(other.id, "Gamma", now)
+        .await
+        .unwrap();
+
+    service
+        .add_member(
+            account.id,
+            second.id,
+            other.id,
+            OrganizationRole::Member,
+            now,
+        )
+        .await
+        .unwrap();
+    let own = service.list_organizations(account.id).await.unwrap();
+    assert_eq!(own.len(), 2);
+    assert_eq!(own[0].display_name, "Alfa");
+    assert_eq!(own[0].role, OrganizationRole::Owner);
+    assert_eq!(own[1].display_name, "Beta");
+    assert_eq!(own[1].role, OrganizationRole::Owner);
+    assert!(
+        own.iter()
+            .all(|organization| organization.status == "active")
+    );
+
+    let other_view = service.list_organizations(other.id).await.unwrap();
+    assert_eq!(other_view.len(), 2);
+    assert!(other_view.iter().all(|view| view.id != first.id));
+
+    assert_eq!(
+        service.get_organization(account.id, foreign.id).await,
+        Err(CommercialError::NotFound)
+    );
+    assert_eq!(
+        service.get_organization(other.id, first.id).await,
+        Err(CommercialError::NotFound)
+    );
+    assert_eq!(
+        service
+            .get_organization(account.id, first.id)
+            .await
+            .unwrap()
+            .role,
+        OrganizationRole::Owner
+    );
+
+    // Membresía revocada: deja de verse y de ser accesible.
+    service
+        .revoke_member(account.id, second.id, other.id, now)
+        .await
+        .unwrap();
+    let other_after = service.list_organizations(other.id).await.unwrap();
+    assert_eq!(other_after.len(), 1);
+    assert_eq!(other_after[0].id, foreign.id);
+
+    // Organización archivada: no visible ni consultable.
+    sqlx::query("UPDATE organization SET status = 'archived' WHERE id = $1")
+        .bind(second.id.as_uuid())
+        .execute(&pool)
+        .await
+        .unwrap();
+    let after_archive = service.list_organizations(account.id).await.unwrap();
+    assert_eq!(after_archive.len(), 1);
+    assert_eq!(
+        service.get_organization(account.id, second.id).await,
+        Err(CommercialError::NotFound)
+    );
+
+    // Organización heredada sin reclamar: no visible ni reclamable.
+    let legacy = Uuid::new_v4();
+    sqlx::query(
+        "INSERT INTO organization (id, display_name, status, created_at)
+         VALUES ($1, 'Legacy', 'legacy_unclaimed', now())",
+    )
+    .bind(legacy)
+    .execute(&pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO organization_membership
+         (organization_id, account_id, role, role_version, joined_at)
+         VALUES ($1, $2, 'owner', 1, now())",
+    )
+    .bind(legacy)
+    .bind(account.id.as_uuid())
+    .execute(&pool)
+    .await
+    .unwrap();
+    assert!(
+        service
+            .list_organizations(account.id)
+            .await
+            .unwrap()
+            .iter()
+            .all(|view| view.id != OrganizationId::from_uuid(legacy))
+    );
+    assert_eq!(
+        service
+            .get_organization(account.id, OrganizationId::from_uuid(legacy))
+            .await,
+        Err(CommercialError::NotFound)
+    );
+
+    // Cuenta deshabilitada: sin listado ni acceso.
+    sqlx::query("UPDATE commercial_account SET status = 'disabled' WHERE id = $1")
+        .bind(account.id.as_uuid())
+        .execute(&pool)
+        .await
+        .unwrap();
+    assert!(
+        service
+            .list_organizations(account.id)
+            .await
+            .unwrap()
+            .is_empty()
+    );
+    assert_eq!(
+        service.get_organization(account.id, first.id).await,
+        Err(CommercialError::NotFound)
+    );
+}
+
+#[tokio::test]
+async fn creation_rolls_back_when_audit_fails_and_rejects_disabled_account() {
+    let pool = open(&isolated_url("TEST_DATABASE_URL")).await.unwrap();
+    let service = CommercialService::new(PgCommercialRepository::new(pool.clone()));
+    let now = OffsetDateTime::now_utc();
+    let account = service
+        .create_account(
+            &format!("p023-audit-{}@example.test", Uuid::new_v4()),
+            "Auditoría P023",
+            now,
+        )
+        .await
+        .unwrap();
+
+    let trigger_sql = format!(
+        "CREATE OR REPLACE FUNCTION test_fail_org_audit_fn() RETURNS trigger
+         LANGUAGE plpgsql AS $$
+         BEGIN
+           IF NEW.action = 'organization_created' AND NEW.actor_account_id = '{}'::uuid THEN
+             RAISE EXCEPTION 'fallo sintético de auditoría';
+           END IF;
+           RETURN NEW;
+         END;
+         $$",
+        account.id
+    );
+    sqlx::query(&trigger_sql).execute(&pool).await.unwrap();
+    sqlx::query(
+        "CREATE TRIGGER test_fail_org_audit BEFORE INSERT ON commercial_audit_event
+         FOR EACH ROW EXECUTE FUNCTION test_fail_org_audit_fn()",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    assert_eq!(
+        service
+            .create_organization(account.id, "No debe persistir", now)
+            .await,
+        Err(CommercialError::Storage)
+    );
+    sqlx::query("DROP TRIGGER test_fail_org_audit ON commercial_audit_event")
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query("DROP FUNCTION test_fail_org_audit_fn()")
+        .execute(&pool)
+        .await
+        .unwrap();
+    let organizations: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM organization WHERE display_name = 'No debe persistir'",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(organizations, 0);
+    let memberships: i64 =
+        sqlx::query_scalar("SELECT count(*) FROM organization_membership WHERE account_id = $1")
+            .bind(account.id.as_uuid())
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(memberships, 0);
+
+    // Deshabilitación confirmada antes de crear: no se crea ni audita.
+    sqlx::query("UPDATE commercial_account SET status = 'disabled' WHERE id = $1")
+        .bind(account.id.as_uuid())
+        .execute(&pool)
+        .await
+        .unwrap();
+    assert_eq!(
+        service
+            .create_organization(account.id, "Cuenta deshabilitada", now)
+            .await,
+        Err(CommercialError::NotFound)
+    );
+    let created: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM organization WHERE display_name = 'Cuenta deshabilitada'",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(created, 0);
 }
 
 #[tokio::test]
