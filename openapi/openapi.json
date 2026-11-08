@@ -742,15 +742,48 @@
         "tags": [
           "Organizaciones"
         ],
-        "summary": "Lista las organizaciones activas del actor autenticado (máximo técnico 100).",
+        "summary": "Lista las organizaciones activas del actor autenticado con paginación por cursor.",
         "operationId": "listOrganizations",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "maximum": 100,
+              "minimum": 1
+            },
+            "example": 50
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "example": "eyJuIjoiTWkgbmVnb2NpbyIsImkiOiIxMjNlNDU2Ny1lODliLTQyZDMtYTQ1Ni00MjY2MTQxNzQwMTAifQ"
+          }
+        ],
         "responses": {
           "200": {
-            "description": "Organizaciones activas con membresía activa; orden por nombre e id",
+            "description": "Organizaciones activas con membresía activa; orden por nombre e id. Usa next_cursor para continuar",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/OrganizationListResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Cursor o límite inválido",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             }
@@ -964,6 +997,438 @@
         ]
       }
     },
+    "/api/v1/organizations/{id}/members": {
+      "get": {
+        "tags": [
+          "Membresías"
+        ],
+        "summary": "Lista las membresías activas de una organización accesible para el actor.",
+        "operationId": "listOrganizationMembers",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Identificador UUID de la organización",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "maximum": 100,
+              "minimum": 1
+            },
+            "example": 50
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "example": "eyJuIjoiTWkgbmVnb2NpbyIsImkiOiIxMjNlNDU2Ny1lODliLTQyZDMtYTQ1Ni00MjY2MTQxNzQwMTAifQ"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Membresías activas visibles para owner, admin o member; orden por alta y cuenta",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MemberListResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "UUID, cursor o límite inválido",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sesión inválida o cuenta deshabilitada",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Organización inexistente, ajena o sin membresía activa",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "PostgreSQL no disponible",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "commercialSession": []
+          }
+        ]
+      },
+      "post": {
+        "tags": [
+          "Membresías"
+        ],
+        "summary": "Agrega una cuenta activa como miembro; sólo un owner de la organización.",
+        "operationId": "addOrganizationMember",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Identificador UUID de la organización",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "description": "account_id de la cuenta activa y rol owner/admin/member",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AddMemberRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Membresía creada; cabecera Location con la ruta del recurso",
+            "headers": {
+              "Location": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "URL del recurso creado"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MemberRoleResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "UUID o rol inválido",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sesión inválida o cuenta deshabilitada",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Origen no permitido o actor sin rol owner",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Organización ajena, cuenta inexistente o deshabilitada",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "La cuenta ya tuvo o tiene membresía en la organización",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "PostgreSQL no disponible",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "commercialSession": []
+          }
+        ]
+      }
+    },
+    "/api/v1/organizations/{id}/members/{account_id}": {
+      "delete": {
+        "tags": [
+          "Membresías"
+        ],
+        "summary": "Revoca la membresía activa; sólo un owner y sin dejar la organización sin owner.",
+        "operationId": "revokeOrganizationMember",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Identificador UUID de la organización",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "account_id",
+            "in": "path",
+            "description": "Identificador UUID de la cuenta miembro",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Membresía revocada; deja de conceder acceso"
+          },
+          "400": {
+            "description": "UUID inválido",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sesión inválida o cuenta deshabilitada",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Origen no permitido o actor sin rol owner",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Organización ajena o membresía inexistente",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Último propietario protegido",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "PostgreSQL no disponible",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "commercialSession": []
+          }
+        ]
+      },
+      "patch": {
+        "tags": [
+          "Membresías"
+        ],
+        "summary": "Cambia el rol de un miembro; sólo un owner y sin romper el último propietario.",
+        "operationId": "changeOrganizationMemberRole",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Identificador UUID de la organización",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "account_id",
+            "in": "path",
+            "description": "Identificador UUID de la cuenta miembro",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "description": "Nuevo rol owner/admin/member",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChangeMemberRoleRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Rol actualizado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MemberRoleResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "UUID o rol inválido",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sesión inválida o cuenta deshabilitada",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Origen no permitido o actor sin rol owner",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Organización ajena o membresía inexistente",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Rol sin cambios o último propietario protegido",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "PostgreSQL no disponible",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "commercialSession": []
+          }
+        ]
+      }
+    },
     "/api/v1/plans": {
       "get": {
         "tags": [
@@ -1065,6 +1530,38 @@
   },
   "components": {
     "schemas": {
+      "AddMemberRequest": {
+        "type": "object",
+        "required": [
+          "account_id",
+          "role"
+        ],
+        "properties": {
+          "account_id": {
+            "type": "string",
+            "format": "uuid",
+            "example": "123e4567-e89b-42d3-a456-426614174011"
+          },
+          "role": {
+            "type": "string",
+            "example": "member"
+          }
+        },
+        "additionalProperties": false
+      },
+      "ChangeMemberRoleRequest": {
+        "type": "object",
+        "required": [
+          "role"
+        ],
+        "properties": {
+          "role": {
+            "type": "string",
+            "example": "admin"
+          }
+        },
+        "additionalProperties": false
+      },
       "ChangePasswordRequest": {
         "type": "object",
         "required": [
@@ -1318,6 +1815,70 @@
           }
         }
       },
+      "MemberListResponse": {
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MemberResponse"
+            }
+          },
+          "next_cursor": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Cursor opaco para la página siguiente; ausente en la última página.",
+            "example": "eyJ0IjoxNzYyNTYwMDAwMDAwMDAwMDAsImkiOiIxMjNlNDU2Ny1lODliLTQyZDMtYTQ1Ni00MjY2MTQxNzQwMTEifQ"
+          }
+        }
+      },
+      "MemberResponse": {
+        "type": "object",
+        "required": [
+          "account_id",
+          "role",
+          "joined_at"
+        ],
+        "properties": {
+          "account_id": {
+            "type": "string",
+            "format": "uuid",
+            "example": "123e4567-e89b-42d3-a456-426614174011"
+          },
+          "joined_at": {
+            "type": "string",
+            "format": "date-time",
+            "example": "2026-11-08T00:00:00Z"
+          },
+          "role": {
+            "type": "string",
+            "example": "member"
+          }
+        }
+      },
+      "MemberRoleResponse": {
+        "type": "object",
+        "required": [
+          "account_id",
+          "role"
+        ],
+        "properties": {
+          "account_id": {
+            "type": "string",
+            "format": "uuid",
+            "example": "123e4567-e89b-42d3-a456-426614174011"
+          },
+          "role": {
+            "type": "string",
+            "example": "admin"
+          }
+        }
+      },
       "OrganizationListResponse": {
         "type": "object",
         "required": [
@@ -1329,6 +1890,14 @@
             "items": {
               "$ref": "#/components/schemas/OrganizationResponse"
             }
+          },
+          "next_cursor": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Cursor opaco para la página siguiente; ausente en la última página.",
+            "example": "eyJuIjoiTWkgbmVnb2NpbyIsImkiOiIxMjNlNDU2Ny1lODliLTQyZDMtYTQ1Ni00MjY2MTQxNzQwMTAifQ"
           }
         }
       },

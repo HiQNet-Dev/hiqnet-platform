@@ -13,8 +13,12 @@ pub enum CommercialError {
     InvalidRole,
     #[error("recurso inexistente o acceso no autorizado")]
     NotFound,
+    #[error("el actor carece del rol requerido en la organización")]
+    Forbidden,
     #[error("conflicto de identidad o membresía")]
     Conflict,
+    #[error("cursor de paginación inválido")]
+    InvalidCursor,
     #[error("no fue posible completar la operación de almacenamiento")]
     Storage,
 }

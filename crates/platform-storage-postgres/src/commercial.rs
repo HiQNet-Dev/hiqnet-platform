@@ -1,7 +1,8 @@
 //! Consultas comerciales aisladas por actor verificado y organización.
 
 use async_trait::async_trait;
-use platform_application::commercial::{CommercialRepository, OrganizationView};
+use base64::Engine as _;
+use platform_application::commercial::{CommercialRepository, OrganizationView, Page};
 use platform_core::{
     commercial::{
         CommercialAccount, CommercialError, CommercialOrganization, CommercialResult,
@@ -10,6 +11,7 @@ use platform_core::{
     ids::{CommercialAccountId, InstallationId, OrganizationId},
     installation::Installation,
 };
+use serde::{Deserialize, Serialize};
 use sqlx::{PgPool, Postgres, Row, Transaction};
 use time::OffsetDateTime;
 use uuid::Uuid;
@@ -24,6 +26,79 @@ impl PgCommercialRepository {
     }
 }
 
+/// Versión del formato de cursor; un cambio incompatible debe incrementarla.
+const CURSOR_VERSION: u8 = 1;
+const ORGANIZATIONS_KIND: &str = "organizations";
+const MEMBERS_KIND: &str = "members";
+/// Cota técnica defensiva: el nombre visible puede ocupar hasta 200 caracteres
+/// multibyte y el JSON se codifica en base64url.
+const MAX_CURSOR_LEN: usize = 2048;
+
+/// Clave de orden del listado de organizaciones: (display_name, id).
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct OrganizationCursor {
+    v: u8,
+    k: String,
+    n: String,
+    i: Uuid,
+}
+
+/// Clave de orden del listado de miembros: (joined_at nanos, account_id).
+/// Incluye la organización para impedir reutilizar el cursor en otro recurso.
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct MemberCursor {
+    v: u8,
+    k: String,
+    o: Uuid,
+    t: i64,
+    i: Uuid,
+}
+
+fn encode_cursor<T: Serialize>(payload: &T) -> CommercialResult<String> {
+    let json = serde_json::to_vec(payload).map_err(|_| CommercialError::InvalidCursor)?;
+    Ok(base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(json))
+}
+
+fn decode_cursor<T: for<'de> Deserialize<'de>>(cursor: &str) -> CommercialResult<T> {
+    if cursor.len() > MAX_CURSOR_LEN {
+        return Err(CommercialError::InvalidCursor);
+    }
+    let bytes = base64::engine::general_purpose::URL_SAFE_NO_PAD
+        .decode(cursor)
+        .map_err(|_| CommercialError::InvalidCursor)?;
+    serde_json::from_slice(&bytes).map_err(|_| CommercialError::InvalidCursor)
+}
+
+fn decode_organization_cursor(cursor: &str) -> CommercialResult<(String, OrganizationId)> {
+    let decoded: OrganizationCursor = decode_cursor(cursor)?;
+    if decoded.v != CURSOR_VERSION || decoded.k != ORGANIZATIONS_KIND {
+        return Err(CommercialError::InvalidCursor);
+    }
+    Ok((decoded.n, OrganizationId::from_uuid(decoded.i)))
+}
+
+fn decode_member_cursor(
+    cursor: &str,
+    organization: OrganizationId,
+) -> CommercialResult<(OffsetDateTime, CommercialAccountId)> {
+    let decoded: MemberCursor = decode_cursor(cursor)?;
+    if decoded.v != CURSOR_VERSION
+        || decoded.k != MEMBERS_KIND
+        || decoded.o != organization.as_uuid()
+    {
+        return Err(CommercialError::InvalidCursor);
+    }
+    let joined_at = OffsetDateTime::from_unix_timestamp_nanos(i128::from(decoded.t))
+        .map_err(|_| CommercialError::InvalidCursor)?;
+    Ok((joined_at, CommercialAccountId::from_uuid(decoded.i)))
+}
+
+fn page_limit(limit: u32) -> i64 {
+    i64::from(limit.max(1)) + 1
+}
+
 fn storage(_error: sqlx::Error) -> CommercialError {
     CommercialError::Storage
 }
@@ -35,11 +110,13 @@ fn insertion(error: sqlx::Error) -> CommercialError {
     }
 }
 
-async fn require_owner(
+/// Comprueba la membresía activa del actor y devuelve su rol, bloqueando la
+/// organización para serializar mutaciones de membresía.
+async fn require_membership(
     tx: &mut Transaction<'_, Postgres>,
     actor: CommercialAccountId,
     organization: OrganizationId,
-) -> CommercialResult<()> {
+) -> CommercialResult<OrganizationRole> {
     // Serializa cambios de membresía y protección del último owner por organización.
     let active: Option<Uuid> = sqlx::query_scalar(
         "SELECT id FROM organization WHERE id = $1 AND status = 'active' FOR UPDATE",
@@ -51,23 +128,33 @@ async fn require_owner(
     if active.is_none() {
         return Err(CommercialError::NotFound);
     }
-    let allowed: bool = sqlx::query_scalar(
-        "SELECT EXISTS (
-            SELECT 1 FROM organization_membership m
-            JOIN commercial_account a ON a.id = m.account_id
-            WHERE m.organization_id = $1 AND m.account_id = $2
-              AND m.role = 'owner' AND m.role_version = 1
-              AND m.revoked_at IS NULL AND a.status = 'active')",
+    let membership: Option<(String, i16)> = sqlx::query_as(
+        "SELECT m.role, m.role_version
+         FROM organization_membership m
+         JOIN commercial_account a ON a.id = m.account_id AND a.status = 'active'
+         WHERE m.organization_id = $1 AND m.account_id = $2
+           AND m.revoked_at IS NULL",
     )
     .bind(organization.as_uuid())
     .bind(actor.as_uuid())
-    .fetch_one(&mut **tx)
+    .fetch_optional(&mut **tx)
     .await
     .map_err(storage)?;
-    if allowed {
-        Ok(())
-    } else {
-        Err(CommercialError::NotFound)
+    let Some((role, version)) = membership else {
+        return Err(CommercialError::NotFound);
+    };
+    OrganizationRole::from_storage(&role, version)
+}
+
+/// Sólo `owner` administra membresías; otros roles reciben `Forbidden`.
+async fn require_owner(
+    tx: &mut Transaction<'_, Postgres>,
+    actor: CommercialAccountId,
+    organization: OrganizationId,
+) -> CommercialResult<()> {
+    match require_membership(tx, actor, organization).await? {
+        OrganizationRole::Owner => Ok(()),
+        OrganizationRole::Admin | OrganizationRole::Member => Err(CommercialError::Forbidden),
     }
 }
 
@@ -244,14 +331,17 @@ impl CommercialRepository for PgCommercialRepository {
     ) -> CommercialResult<()> {
         let mut tx = self.pool.begin().await.map_err(storage)?;
         require_owner(&mut tx, actor, organization).await?;
-        let active: bool = sqlx::query_scalar(
-            "SELECT EXISTS (SELECT 1 FROM commercial_account WHERE id = $1 AND status = 'active')",
+        // Bloqueo compartido del sujeto: una deshabilitación concurrente no
+        // puede confirmarse entre esta comprobación y el alta.
+        let active: Option<Uuid> = sqlx::query_scalar(
+            "SELECT id FROM commercial_account
+             WHERE id = $1 AND status = 'active' FOR SHARE",
         )
         .bind(member.as_uuid())
-        .fetch_one(&mut *tx)
+        .fetch_optional(&mut *tx)
         .await
         .map_err(storage)?;
-        if !active {
+        if active.is_none() {
             return Err(CommercialError::NotFound);
         }
         sqlx::query(
@@ -336,7 +426,8 @@ impl CommercialRepository for PgCommercialRepository {
         require_owner(&mut tx, actor, organization).await?;
         let previous = protect_last_owner(&mut tx, organization, member).await?;
         let changed = sqlx::query(
-            "UPDATE organization_membership SET revoked_at = $3
+            "UPDATE organization_membership
+             SET revoked_at = GREATEST($3, joined_at)
              WHERE organization_id = $1 AND account_id = $2 AND revoked_at IS NULL",
         )
         .bind(organization.as_uuid())
@@ -365,40 +456,117 @@ impl CommercialRepository for PgCommercialRepository {
         &self,
         actor: CommercialAccountId,
         organization: OrganizationId,
-    ) -> CommercialResult<Vec<OrganizationMembership>> {
-        // Un id de organización conocido no permite enumerar miembros ajenos.
-        let rows = sqlx::query(
-            "SELECT m.account_id, m.role, m.role_version, m.joined_at
-             FROM organization_membership m
-             JOIN organization o ON o.id = m.organization_id AND o.status = 'active'
-             WHERE m.organization_id = $1 AND m.revoked_at IS NULL
-               AND EXISTS (
-                 SELECT 1 FROM organization_membership mine
-                 JOIN commercial_account a ON a.id = mine.account_id
-                 WHERE mine.organization_id = m.organization_id AND mine.account_id = $2
-                   AND mine.revoked_at IS NULL AND a.status = 'active')
-             ORDER BY m.joined_at, m.account_id",
-        )
-        .bind(organization.as_uuid())
-        .bind(actor.as_uuid())
-        .fetch_all(&self.pool)
-        .await
-        .map_err(storage)?;
-        if rows.is_empty() {
+        after: Option<&str>,
+        limit: u32,
+    ) -> CommercialResult<Page<OrganizationMembership>> {
+        // Una sola sentencia: la autorización y la lectura comparten instantánea.
+        // Así una revocación confirmada antes de la lectura no puede quedar
+        // oculta por una comprobación previa en otra sentencia/conexión.
+        let rows = if let Some(cursor) = after {
+            let (joined_at, account_id) = decode_member_cursor(cursor, organization)?;
+            sqlx::query(
+                "WITH actor AS (
+                     SELECT mine.role, mine.role_version
+                     FROM organization_membership mine
+                     JOIN organization o ON o.id = mine.organization_id AND o.status = 'active'
+                     JOIN commercial_account a ON a.id = mine.account_id AND a.status = 'active'
+                     WHERE mine.organization_id = $1 AND mine.account_id = $2
+                       AND mine.revoked_at IS NULL
+                 )
+                 SELECT actor.role AS actor_role,
+                        actor.role_version AS actor_version,
+                        page.account_id, page.role, page.role_version, page.joined_at
+                 FROM actor
+                 LEFT JOIN LATERAL (
+                     SELECT m.account_id, m.role, m.role_version, m.joined_at
+                     FROM organization_membership m
+                     WHERE m.organization_id = $1 AND m.revoked_at IS NULL
+                       AND (m.joined_at, m.account_id) > ($3, $4)
+                     ORDER BY m.joined_at, m.account_id
+                     LIMIT $5
+                 ) AS page ON TRUE",
+            )
+            .bind(organization.as_uuid())
+            .bind(actor.as_uuid())
+            .bind(joined_at)
+            .bind(account_id.as_uuid())
+            .bind(page_limit(limit))
+            .fetch_all(&self.pool)
+            .await
+            .map_err(storage)?
+        } else {
+            sqlx::query(
+                "WITH actor AS (
+                     SELECT mine.role, mine.role_version
+                     FROM organization_membership mine
+                     JOIN organization o ON o.id = mine.organization_id AND o.status = 'active'
+                     JOIN commercial_account a ON a.id = mine.account_id AND a.status = 'active'
+                     WHERE mine.organization_id = $1 AND mine.account_id = $2
+                       AND mine.revoked_at IS NULL
+                 )
+                 SELECT actor.role AS actor_role,
+                        actor.role_version AS actor_version,
+                        page.account_id, page.role, page.role_version, page.joined_at
+                 FROM actor
+                 LEFT JOIN LATERAL (
+                     SELECT m.account_id, m.role, m.role_version, m.joined_at
+                     FROM organization_membership m
+                     WHERE m.organization_id = $1 AND m.revoked_at IS NULL
+                     ORDER BY m.joined_at, m.account_id
+                     LIMIT $3
+                 ) AS page ON TRUE",
+            )
+            .bind(organization.as_uuid())
+            .bind(actor.as_uuid())
+            .bind(page_limit(limit))
+            .fetch_all(&self.pool)
+            .await
+            .map_err(storage)?
+        };
+
+        // Sin filas del CTE el actor no es miembro activo: 404 neutral.
+        let Some(first) = rows.first() else {
             return Err(CommercialError::NotFound);
+        };
+        let actor_role: String = first.get("actor_role");
+        let actor_version: i16 = first.get("actor_version");
+        OrganizationRole::from_storage(&actor_role, actor_version)?;
+
+        let mut items = Vec::with_capacity(rows.len());
+        for row in rows {
+            let Some(account_id) = row.get::<Option<Uuid>, _>("account_id") else {
+                continue;
+            };
+            let role: String = row.get("role");
+            let version: i16 = row.get("role_version");
+            items.push(OrganizationMembership {
+                organization_id: organization,
+                account_id: CommercialAccountId::from_uuid(account_id),
+                role: OrganizationRole::from_storage(&role, version)?,
+                joined_at: row.get("joined_at"),
+            });
         }
-        rows.into_iter()
-            .map(|row| {
-                let role: String = row.get("role");
-                let version: i16 = row.get("role_version");
-                Ok(OrganizationMembership {
-                    organization_id: organization,
-                    account_id: CommercialAccountId::from_uuid(row.get("account_id")),
-                    role: OrganizationRole::from_storage(&role, version)?,
-                    joined_at: row.get("joined_at"),
+        let has_more = items.len() > limit as usize;
+        if has_more {
+            items.pop();
+        }
+        let next_cursor = if has_more {
+            items
+                .last()
+                .map(|last| {
+                    encode_cursor(&MemberCursor {
+                        v: CURSOR_VERSION,
+                        k: MEMBERS_KIND.to_owned(),
+                        o: organization.as_uuid(),
+                        t: last.joined_at.unix_timestamp_nanos() as i64,
+                        i: last.account_id.as_uuid(),
+                    })
                 })
-            })
-            .collect()
+                .transpose()?
+        } else {
+            None
+        };
+        Ok(Page::new(items, next_cursor))
     }
 
     async fn get_installation(
@@ -428,33 +596,77 @@ impl CommercialRepository for PgCommercialRepository {
     async fn list_organizations(
         &self,
         actor: CommercialAccountId,
-    ) -> CommercialResult<Vec<OrganizationView>> {
-        // Límite técnico acotado; la paginación por cursor queda para P02.3-B.
-        let rows = sqlx::query(
-            "SELECT o.id, o.display_name, m.role, m.role_version
-             FROM organization_membership m
-             JOIN organization o ON o.id = m.organization_id AND o.status = 'active'
-             JOIN commercial_account a ON a.id = m.account_id AND a.status = 'active'
-             WHERE m.account_id = $1 AND m.revoked_at IS NULL
-             ORDER BY o.display_name, o.id
-             LIMIT 100",
-        )
-        .bind(actor.as_uuid())
-        .fetch_all(&self.pool)
-        .await
-        .map_err(storage)?;
-        rows.into_iter()
-            .map(|row| {
-                let role: String = row.get("role");
-                let version: i16 = row.get("role_version");
-                Ok(OrganizationView {
-                    id: OrganizationId::from_uuid(row.get("id")),
-                    display_name: row.get("display_name"),
-                    role: OrganizationRole::from_storage(&role, version)?,
-                    status: "active",
+        after: Option<&str>,
+        limit: u32,
+    ) -> CommercialResult<Page<OrganizationView>> {
+        // Aislamiento en SQL: cuenta y membresía activas, organización activa.
+        let rows = if let Some(cursor) = after {
+            let (display_name, id) = decode_organization_cursor(cursor)?;
+            sqlx::query(
+                "SELECT o.id, o.display_name, m.role, m.role_version
+                 FROM organization_membership m
+                 JOIN organization o ON o.id = m.organization_id AND o.status = 'active'
+                 JOIN commercial_account a ON a.id = m.account_id AND a.status = 'active'
+                 WHERE m.account_id = $1 AND m.revoked_at IS NULL
+                   AND (o.display_name, o.id) > ($2, $3)
+                 ORDER BY o.display_name, o.id
+                 LIMIT $4",
+            )
+            .bind(actor.as_uuid())
+            .bind(display_name)
+            .bind(id.as_uuid())
+            .bind(page_limit(limit))
+            .fetch_all(&self.pool)
+            .await
+            .map_err(storage)?
+        } else {
+            sqlx::query(
+                "SELECT o.id, o.display_name, m.role, m.role_version
+                 FROM organization_membership m
+                 JOIN organization o ON o.id = m.organization_id AND o.status = 'active'
+                 JOIN commercial_account a ON a.id = m.account_id AND a.status = 'active'
+                 WHERE m.account_id = $1 AND m.revoked_at IS NULL
+                 ORDER BY o.display_name, o.id
+                 LIMIT $2",
+            )
+            .bind(actor.as_uuid())
+            .bind(page_limit(limit))
+            .fetch_all(&self.pool)
+            .await
+            .map_err(storage)?
+        };
+
+        let mut items = Vec::with_capacity(rows.len());
+        for row in rows {
+            let role: String = row.get("role");
+            let version: i16 = row.get("role_version");
+            items.push(OrganizationView {
+                id: OrganizationId::from_uuid(row.get("id")),
+                display_name: row.get("display_name"),
+                role: OrganizationRole::from_storage(&role, version)?,
+                status: "active",
+            });
+        }
+        let has_more = items.len() > limit as usize;
+        if has_more {
+            items.pop();
+        }
+        let next_cursor = if has_more {
+            items
+                .last()
+                .map(|last| {
+                    encode_cursor(&OrganizationCursor {
+                        v: CURSOR_VERSION,
+                        k: ORGANIZATIONS_KIND.to_owned(),
+                        n: last.display_name.clone(),
+                        i: last.id.as_uuid(),
+                    })
                 })
-            })
-            .collect()
+                .transpose()?
+        } else {
+            None
+        };
+        Ok(Page::new(items, next_cursor))
     }
 
     async fn get_organization(

@@ -21,6 +21,28 @@ pub struct OrganizationView {
     pub status: &'static str,
 }
 
+/// Página ordenada y acotada; `next_cursor` es opaco para el cliente.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Page<T> {
+    pub items: Vec<T>,
+    pub next_cursor: Option<String>,
+}
+
+impl<T> Page<T> {
+    pub fn new(items: Vec<T>, next_cursor: Option<String>) -> Self {
+        Self { items, next_cursor }
+    }
+}
+
+/// Límite por defecto de página cuando el cliente no lo indica.
+pub const DEFAULT_PAGE_LIMIT: u32 = 50;
+/// Límite técnico máximo; no representa una cuota comercial por plan.
+pub const MAX_PAGE_LIMIT: u32 = 100;
+
+pub fn page_limit(limit: u32) -> u32 {
+    limit.clamp(1, MAX_PAGE_LIMIT)
+}
+
 #[async_trait]
 pub trait CommercialRepository: Send + Sync {
     async fn create_account(&self, account: &CommercialAccount) -> CommercialResult<()>;
@@ -56,7 +78,9 @@ pub trait CommercialRepository: Send + Sync {
         &self,
         actor: CommercialAccountId,
         organization: OrganizationId,
-    ) -> CommercialResult<Vec<OrganizationMembership>>;
+        after: Option<&str>,
+        limit: u32,
+    ) -> CommercialResult<Page<OrganizationMembership>>;
     async fn get_installation(
         &self,
         actor: CommercialAccountId,
@@ -66,7 +90,9 @@ pub trait CommercialRepository: Send + Sync {
     async fn list_organizations(
         &self,
         actor: CommercialAccountId,
-    ) -> CommercialResult<Vec<OrganizationView>>;
+        after: Option<&str>,
+        limit: u32,
+    ) -> CommercialResult<Page<OrganizationView>>;
     /// Organización activa con membresía activa del actor; `NotFound` si no.
     async fn get_organization(
         &self,
@@ -151,8 +177,12 @@ impl<R: CommercialRepository> CommercialService<R> {
         &self,
         actor: CommercialAccountId,
         organization: OrganizationId,
-    ) -> CommercialResult<Vec<OrganizationMembership>> {
-        self.repository.list_members(actor, organization).await
+        after: Option<&str>,
+        limit: u32,
+    ) -> CommercialResult<Page<OrganizationMembership>> {
+        self.repository
+            .list_members(actor, organization, after, page_limit(limit))
+            .await
     }
 
     pub async fn get_installation(
@@ -166,8 +196,12 @@ impl<R: CommercialRepository> CommercialService<R> {
     pub async fn list_organizations(
         &self,
         actor: CommercialAccountId,
-    ) -> CommercialResult<Vec<OrganizationView>> {
-        self.repository.list_organizations(actor).await
+        after: Option<&str>,
+        limit: u32,
+    ) -> CommercialResult<Page<OrganizationView>> {
+        self.repository
+            .list_organizations(actor, after, page_limit(limit))
+            .await
     }
 
     pub async fn get_organization(

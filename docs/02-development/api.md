@@ -30,9 +30,13 @@ Rutas de identidad comercial (P02.2-A), independientes del token DEV anterior:
 | GET | `/api/v1/auth/me` | Cookie de sesión | 200 identidad | 401 sesión ausente/expirada/revocada; 503 BD |
 | POST | `/api/v1/auth/password/change` | Cookie de sesión | 204 + nueva cookie | 400 política; 401 actual incorrecta/sesión; 403 origen; 409 concurrencia; 429 rate limit; 503 BD |
 | POST | `/api/v1/auth/sessions/revoke` | Cookie de sesión | 204 y cookie borrada | 401 sesión; 403 origen; 503 BD |
-| GET | `/api/v1/organizations` | Cookie de sesión | 200 `items` | 401 sesión; 503 BD |
+| GET | `/api/v1/organizations` | Cookie de sesión | 200 `items` + `next_cursor` | 400 cursor/límite; 401 sesión; 503 BD |
 | POST | `/api/v1/organizations` | Cookie de sesión | 201 + `Location` | 400 nombre; 401 sesión; 403 origen; 429 límite; 503 BD |
 | GET | `/api/v1/organizations/{id}` | Cookie de sesión | 200 organización | 400 UUID; 401 sesión; 404 ajena; 503 BD |
+| GET | `/api/v1/organizations/{id}/members` | Cookie de sesión + membresía | 200 `items` + `next_cursor` | 400 UUID/cursor; 401 sesión; 404 ajena; 503 BD |
+| POST | `/api/v1/organizations/{id}/members` | Cookie de sesión + owner | 201 + `Location` | 400 rol; 401; 403 origen/rol; 404 ajena/cuenta; 409 duplicada; 503 BD |
+| PATCH | `/api/v1/organizations/{id}/members/{account_id}` | Cookie de sesión + owner | 200 rol | 400 rol; 401; 403; 404; 409 último owner; 503 BD |
+| DELETE | `/api/v1/organizations/{id}/members/{account_id}` | Cookie de sesión + owner | 204 | 401; 403; 404; 409 último owner; 503 BD |
 
 La sesión comercial no es el token DEV ni una identidad POS. El `account_id` de `/me` proviene **solo** de la cookie verificada en PostgreSQL; ningún body, query o encabezado puede elegirlo. Cada login rota sesiones previas y persiste únicamente el hash SHA-256 del token. La cookie es `HttpOnly`, `SameSite=Lax`, `Path=/api` y `Secure` salvo en `HIQNET_PLATFORM_ENV=development` con `HIQNET_PLATFORM_COOKIE_SECURE=false` explícito; el arranque rechaza desactivar `Secure` fuera de development. **En producción toda mutación exige `Origin` exacto** igual a `HIQNET_PLATFORM_ALLOWED_ORIGIN`; `null`, valores múltiples, malformados o ausentes se rechazan. Sólo development admite ausencia de `Origin` para curl/Swagger; sin origen configurado se falla cerrado. La contraseña se protege con Argon2id (m=19456 KiB, t=2, p=1, salt aleatorio) y nunca se registra; `HIQNET_PLATFORM_AUTH_CONCURRENCY` (4 por defecto) acota verificaciones simultáneas y responde 503 `auth_overloaded` bajo saturación.
 
@@ -95,7 +99,7 @@ curl -i -b cookies.txt -X POST http://127.0.0.1:8080/api/v1/auth/logout \
 
 ### Organizaciones autenticadas
 
-Con cookie comercial se pueden crear y consultar únicamente organizaciones propias. `GET /api/v1/organizations` devuelve las organizaciones activas con membresía activa, ordenadas por nombre e id y limitadas técnicamente a 100; la paginación por cursor queda pendiente. `POST /api/v1/organizations` acepta sólo `display_name`, exige Origin válido y asigna `owner` en la misma transacción que crea la organización, la membresía y las auditorías `organization_created`/`membership_added`; no es idempotente y no admite `account_id`, `owner_id`, `tenant_id` ni `role` del cliente. `GET /api/v1/organizations/{id}` responde 404 neutral para organizaciones ajenas, archivadas, `legacy_unclaimed` o sin membresía activa.
+Con cookie comercial se pueden crear y consultar únicamente organizaciones propias. `GET /api/v1/organizations` devuelve las organizaciones activas con membresía activa, ordenadas por nombre e id. `POST /api/v1/organizations` acepta sólo `display_name`, exige Origin válido y asigna `owner` en la misma transacción que crea la organización, la membresía y las auditorías `organization_created`/`membership_added`; no es idempotente y no admite `account_id`, `owner_id`, `tenant_id` ni `role` del cliente. `GET /api/v1/organizations/{id}` responde 404 neutral para organizaciones ajenas, archivadas, `legacy_unclaimed` o sin membresía activa.
 
 ```sh
 curl -i -b cookies.txt -X POST http://127.0.0.1:8080/api/v1/organizations \
@@ -103,10 +107,40 @@ curl -i -b cookies.txt -X POST http://127.0.0.1:8080/api/v1/organizations \
   -H 'Origin: http://127.0.0.1:8080' \
   -d '{"display_name":"Mi negocio"}'
 # 201 y Location: /api/v1/organizations/<uuid>
-curl -i -b cookies.txt http://127.0.0.1:8080/api/v1/organizations
+curl -i -b cookies.txt 'http://127.0.0.1:8080/api/v1/organizations?limit=50'
 ```
 
-La creación está limitada a 5 solicitudes por minuto y cuenta en esta instancia (protección técnica, no cuota de plan). Las organizaciones heredadas no se reclaman automáticamente. La administración de membresías y roles queda para P02.3-B.
+La creación está limitada a 5 solicitudes por minuto y cuenta en esta instancia (protección técnica, no cuota de plan). Las organizaciones heredadas no se reclaman automáticamente.
+
+### Paginación por cursor (P02.3-B)
+
+`GET /api/v1/organizations` y `GET /api/v1/organizations/{id}/members` aceptan `limit` (1–100, por defecto 50) y `cursor`. El campo `next_cursor` de la respuesta es opaco: se envía tal cual como `cursor` para obtener la página siguiente y se omite en la última página. El orden es estable: organizaciones por `display_name` e `id`; miembros por `joined_at` y `account_id`. El cursor incluye versión y tipo de listado; el de miembros queda vinculado a la organización. Reutilizarlo en otro listado u organización, enviar una versión desconocida o superar 2048 caracteres devuelve 400. Un cursor malformado o un límite fuera de rango también devuelven 400. El límite es técnico y no representa una cuota comercial por plan. El formato de `items` es compatible con P02.3-A; sólo se añadió `next_cursor`.
+
+### Membresías y roles
+
+| Método | Ruta | Rol requerido | Éxito | Casos frecuentes |
+| --- | --- | --- | --- | --- |
+| GET | `/api/v1/organizations/{id}/members` | Cualquier miembro activo | 200 `items` | 400 UUID/cursor/límite; 401 sesión; 404 organización ajena o sin membresía; 503 BD |
+| POST | `/api/v1/organizations/{id}/members` | `owner` | 201 + `Location` | 400 UUID/rol; 401 sesión; 403 origen o rol insuficiente; 404 organización ajena o cuenta inexistente/deshabilitada; 409 membresía previa; 503 BD |
+| PATCH | `/api/v1/organizations/{id}/members/{account_id}` | `owner` | 200 rol actualizado | 400 UUID/rol; 401 sesión; 403 origen o rol insuficiente; 404 organización/membresía ajena; 409 rol sin cambios o último owner; 503 BD |
+| DELETE | `/api/v1/organizations/{id}/members/{account_id}` | `owner` | 204 | 400 UUID; 401 sesión; 403 origen o rol insuficiente; 404 organización/membresía ajena; 409 último owner; 503 BD |
+
+`POST` recibe `{"account_id":"<uuid>","role":"member"}`; el `account_id` identifica **al sujeto** de la operación, nunca al actor, que proviene sólo de la cookie. Los roles válidos son `owner`, `admin` y `member` (versión 1). La respuesta de listado expone únicamente `account_id`, `role` y `joined_at`: no incluye correo, nombre visible, credenciales ni sesiones. Owner, admin y member pueden consultar; sólo owner administra. Un admin o member que intenta mutar recibe 403; una organización ajena o inexistente devuelve 404 neutral. El último `owner` activo no puede degradarse ni revocarse (409). Cada alta, cambio de rol y revocación se confirma con su evento de auditoría en la misma transacción; si la auditoría falla, no queda cambio.
+
+La reincorporación de una membresía revocada se rechaza con 409 mientras no exista una política aprobada, porque la clave primaria `(organization_id, account_id)` no admite una segunda fila. La revocación es persistente y el acceso cesa en la siguiente solicitud. La administración de invitaciones, correo y React Portal sigue fuera de alcance.
+
+```sh
+curl -i -b cookies.txt 'http://127.0.0.1:8080/api/v1/organizations/<ORG>/members?limit=50'
+curl -i -b cookies.txt -X POST http://127.0.0.1:8080/api/v1/organizations/<ORG>/members \
+  -H 'Content-Type: application/json' -H 'Origin: http://127.0.0.1:8080' \
+  -d '{"account_id":"<CUENTA>","role":"member"}'
+curl -i -b cookies.txt -X PATCH http://127.0.0.1:8080/api/v1/organizations/<ORG>/members/<CUENTA> \
+  -H 'Content-Type: application/json' -H 'Origin: http://127.0.0.1:8080' \
+  -d '{"role":"admin"}'
+curl -i -b cookies.txt -X DELETE http://127.0.0.1:8080/api/v1/organizations/<ORG>/members/<CUENTA> \
+  -H 'Origin: http://127.0.0.1:8080'
+# 204; la cuenta revocada deja de ver la organización y sus miembros
+```
 
 ### Cambio de contraseña y revocación de sesiones
 
