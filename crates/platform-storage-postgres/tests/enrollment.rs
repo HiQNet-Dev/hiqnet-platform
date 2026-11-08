@@ -272,6 +272,39 @@ async fn idempotencia_rbac_firma_duplicate_key_y_aislamiento() {
             .await,
         Err(EnrollmentError::Forbidden)
     ));
+    let member_id = Uuid::new_v4();
+    sqlx::query(
+        "INSERT INTO commercial_account (id, email, display_name, created_at) \
+         VALUES ($1, $2, 'Member fixture', now())",
+    )
+    .bind(member_id)
+    .bind(format!("member-{member_id}@example.test"))
+    .execute(&pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO organization_membership \
+         (organization_id, account_id, role, role_version, joined_at) \
+         VALUES ($1, $2, 'member', 1, now())",
+    )
+    .bind(organization_id)
+    .bind(member_id)
+    .execute(&pool)
+    .await
+    .unwrap();
+    assert!(matches!(
+        service
+            .approve_enrollment(
+                ApproveEnrollmentRequest {
+                    user_code: challenge.user_code.clone(),
+                    organization_id: OrganizationId::from_uuid(organization_id),
+                    actor_account_id: CommercialAccountId::from_uuid(member_id),
+                },
+                OffsetDateTime::now_utc(),
+            )
+            .await,
+        Err(EnrollmentError::Forbidden)
+    ));
     service
         .approve_enrollment(
             ApproveEnrollmentRequest {
