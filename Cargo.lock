@@ -1271,6 +1271,7 @@ name = "platform-storage-postgres"
 version = "0.1.0"
 dependencies = [
  "async-trait",
+ "base64 0.22.1",
  "platform-application",
  "platform-core",
  "serde",
