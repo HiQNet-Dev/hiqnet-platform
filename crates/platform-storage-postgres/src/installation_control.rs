@@ -156,7 +156,7 @@ async fn installation_detail(
     let rehost = sqlx::query(
         "SELECT id, enrollment_request_id, status, reason, created_at, expires_at \
          FROM installation_rehost_authorization \
-         WHERE installation_id = $1 AND status IN ('pending', 'consumed') \
+         WHERE installation_id = $1 AND status = 'pending' \
          ORDER BY created_at DESC LIMIT 1",
     )
     .bind(id.as_uuid())
@@ -302,37 +302,9 @@ impl InstallationControlRepository for PgInstallationControlRepository {
         now: OffsetDateTime,
     ) -> InstallationControlResult<RehostAuthorizationView> {
         let mut tx = self.pool.begin().await.map_err(storage)?;
-        let existing = sqlx::query(
-            "SELECT id, enrollment_request_id, status, reason, created_at, expires_at \
-             FROM installation_rehost_authorization WHERE enrollment_request_id = $1",
-        )
-        .bind(enrollment_request_id.as_uuid())
-        .fetch_optional(&mut *tx)
-        .await
-        .map_err(storage)?;
-        if let Some(row) = existing {
-            let view = rehost_from_row(&row)?;
-            let same_installation = {
-                let stored: Uuid = sqlx::query_scalar(
-                    "SELECT installation_id FROM installation_rehost_authorization \
-                     WHERE enrollment_request_id = $1",
-                )
-                .bind(enrollment_request_id.as_uuid())
-                .fetch_one(&mut *tx)
-                .await
-                .map_err(storage)?;
-                stored == id.as_uuid()
-            };
-            tx.commit().await.map_err(storage)?;
-            if !same_installation {
-                return Err(InstallationControlError::RehostConflict);
-            }
-            return match view.status {
-                RehostStatus::Pending | RehostStatus::Consumed => Ok(view),
-                _ => Err(InstallationControlError::RehostConflict),
-            };
-        }
-
+        // Lock order: primero el enrollment_request concreto y sólo después se
+        // reconsulta la autorización. Dos reintentos del mismo request se
+        // serializan aquí y devuelven la misma autorización.
         let request = sqlx::query(
             "SELECT installation_id, product_id, status, organization_id, \
                     approved_by_account_id, expires_at \
@@ -346,6 +318,35 @@ impl InstallationControlRepository for PgInstallationControlRepository {
             tx.rollback().await.map_err(storage)?;
             return Err(InstallationControlError::RehostConflict);
         };
+
+        let existing = sqlx::query(
+            "SELECT id, installation_id, enrollment_request_id, status, reason, created_at, \
+                    expires_at \
+             FROM installation_rehost_authorization WHERE enrollment_request_id = $1",
+        )
+        .bind(enrollment_request_id.as_uuid())
+        .fetch_optional(&mut *tx)
+        .await
+        .map_err(storage)?;
+        if let Some(row) = existing {
+            let stored_installation: Uuid = row.get("installation_id");
+            if stored_installation != id.as_uuid() {
+                tx.rollback().await.map_err(storage)?;
+                return Err(InstallationControlError::RehostConflict);
+            }
+            let view = rehost_from_row(&row)?;
+            return match view.status {
+                RehostStatus::Pending | RehostStatus::Consumed => {
+                    tx.commit().await.map_err(storage)?;
+                    Ok(view)
+                }
+                _ => {
+                    tx.rollback().await.map_err(storage)?;
+                    Err(InstallationControlError::RehostConflict)
+                }
+            };
+        }
+
         let request_status: String = request.get("status");
         let request_installation: Uuid = request.get("installation_id");
         let request_organization: Option<Uuid> = request.get("organization_id");

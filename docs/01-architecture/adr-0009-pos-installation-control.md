@@ -5,7 +5,7 @@
 **Fase:** C5 — POS Control
 **Relacionado:** [ADR-0003](adr-0003-installation-enrollment.md), [ADR-0004](adr-0004-control-center-boundaries.md), [ADR-0007](adr-0007-product-project-model.md), [ADR-0008](adr-0008-control-center-frontend.md)
 
-> Este documento describe el contrato ratificado. La migración `0009` existe en local y no está integrada en `main`.
+> Este documento describe el contrato ratificado. La migración `0009` está implementada en la rama C5 y publicada en el PR #20, pero aún NO está integrada en `main`.
 
 ## 1. Definición de Installation (D-C5-01)
 
@@ -414,14 +414,15 @@ Autorización; matriz de transiciones; atomicidad del rehost; consumo one-time d
 
 ```text
 C5.0B: APROBADO
-C5.0C: PROPUESTO
-C5.1: NO INICIADO
-0009: NO CREADA
+C5.0C: APROBADO
+C5.1: IMPLEMENTADO EN RAMA / VALIDADO LOCALMENTE + CI REMOTO
+C5.2: IMPLEMENTADO EN RAMA / VALIDADO LOCALMENTE + CI REMOTO
+0009: IMPLEMENTADA EN RAMA / NO integrada en main
 ```
 
 ---
 
-# C5.0C — API / Security / Persistence / UX Contract (PROPUESTO)
+# C5.0C — API / Security / Persistence / UX Contract
 
 ## C1. Modelo de persistencia de rehost
 
@@ -561,9 +562,11 @@ ControlInstallationDetail
   summary
   current_identity { generation, fingerprint, created_at } | null
   current_binding { bound_at, approved_by_account_id } | null
-  enrollment { status, approved_at }        -- sin datos comerciales adicionales
-  rehost { status, expires_at, reason }      -- solo autorización pending actual, sin secretos
+  rehost { status, expires_at, reason } | null  -- sólo autorización pending actual
 ```
+
+- El detalle C5 **no expone un objeto Enrollment completo**. El Enrollment comercial sigue siendo la autoridad del flujo, pero su read model e histórico no forman parte de este endpoint C5.
+- `rehost` representa únicamente la autorización `pending` actual. Una autorización `consumed` se conserva en PostgreSQL como histórico, pero no se devuelve como estado actual del detalle.
 
 - `fingerprint`: hex canónico completo del fingerprint (no la public key completa). La UI puede mostrarlo truncado y permitir copiar el valor completo.
 - El detalle C5 **no carga históricos ilimitados** de identidades, bindings, enrollments ni autorizaciones. Esos históricos permanecen en PostgreSQL y se difieren a C6 Audit/Security o a endpoints paginados futuros.
@@ -645,7 +648,7 @@ Campos: staff, installation, organization, product (si existe), timestamp, befor
 - `clone_suspected` permanece conceptual; C5 no promete detección fiable.
 - Si se necesitan `rehost_authorized`/`rehost_expired`, se añadirán al CHECK de `commercial_security_event` en la migración futura.
 
-## C11. Plan de migración futura (`0009`, NO autorizada)
+## C11. Plan de migración (`0009`, implementada en rama)
 
 Contenido previsto:
 
@@ -726,8 +729,9 @@ Acciones: Suspend / Reactivate / Rehost según capability
 
 ```text
 C5.0B: APROBADO
-C5.0C: PROPUESTO
-C5.1: NO INICIADO
-0009: NO CREADA
-commit/push: NO
+C5.0C: APROBADO
+C5.1: IMPLEMENTADO EN RAMA / VALIDADO LOCALMENTE
+C5.2: IMPLEMENTADO EN RAMA / VALIDADO LOCALMENTE
+0009: IMPLEMENTADA EN RAMA / NO integrada en main
+commit/push: rama publicada en PR #20
 ```

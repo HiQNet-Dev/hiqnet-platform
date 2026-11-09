@@ -899,6 +899,12 @@ async fn rehost_conserva_installation_y_exige_doble_autoridad() {
         .unwrap();
     assert_eq!(authorization.status, RehostStatus::Pending);
     assert_eq!(authorization.enrollment_request_id, rehost_request);
+    let pending_detail = service.get(&admin, by_id).await.unwrap();
+    assert_eq!(
+        pending_detail.rehost.as_ref().map(|rehost| rehost.status),
+        Some(RehostStatus::Pending),
+        "el detalle muestra la autorización pending actual"
+    );
 
     let row = sqlx::query("SELECT status, identity_status FROM installation WHERE id = $1")
         .bind(installation.as_uuid())
@@ -1040,6 +1046,32 @@ async fn rehost_conserva_installation_y_exige_doble_autoridad() {
         .await
         .unwrap();
     assert_eq!(consumed.status, RehostStatus::Consumed);
+    let completed_detail = service.get(&admin, by_id).await.unwrap();
+    assert!(
+        completed_detail.rehost.is_none(),
+        "una autorización consumed no forma parte del estado actual"
+    );
+    let stored_status: String = sqlx::query_scalar(
+        "SELECT status FROM installation_rehost_authorization \
+         WHERE enrollment_request_id = $1",
+    )
+    .bind(rehost_request.as_uuid())
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(stored_status, "consumed");
+    let stored_rows: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM installation_rehost_authorization \
+         WHERE enrollment_request_id = $1",
+    )
+    .bind(rehost_request.as_uuid())
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(
+        stored_rows, 1,
+        "la fila consumed se conserva como histórico"
+    );
 
     // La clave anterior no revive tras el cutover.
     assert!(
@@ -1088,6 +1120,141 @@ async fn rehost_conserva_installation_y_exige_doble_autoridad() {
     .await
     .unwrap();
     assert_eq!(performed_after_replay, 1, "el replay no duplica el evento");
+}
+
+#[tokio::test]
+async fn rehost_idempotente_bajo_concurrencia_real() {
+    let pool = open(&test_url()).await.unwrap();
+    let organization = insert_organization(&pool).await;
+    let owner = insert_owner(&pool, organization).await;
+    let (product, product_key) = insert_product(&pool, "active").await;
+    associate_product(&pool, organization, product, "active").await;
+
+    let (installation, _, _) =
+        enrolar(&pool, organization, owner, &product_key, "Caja concurrente").await;
+    let (rehost_request, _, _) = solicitar_rehost(
+        &pool,
+        organization,
+        owner,
+        installation,
+        &product_key,
+        "Caja concurrente nueva",
+    )
+    .await;
+    let admin = actor(
+        insert_staff(&pool, StaffRole::PlatformAdmin).await,
+        StaffRole::PlatformAdmin,
+    );
+    let service = service(&pool);
+    let by_id = InstallationId::from_uuid(installation.as_uuid());
+    let now = OffsetDateTime::now_utc();
+
+    let (first, second) = tokio::join!(
+        service.authorize_rehost(
+            &admin,
+            by_id,
+            rehost_request,
+            "concurrente".to_string(),
+            now
+        ),
+        service.authorize_rehost(
+            &admin,
+            by_id,
+            rehost_request,
+            "concurrente".to_string(),
+            now
+        ),
+    );
+    let first = first.expect("primera autorización concurrente");
+    let second = second.expect("segunda autorización concurrente");
+    assert_eq!(
+        first.id, second.id,
+        "ambos reintentos devuelven la misma autorización"
+    );
+    assert_eq!(first.status, RehostStatus::Pending);
+
+    let authorizations: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM installation_rehost_authorization \
+         WHERE enrollment_request_id = $1",
+    )
+    .bind(rehost_request.as_uuid())
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(authorizations, 1, "una sola fila por enrollment_request_id");
+    let pending: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM installation_rehost_authorization \
+         WHERE installation_id = $1 AND status = 'pending'",
+    )
+    .bind(installation.as_uuid())
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(pending, 1);
+
+    let actions = audit_actions(&pool, installation.as_uuid()).await;
+    for action in [
+        "installation_rehost_authorized",
+        "installation_identity_retired",
+        "installation_binding_revoked",
+    ] {
+        assert_eq!(
+            actions
+                .iter()
+                .filter(|value| value.as_str() == action)
+                .count(),
+            1,
+            "{action} debe registrarse exactamente una vez"
+        );
+    }
+    assert_eq!(actions.len(), 3, "sin auditoría duplicada");
+
+    let security_events: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM commercial_security_event \
+         WHERE kind = 'identity_revoked' AND installation_id = $1",
+    )
+    .bind(installation.as_uuid())
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(security_events, 1);
+
+    let active_identities: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM installation_identity \
+         WHERE installation_id = $1 AND retired_at IS NULL",
+    )
+    .bind(installation.as_uuid())
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(active_identities, 0);
+    let retired_identities: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM installation_identity \
+         WHERE installation_id = $1 AND retired_at IS NOT NULL",
+    )
+    .bind(installation.as_uuid())
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(retired_identities, 1);
+    let active_bindings: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM installation_binding \
+         WHERE installation_id = $1 AND revoked_at IS NULL",
+    )
+    .bind(installation.as_uuid())
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(active_bindings, 0);
+    let revoked_bindings: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM installation_binding \
+         WHERE installation_id = $1 AND revoked_at IS NOT NULL",
+    )
+    .bind(installation.as_uuid())
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(revoked_bindings, 1);
 }
 
 #[tokio::test]
