@@ -93,3 +93,15 @@ Resumen de capabilities:
 - Roles demasiado amplios aumentan el blast radius de una cuenta comprometida.
 - Un RBAC basado sólo en rol no cubre excepciones; se documenta la evolución a capabilities explícitas.
 - Sin MFA en C1, el robo de sesión staff es el riesgo principal; se mitiga con sesión corta y revocación inmediata.
+
+## 7. Propuesta de enmienda Fase 1 (Beta)
+
+Esta sección complementa §5 y, una vez ratificada, prevalecerá sobre cualquier redacción anterior que situara 4-eyes en C6 o que implicara una superficie mutable de seguridad en C6. Queda pendiente de revisión.
+
+- **`security.manage`:** reservada para una futura superficie mutable de seguridad. C6 inicial es read-only y no la consume; no concede acceso adicional a los read models de C6 ni concede `installations.rehost`, y no implica incident management ni configuración de seguridad.
+- **`security_auditor`:** conserva `security.read`, `security.manage` y `audit.read`; en C6 sólo usa las dos de lectura. No tiene `installations.rehost`.
+- **4-eyes:** se difiere a la futura fase que introduzca una mutación administrativa o de seguridad suficientemente crítica. C6 es read-only y no requiere doble aprobación.
+- **Dominio comercial Beta:** no se crean capabilities nuevas. Planes usan `products.read`/`products.manage`; suscripciones, entitlements y OrganizationProduct usan `organizations.read`/`organizations.manage`. Ver [ADR-0011](adr-0011-commercial-domain.md).
+- **Lectura de auditoría/seguridad:** `security.read` y `audit.read` se mantienen para todos los roles según la matriz ratificada. Es un riesgo de confidencialidad interna aceptado para la Beta controlada, condicionado a metadata saneada y superficie staff. Ver [Seguridad Beta](../02-development/platform-beta-security.md).
+
+En caso de conflicto con la redacción histórica de §5, prevalecerá esta enmienda una vez ratificada; PR #22 (C6) alinea la redacción anterior.

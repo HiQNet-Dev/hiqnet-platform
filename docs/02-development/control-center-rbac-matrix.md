@@ -57,3 +57,16 @@ Leyenda: `✓` permitido · `—` denegado.
 - `support` no tiene mutaciones en C1.
 - `security_auditor` puede mutar configuración de seguridad y triage, no datos de negocio.
 - 4-eyes se difiere a C6.
+
+## 5. Propuesta de enmienda Fase 1 (Beta)
+
+Esta sección complementa la matriz anterior y no cambia los checks de roles. Una vez ratificada, prevalecerá sobre redacciones previas que situaran triage mutable o 4-eyes en C6. Queda pendiente de revisión.
+
+- **Capabilities comerciales Beta:** no se crean nuevas. Planes usan `products.read`/`products.manage`; suscripciones, entitlements y OrganizationProduct usan `organizations.read`/`organizations.manage`.
+- **Consecuencia:** `operator`, `support` y `read_only` pueden leer planes/suscripciones/entitlements; sólo `super_admin` y `platform_admin` pueden crear/editar planes y transicionar suscripciones.
+- **`security.manage`:** reservada; C6 es read-only y no la consume. No concede `installations.rehost` ni acceso adicional a los read models C6.
+- **`security_auditor`:** conserva `security.read`, `security.manage` y `audit.read`; en C6 sólo usa lectura. No tiene `installations.rehost`.
+- **`security.read`/`audit.read`:** concedidas a todos los roles según la matriz ratificada. Riesgo de confidencialidad interna aceptado para Beta controlada, condicionado a metadata saneada y superficie staff. Ver [Seguridad Beta](platform-beta-security.md).
+- **4-eyes:** diferido a una fase futura con mutación crítica; C6 no lo requiere.
+
+En caso de conflicto con la redacción histórica, prevalecerá esta enmienda una vez ratificada; PR #22 (C6) alinea la redacción anterior.

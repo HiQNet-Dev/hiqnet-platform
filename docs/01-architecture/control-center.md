@@ -70,4 +70,16 @@ Productos futuros se integran como módulos del Control Center y capacidades de 
 - [ADR-0002 — Autenticación comercial](adr-0002-authentication-strategy.md)
 - [ADR-0003 — Enrolamiento de instalaciones](adr-0003-installation-enrollment.md)
 - [Guía de desarrollo local](../02-development/local.md)
-- [Portal](../02-development/portal.md)
+- Portal comercial: PR #12/#13 (pendiente de integración; `docs/02-development/portal.md` se incorpora al mergear F02)
+
+## 7. Estado de Beta (Fase 1)
+
+La arquitectura multiproducto y el alcance Beta quedan propuestos para ratificación en [Platform](platform.md). El dominio comercial pendiente se define en [ADR-0011](adr-0011-commercial-domain.md). El backlog cerrado y la matriz de seguridad están en [Backlog Beta](../02-development/platform-beta-backlog.md) y [Seguridad Beta](../02-development/platform-beta-security.md).
+
+- C1–C5: implementados y validados en `main`.
+- C6: contrato en PR #22 (pendiente de merge); implementación C6.1–C6.4 pendiente.
+- Portal: PR #12/#13 pendientes de rebase/merge.
+- Dominio comercial: planes, suscripciones y entitlements pendientes (ADR-0011).
+- OrganizationProduct: lectura implementada; mutación pendiente.
+- Licenciamiento: Ed25519 v1; emisión productiva deshabilitada.
+- Beta: no iniciada; el siguiente incremento es el definido en el backlog.
