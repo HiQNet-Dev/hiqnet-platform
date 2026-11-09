@@ -53,6 +53,20 @@ test("bootstrap, products, detail/projects y logout usan sólo API control", asy
   await expect(page.getByRole("heading", { name: "Control Center" })).toBeVisible();
 });
 
+test("una sesión expirada durante Products redirige a login", async ({ page }) => {
+  await page.route("**/api/v1/control/auth/me", (route) => route.fulfill({ contentType: "application/json", body: JSON.stringify(staff) }));
+  await page.route("**/api/v1/control/products**", (route) => route.fulfill({ status: 401, contentType: "application/json", body: JSON.stringify({ message: "session expired" }) }));
+  await page.goto("/control/products");
+  await expect(page.getByRole("heading", { name: "Control Center" })).toBeVisible();
+});
+
+test("un 403 de Products muestra acceso insuficiente", async ({ page }) => {
+  await page.route("**/api/v1/control/auth/me", (route) => route.fulfill({ contentType: "application/json", body: JSON.stringify(staff) }));
+  await page.route("**/api/v1/control/products**", (route) => route.fulfill({ status: 403, contentType: "application/json", body: JSON.stringify({ message: "forbidden" }) }));
+  await page.goto("/control/products");
+  await expect(page.getByRole("heading", { name: "Acceso insuficiente" })).toBeVisible();
+});
+
 test("staff read-only puede consultar el registry sin acciones de gestión", async ({ page }) => {
   await page.route("**/api/v1/control/auth/me", (route) => route.fulfill({ contentType: "application/json", body: JSON.stringify({ ...staff, capabilities: ["products.read"] }) }));
   await page.route("**/api/v1/control/products**", (route) => route.fulfill({ contentType: "application/json", body: JSON.stringify({ items: [product], next_cursor: null }) }));

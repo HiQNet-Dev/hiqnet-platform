@@ -15,7 +15,14 @@ export class ControlApiError extends Error {
   }
 }
 
-async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
+const sessionExpiredEvent = "control:session-expired";
+const sessionRestoredEvent = "control:session-restored";
+
+function dispatchSessionEvent(name: string) {
+  if (typeof window !== "undefined") window.dispatchEvent(new Event(name));
+}
+
+async function request<T>(path: string, init: RequestInit = {}, invalidateSession = true): Promise<T> {
   const response = await fetch(`/api/v1/control${path}`, {
     ...init,
     credentials: "include",
@@ -23,15 +30,20 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   });
   if (!response.ok) {
     const body = (await response.json().catch(() => null)) as { message?: string } | null;
+    if (invalidateSession && response.status === 401) dispatchSessionEvent(sessionExpiredEvent);
     throw new ControlApiError(response.status, body?.message ?? "No fue posible completar la solicitud.");
   }
   return response.status === 204 ? (undefined as T) : (response.json() as Promise<T>);
 }
 
 export const controlClient = {
-  login: (email: string, password: string) => request<void>("/auth/login", { method: "POST", body: JSON.stringify({ email, password }) }),
-  logout: () => request<void>("/auth/logout", { method: "POST" }),
-  me: () => request<StaffMe>("/auth/me"),
+  login: async (email: string, password: string) => {
+    const result = await request<void>("/auth/login", { method: "POST", body: JSON.stringify({ email, password }) }, false);
+    dispatchSessionEvent(sessionRestoredEvent);
+    return result;
+  },
+  logout: () => request<void>("/auth/logout", { method: "POST" }, false),
+  me: () => request<StaffMe>("/auth/me", {}, false),
   products: (filters: { cursor?: string; status?: ProductStatus; type?: ProductType }) => {
     const search = new URLSearchParams();
     search.set("limit", "50");
@@ -43,3 +55,5 @@ export const controlClient = {
   product: (key: string) => request<Product>(`/products/${encodeURIComponent(key)}`),
   projects: (productKey: string) => request<ProjectPage>(`/projects?product_key=${encodeURIComponent(productKey)}&limit=50`),
 };
+
+export const controlSessionEvents = { expired: sessionExpiredEvent, restored: sessionRestoredEvent };

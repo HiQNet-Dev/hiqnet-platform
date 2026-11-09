@@ -1,7 +1,7 @@
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { controlClient, type ProductStatus, type ProductType } from "../../api/control-client";
-import { useCapability } from "../../auth/session";
+
 import { EmptyState, LoadingState, RequestErrorState } from "../../components/states";
 
 const statuses: ProductStatus[] = ["development", "active", "maintenance", "deprecated", "retired"];
@@ -14,12 +14,12 @@ export function ProductsPage() {
   const type = (params.get("type") || undefined) as ProductType | undefined;
   const cursor = params.get("cursor") || undefined;
   const query = useQuery({ queryKey: ["control", "products", { status, type, cursor }], queryFn: () => controlClient.products({ status, type, cursor }) });
-  const canManage = useCapability("products.manage");
+
   if (query.isPending) return <LoadingState label="Cargando products…" />;
   if (query.isError) return <RequestErrorState error={query.error} retry={() => void query.refetch()} />;
   const update = (key: "status" | "type", value: string) => { const next = new URLSearchParams(); if (key === "status" ? value : status) next.set("status", key === "status" ? value : status!); if (key === "type" ? value : type) next.set("type", key === "type" ? value : type!); setParams(next); };
   const nextCursor = query.data.next_cursor ?? undefined;
-  return <section className="page"><div className="page__heading"><div><p className="eyebrow">Registry</p><h1>Products</h1><p>Productos y proyectos operativos registrados en Platform.</p></div>{canManage && <button className="button" disabled title="La creación llegará en una iteración posterior">New product</button>}</div><div className="filters" aria-label="Filtros de products"><label>Status<select value={status ?? ""} onChange={(e) => update("status", e.target.value)}><option value="">All statuses</option>{statuses.map((item) => <option key={item} value={item}>{statusLabel(item)}</option>)}</select></label><label>Type<select value={type ?? ""} onChange={(e) => update("type", e.target.value)}><option value="">All types</option>{types.map((item) => <option key={item} value={item}>{statusLabel(item)}</option>)}</select></label></div>{query.data.items.length === 0 ? <EmptyState title="No products found" body="No hay registros que coincidan con los filtros actuales." /> : <div className="table-wrap"><table><thead><tr><th>Product</th><th>Type</th><th>Status</th><th>Updated</th></tr></thead><tbody>{query.data.items.map((product) => <tr key={product.id}><td><Link to={`/control/products/${product.key}`} className="table-link">{product.name}<code>{product.key}</code></Link></td><td>{product.product_type}</td><td><span className={`badge badge--${product.status}`}>{product.status}</span></td><td>{new Intl.DateTimeFormat("es", { dateStyle: "medium" }).format(new Date(product.updated_at))}</td></tr>)}</tbody></table></div>}{nextCursor && <button className="button button--secondary" onClick={() => setParams({ ...(status && { status }), ...(type && { type }), cursor: nextCursor })}>Next page</button>}</section>;
+  return <section className="page"><div className="page__heading"><div><p className="eyebrow">Registry</p><h1>Products</h1><p>Productos y proyectos operativos registrados en Platform.</p></div></div><div className="filters" aria-label="Filtros de products"><label>Status<select value={status ?? ""} onChange={(e) => update("status", e.target.value)}><option value="">All statuses</option>{statuses.map((item) => <option key={item} value={item}>{statusLabel(item)}</option>)}</select></label><label>Type<select value={type ?? ""} onChange={(e) => update("type", e.target.value)}><option value="">All types</option>{types.map((item) => <option key={item} value={item}>{statusLabel(item)}</option>)}</select></label></div>{query.data.items.length === 0 ? <EmptyState title="No products found" body="No hay registros que coincidan con los filtros actuales." /> : <div className="table-wrap"><table><thead><tr><th>Product</th><th>Type</th><th>Status</th><th>Updated</th></tr></thead><tbody>{query.data.items.map((product) => <tr key={product.id}><td><Link to={`/control/products/${product.key}`} className="table-link">{product.name}<code>{product.key}</code></Link></td><td>{product.product_type}</td><td><span className={`badge badge--${product.status}`}>{product.status}</span></td><td>{new Intl.DateTimeFormat("es", { dateStyle: "medium" }).format(new Date(product.updated_at))}</td></tr>)}</tbody></table></div>}{nextCursor && <button className="button button--secondary" onClick={() => setParams({ ...(status && { status }), ...(type && { type }), cursor: nextCursor })}>Next page</button>}</section>;
 }
 
 export function ProductDetailPage() {
