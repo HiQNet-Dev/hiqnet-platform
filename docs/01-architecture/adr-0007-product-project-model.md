@@ -110,7 +110,9 @@ erDiagram
 
 ## 6. Decisiones ratificadas
 
-### C4.0 — `organization_product` (APROBADO; implementación en curso — no IMPLEMENTADO hasta integrarse en `main` con pruebas PostgreSQL reales)
+### C4.0 — `organization_product` (IMPLEMENTADO / VALIDADO en C4)
+
+Integrado en `main` mediante la migración `0008` (squash `00a6baa`, 2026-11-09) y validado con PostgreSQL 17 real.
 
 - **Relación persistente:** una fila por `(organization_id, product_id)`; no se elimina físicamente. La desactivación y reactivación reutilizan la misma fila.
 - **`status`:** sólo `active | inactive`. No representa Trial, licencias, suscripciones, cobro, expiración ni estado de pago.

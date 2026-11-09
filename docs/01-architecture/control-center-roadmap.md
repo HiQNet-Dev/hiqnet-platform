@@ -41,6 +41,7 @@ Cada fase debe compilar, testear, exponer OpenAPI, usar migraciones propias y pa
 
 ## C4 — Organizations / accounts global view
 
+- **Estado: CERRADO** (integrado en `main` como `00a6baa`, 2026-11-09; `0008` validada con PostgreSQL 17 real).
 - Vista global staff con endpoints administrativos explícitos.
 - Paginación/filtros server-side, 404 neutral.
 - Sin reutilizar endpoints comerciales.
