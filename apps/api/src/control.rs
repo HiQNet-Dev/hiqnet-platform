@@ -195,7 +195,9 @@ pub struct ProductResponse {
     pub description: String,
     pub status: ProductStatusDto,
     pub product_type: ProductTypeDto,
+    #[serde(with = "time::serde::rfc3339")]
     pub created_at: time::OffsetDateTime,
+    #[serde(with = "time::serde::rfc3339")]
     pub updated_at: time::OffsetDateTime,
 }
 
@@ -216,7 +218,9 @@ pub struct ProjectResponse {
     pub status: ProductStatusDto,
     pub product_id: Option<uuid::Uuid>,
     pub product_key: Option<String>,
+    #[serde(with = "time::serde::rfc3339")]
     pub created_at: time::OffsetDateTime,
+    #[serde(with = "time::serde::rfc3339")]
     pub updated_at: time::OffsetDateTime,
 }
 

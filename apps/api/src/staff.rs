@@ -9,10 +9,11 @@ use axum::{
     http::{HeaderMap, StatusCode, header, request::Parts},
     response::IntoResponse,
 };
+use platform_application::control::ControlService;
 use platform_application::product::ProductService;
 use platform_application::staff::StaffAuthService;
 use platform_core::staff::{AuthenticatedStaffSession, StaffError};
-use platform_storage_postgres::{PgProductRepository, PgStaffRepository};
+use platform_storage_postgres::{PgControlRepository, PgProductRepository, PgStaffRepository};
 use std::sync::Arc;
 
 use crate::auth::{self, AuthState, LoginLimiter};
@@ -24,6 +25,7 @@ pub const STAFF_SESSION_COOKIE: &str = "hiqnet_staff_session";
 pub struct StaffState {
     pub service: Arc<StaffAuthService<PgStaffRepository>>,
     pub product: Arc<ProductService<PgProductRepository>>,
+    pub control: Arc<ControlService<PgControlRepository>>,
     pub limiter: Arc<LoginLimiter>,
     pub session_ttl: time::Duration,
     pub argon2_slots: Arc<tokio::sync::Semaphore>,

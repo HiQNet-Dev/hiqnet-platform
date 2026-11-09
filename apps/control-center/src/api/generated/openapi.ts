@@ -89,6 +89,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/control/accounts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Lista global de cuentas comerciales */
+        get: operations["listControlAccounts"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/control/accounts/{account_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Obtiene una cuenta comercial global */
+        get: operations["getControlAccount"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/control/auth/login": {
         parameters: {
             query?: never;
@@ -132,6 +166,40 @@ export interface paths {
         };
         /** Identidad staff derivada exclusivamente de la sesión verificada. */
         get: operations["staffMe"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/control/organizations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Lista global de organizaciones */
+        get: operations["listControlOrganizations"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/control/organizations/{organization_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Obtiene una organización global */
+        get: operations["getControlOrganization"];
         put?: never;
         post?: never;
         delete?: never;
@@ -475,6 +543,8 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** @enum {string} */
+        AccountStatusDto: "active" | "disabled";
         AddMemberRequest: {
             /**
              * Format: uuid
@@ -501,6 +571,8 @@ export interface components {
             /** @example approved */
             status: string;
         };
+        /** @enum {string} */
+        AssociationStatusDto: "active" | "inactive";
         BeginEnrollmentBody: {
             /** @example 0.1.0 */
             app_version: string;
@@ -525,6 +597,85 @@ export interface components {
             current_password: string;
             /** @example nueva-contraseña-2026 */
             new_password: string;
+        };
+        ControlAccountDetailResponse: {
+            /** Format: date-time */
+            created_at: string;
+            display_name: string;
+            email: string;
+            /** Format: uuid */
+            id: string;
+            memberships: components["schemas"]["ControlAccountMembershipResponse"][];
+            status: components["schemas"]["AccountStatusDto"];
+        };
+        ControlAccountListResponse: {
+            items: components["schemas"]["ControlAccountSummaryResponse"][];
+            next_cursor?: string | null;
+        };
+        ControlAccountMembershipResponse: {
+            /** Format: date-time */
+            joined_at: string;
+            organization_display_name: string;
+            /** Format: uuid */
+            organization_id: string;
+            organization_status: components["schemas"]["OrganizationStatusDto"];
+            /** Format: date-time */
+            revoked_at?: string | null;
+            role: components["schemas"]["MembershipRoleDto"];
+        };
+        ControlAccountSummaryResponse: {
+            /** Format: date-time */
+            created_at: string;
+            display_name: string;
+            email: string;
+            /** Format: uuid */
+            id: string;
+            status: components["schemas"]["AccountStatusDto"];
+        };
+        ControlMembershipResponse: {
+            /** Format: uuid */
+            account_id: string;
+            account_status: components["schemas"]["AccountStatusDto"];
+            display_name: string;
+            email: string;
+            /** Format: date-time */
+            joined_at: string;
+            /** Format: date-time */
+            revoked_at?: string | null;
+            role: components["schemas"]["MembershipRoleDto"];
+        };
+        ControlOrganizationDetailResponse: {
+            /** Format: date-time */
+            created_at: string;
+            display_name: string;
+            /** Format: uuid */
+            id: string;
+            memberships: components["schemas"]["ControlMembershipResponse"][];
+            products: components["schemas"]["ControlOrganizationProductResponse"][];
+            status: components["schemas"]["OrganizationStatusDto"];
+        };
+        ControlOrganizationListResponse: {
+            items: components["schemas"]["ControlOrganizationSummaryResponse"][];
+            next_cursor?: string | null;
+        };
+        ControlOrganizationProductResponse: {
+            /** Format: date-time */
+            activated_at: string;
+            association_status: components["schemas"]["AssociationStatusDto"];
+            entitlements: Record<string, never>;
+            /** Format: uuid */
+            product_id: string;
+            product_key: string;
+            product_name: string;
+            product_status: components["schemas"]["ProductLifecycleDto"];
+        };
+        ControlOrganizationSummaryResponse: {
+            /** Format: date-time */
+            created_at: string;
+            display_name: string;
+            /** Format: uuid */
+            id: string;
+            status: components["schemas"]["OrganizationStatusDto"];
         };
         CreateOrganizationRequest: {
             /** @example Mi negocio */
@@ -705,6 +856,8 @@ export interface components {
             /** @example admin */
             role: string;
         };
+        /** @enum {string} */
+        MembershipRoleDto: "owner" | "admin" | "member";
         OrganizationListResponse: {
             items: components["schemas"]["OrganizationResponse"][];
             /**
@@ -726,6 +879,8 @@ export interface components {
             /** @example active */
             status: string;
         };
+        /** @enum {string} */
+        OrganizationStatusDto: "active" | "legacy_unclaimed" | "archived";
         PlanResponse: {
             /** @example Trial (30 días) */
             display_name: string;
@@ -739,6 +894,8 @@ export interface components {
             /** @example trial */
             plan: string;
         };
+        /** @enum {string} */
+        ProductLifecycleDto: "development" | "active" | "maintenance" | "deprecated" | "retired";
         ProductListResponse: {
             items: components["schemas"]["ProductResponse"][];
             next_cursor?: string | null;
@@ -1103,6 +1260,136 @@ export interface operations {
             };
         };
     };
+    listControlAccounts: {
+        parameters: {
+            query?: {
+                /** @example 50 */
+                limit?: number;
+                cursor?: string;
+                status?: string;
+                search?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Cuentas paginadas por antigüedad e identificador */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ControlAccountListResponse"];
+                };
+            };
+            /** @description Filtro, búsqueda o cursor inválido */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Sesión staff requerida */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Capability insuficiente */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Almacenamiento no disponible */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    getControlAccount: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description UUID de la cuenta comercial */
+                account_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Cuenta con sus memberships históricas */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ControlAccountDetailResponse"];
+                };
+            };
+            /** @description UUID inválido */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Sesión staff requerida */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Capability insuficiente */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Cuenta no encontrada */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Almacenamiento no disponible */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
     staffLogin: {
         parameters: {
             query?: never;
@@ -1209,6 +1496,136 @@ export interface operations {
             };
             /** @description Sesión staff inválida, expirada o revocada */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Almacenamiento no disponible */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    listControlOrganizations: {
+        parameters: {
+            query?: {
+                /** @example 50 */
+                limit?: number;
+                cursor?: string;
+                status?: string;
+                search?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Organizaciones paginadas por antigüedad e identificador */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ControlOrganizationListResponse"];
+                };
+            };
+            /** @description Filtro, búsqueda o cursor inválido */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Sesión staff requerida */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Capability insuficiente */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Almacenamiento no disponible */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    getControlOrganization: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description UUID de la organización */
+                organization_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Organización con memberships y products */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ControlOrganizationDetailResponse"];
+                };
+            };
+            /** @description UUID inválido */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Sesión staff requerida */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Capability insuficiente */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Organización no encontrada */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };

@@ -1,7 +1,8 @@
 import { Navigate, Route, Routes } from "react-router-dom";
 import { useSession } from "../auth/session";
 import { ErrorState, LoadingState } from "../components/states";
-import { OrganizationsPage } from "../features/organizations/organizations-page";
+import { AccountDetailPage, AccountsPage } from "../features/accounts/accounts-page";
+import { OrganizationDetailPage, OrganizationsPage } from "../features/organizations/organizations-page";
 import { ProductDetailPage, ProductsPage } from "../features/products/products-pages";
 import { AppShell } from "../layouts/app-shell";
 import { LoginPage } from "./login-page";
@@ -20,4 +21,21 @@ function LoginRoute() {
   return session.kind === "authenticated" ? <Navigate to="/control/products" replace /> : <LoginPage />;
 }
 function AccessDenied() { return <section className="page"><ErrorState title="Acceso insuficiente" /></section>; }
-export function AppRouter() { return <Routes><Route path="/control/login" element={<LoginRoute />} /><Route path="/control" element={<ProtectedRoute />}><Route index element={<Navigate to="products" replace />} /><Route path="products" element={<ProductsPage />} /><Route path="products/:productKey" element={<ProductDetailPage />} /><Route path="organizations" element={<OrganizationsPage />} /><Route path="forbidden" element={<AccessDenied />} /></Route><Route path="*" element={<Navigate to="/control" replace />} /></Routes>; }
+export function AppRouter() {
+  return (
+    <Routes>
+      <Route path="/control/login" element={<LoginRoute />} />
+      <Route path="/control" element={<ProtectedRoute />}>
+        <Route index element={<Navigate to="products" replace />} />
+        <Route path="products" element={<ProductsPage />} />
+        <Route path="products/:productKey" element={<ProductDetailPage />} />
+        <Route path="organizations" element={<OrganizationsPage />} />
+        <Route path="organizations/:organizationId" element={<OrganizationDetailPage />} />
+        <Route path="accounts" element={<AccountsPage />} />
+        <Route path="accounts/:accountId" element={<AccountDetailPage />} />
+        <Route path="forbidden" element={<AccessDenied />} />
+      </Route>
+      <Route path="*" element={<Navigate to="/control" replace />} />
+    </Routes>
+  );
+}

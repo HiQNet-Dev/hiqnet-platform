@@ -5,6 +5,7 @@
 
 pub mod auth;
 pub mod commercial;
+pub mod control;
 pub mod enrollment;
 pub mod error;
 pub mod ports;
