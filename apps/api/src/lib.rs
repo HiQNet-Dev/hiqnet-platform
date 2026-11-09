@@ -1519,6 +1519,19 @@ mod tests {
             .unwrap();
     }
 
+    async fn product_project_audit_count(pool: &PgPool, email: &str) -> i64 {
+        sqlx::query_scalar(
+            "SELECT count(*) FROM staff_audit_event e
+             JOIN staff_account a ON a.id = e.staff_account_id
+             WHERE a.email = $1
+               AND e.action IN ('product_created', 'product_updated', 'project_created', 'project_updated')",
+        )
+        .bind(email)
+        .fetch_one(pool)
+        .await
+        .unwrap()
+    }
+
     async fn send(
         router: &Router,
         method: Method,
@@ -3994,6 +4007,7 @@ mod tests {
         assert_eq!(status, StatusCode::CREATED);
         assert_eq!(body["key"], product_key);
         assert_eq!(body["status"], "active");
+        let product_initial_updated_at = body["updated_at"].clone();
 
         // Clave duplicada: conflicto sin filtrar detalles.
         let (status, _, _) = send_method(
@@ -4035,6 +4049,9 @@ mod tests {
         .await;
         assert_eq!(status, StatusCode::OK);
         assert_eq!(body["status"], "maintenance");
+        let product_changed_updated_at = body["updated_at"].clone();
+        assert_ne!(product_changed_updated_at, product_initial_updated_at);
+        assert_eq!(product_project_audit_count(&pool, &email).await, 2);
 
         // PATCH sin cambios efectivos → 400 (no se audita una mutación inexistente).
         let (status, _, body) = send_method(
@@ -4048,6 +4065,44 @@ mod tests {
         .await;
         assert_eq!(status, StatusCode::BAD_REQUEST);
         assert_eq!(body["code"], "validation_error");
+
+        let (status, _, body) = send_method(
+            &router,
+            Method::PATCH,
+            &format!("/api/v1/control/products/{product_key}"),
+            Some(&admin_cookie),
+            Some(origin),
+            Some(json!({"status": null})),
+        )
+        .await;
+        assert_eq!(status, StatusCode::BAD_REQUEST);
+        assert_eq!(body["code"], "validation_error");
+
+        // Repetir el valor persistido también es un no-op: no se actualiza ni audita.
+        let (status, _, body) = send_method(
+            &router,
+            Method::PATCH,
+            &format!("/api/v1/control/products/{product_key}"),
+            Some(&admin_cookie),
+            Some(origin),
+            Some(json!({"status": "maintenance"})),
+        )
+        .await;
+        assert_eq!(status, StatusCode::BAD_REQUEST);
+        assert_eq!(body["code"], "validation_error");
+
+        let (status, _, body) = send_method(
+            &router,
+            Method::GET,
+            &format!("/api/v1/control/products/{product_key}"),
+            Some(&admin_cookie),
+            None,
+            None,
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(body["updated_at"], product_changed_updated_at);
+        assert_eq!(product_project_audit_count(&pool, &email).await, 2);
 
         let project_key = format!("api-{}", Uuid::new_v4().simple());
         let (status, _, body) = send_method(
@@ -4067,6 +4122,7 @@ mod tests {
         .await;
         assert_eq!(status, StatusCode::CREATED);
         assert_eq!(body["product_key"], product_key);
+        let project_initial_updated_at = body["updated_at"].clone();
 
         let (status, _, body) = send_method(
             &router,
@@ -4086,17 +4142,51 @@ mod tests {
                 .any(|item| item["key"] == project_key)
         );
 
-        let audit_count: i64 = sqlx::query_scalar(
-            "SELECT count(*) FROM staff_audit_event e
-             JOIN staff_account a ON a.id = e.staff_account_id
-             WHERE a.email = $1
-               AND e.action IN ('product_created', 'product_updated', 'project_created')",
+        let (status, _, body) = send_method(
+            &router,
+            Method::PATCH,
+            &format!("/api/v1/control/projects/{project_key}"),
+            Some(&admin_cookie),
+            Some(origin),
+            Some(json!({"status": "maintenance"})),
         )
-        .bind(&email)
-        .fetch_one(&pool)
-        .await
-        .unwrap();
-        assert!(audit_count >= 3, "auditoría de mutaciones: {audit_count}");
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(body["status"], "maintenance");
+        let project_changed_updated_at = body["updated_at"].clone();
+        assert_ne!(project_changed_updated_at, project_initial_updated_at);
+        assert_eq!(product_project_audit_count(&pool, &email).await, 4);
+
+        for request in [
+            json!({}),
+            json!({"status": null}),
+            json!({"status": "maintenance"}),
+        ] {
+            let (status, _, body) = send_method(
+                &router,
+                Method::PATCH,
+                &format!("/api/v1/control/projects/{project_key}"),
+                Some(&admin_cookie),
+                Some(origin),
+                Some(request),
+            )
+            .await;
+            assert_eq!(status, StatusCode::BAD_REQUEST);
+            assert_eq!(body["code"], "validation_error");
+        }
+
+        let (status, _, body) = send_method(
+            &router,
+            Method::GET,
+            &format!("/api/v1/control/projects/{project_key}"),
+            Some(&admin_cookie),
+            None,
+            None,
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(body["updated_at"], project_changed_updated_at);
+        assert_eq!(product_project_audit_count(&pool, &email).await, 4);
 
         // read_only puede leer pero no mutar.
         let reader_email = format!("staff-reader-{}@hiqnet.test", Uuid::new_v4());

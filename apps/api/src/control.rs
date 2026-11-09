@@ -238,8 +238,8 @@ pub struct CreateProductRequest {
     pub product_type: ProductTypeDto,
 }
 
-/// `key` y `type` son inmutables. Los campos omitidos o `null` no cambian; al
-/// menos un campo efectivo es obligatorio.
+/// `key` y `type` son inmutables. Los campos omitidos o `null` no cambian. Los
+/// campos presentes deben diferir del valor persistido; de lo contrario se rechaza.
 #[derive(serde::Deserialize, utoipa::ToSchema)]
 #[serde(deny_unknown_fields)]
 pub struct UpdateProductRequest {
@@ -264,7 +264,8 @@ pub struct CreateProjectRequest {
 }
 
 /// `key`, `project_type` y la asociación Product son inmutables. Los campos
-/// omitidos o `null` no cambian; al menos un campo efectivo es obligatorio.
+/// omitidos o `null` no cambian. Los campos presentes deben diferir del valor
+/// persistido; de lo contrario se rechaza.
 #[derive(serde::Deserialize, utoipa::ToSchema)]
 #[serde(deny_unknown_fields)]
 pub struct UpdateProjectRequest {

@@ -3806,7 +3806,7 @@
       },
       "UpdateProductRequest": {
         "type": "object",
-        "description": "`key` y `type` son inmutables. Los campos omitidos o `null` no cambian; al\nmenos un campo efectivo es obligatorio.",
+        "description": "`key` y `type` son inmutables. Los campos omitidos o `null` no cambian. Los\ncampos presentes deben diferir del valor persistido; de lo contrario se rechaza.",
         "properties": {
           "description": {
             "type": "string"
@@ -3822,7 +3822,7 @@
       },
       "UpdateProjectRequest": {
         "type": "object",
-        "description": "`key`, `project_type` y la asociación Product son inmutables. Los campos\nomitidos o `null` no cambian; al menos un campo efectivo es obligatorio.",
+        "description": "`key`, `project_type` y la asociación Product son inmutables. Los campos\nomitidos o `null` no cambian. Los campos presentes deben diferir del valor\npersistido; de lo contrario se rechaza.",
         "properties": {
           "description": {
             "type": "string"

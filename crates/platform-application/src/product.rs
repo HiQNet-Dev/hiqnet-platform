@@ -143,6 +143,14 @@ impl<R: ProductRepository> ProductService<R> {
     ) -> ProductResult<Product> {
         actor.require(Capability::ProductsManage)?;
         validate_product_changes(&changes)?;
+        let product = self
+            .repository
+            .get_product(key)
+            .await?
+            .ok_or(ProductError::NotFound)?;
+        if !has_effective_product_changes(&product, &changes) {
+            return Err(ProductError::InvalidInput);
+        }
         self.repository
             .update_product(actor, key, &changes, now)
             .await
@@ -198,6 +206,14 @@ impl<R: ProductRepository> ProductService<R> {
     ) -> ProductResult<Project> {
         actor.require(Capability::ProductsManage)?;
         validate_project_changes(&changes)?;
+        let project = self
+            .repository
+            .get_project(key)
+            .await?
+            .ok_or(ProductError::NotFound)?;
+        if !has_effective_project_changes(&project, &changes) {
+            return Err(ProductError::InvalidInput);
+        }
         self.repository
             .update_project(actor, key, &changes, now)
             .await
@@ -248,6 +264,20 @@ fn validate_product_changes(changes: &ProductChanges) -> ProductResult<()> {
     Ok(())
 }
 
+fn has_effective_product_changes(product: &Product, changes: &ProductChanges) -> bool {
+    changes
+        .name
+        .as_deref()
+        .is_some_and(|name| name.trim() != product.name)
+        || changes
+            .description
+            .as_deref()
+            .is_some_and(|description| description != product.description)
+        || changes
+            .status
+            .is_some_and(|status| status != product.status)
+}
+
 fn validate_new_project(project: &NewProject) -> ProductResult<()> {
     if !is_valid_key(&project.key) {
         return Err(ProductError::InvalidInput);
@@ -269,10 +299,28 @@ fn validate_project_changes(changes: &ProjectChanges) -> ProductResult<()> {
     Ok(())
 }
 
+fn has_effective_project_changes(project: &Project, changes: &ProjectChanges) -> bool {
+    changes
+        .name
+        .as_deref()
+        .is_some_and(|name| name.trim() != project.name)
+        || changes
+            .description
+            .as_deref()
+            .is_some_and(|description| description != project.description)
+        || changes
+            .status
+            .is_some_and(|status| status != project.status)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use platform_core::product::{MAX_DESCRIPTION_LEN, NewProduct};
+    use platform_core::{
+        ids::{ProductId, ProjectId},
+        product::{MAX_DESCRIPTION_LEN, NewProduct, ProjectType},
+    };
+    use time::OffsetDateTime;
 
     fn actor(role: StaffRole) -> StaffActor {
         StaffActor {
@@ -370,5 +418,59 @@ mod tests {
             }),
             Ok(())
         );
+
+        let now = OffsetDateTime::now_utc();
+        let product = Product {
+            id: ProductId::new(),
+            key: "pos".into(),
+            name: "HiQNet POS".into(),
+            description: "Punto de venta".into(),
+            status: LifecycleStatus::Active,
+            product_type: ProductType::Desktop,
+            created_at: now,
+            updated_at: now,
+        };
+        assert!(!has_effective_product_changes(
+            &product,
+            &ProductChanges {
+                name: Some(" HiQNet POS ".into()),
+                description: Some("Punto de venta".into()),
+                status: Some(LifecycleStatus::Active),
+            }
+        ));
+        assert!(has_effective_product_changes(
+            &product,
+            &ProductChanges {
+                status: Some(LifecycleStatus::Maintenance),
+                ..Default::default()
+            }
+        ));
+
+        let project = Project {
+            id: ProjectId::new(),
+            key: "platform-api".into(),
+            name: "Platform API".into(),
+            description: String::new(),
+            project_type: ProjectType::Service,
+            status: LifecycleStatus::Active,
+            product_id: Some(product.id),
+            product_key: Some(product.key),
+            created_at: now,
+            updated_at: now,
+        };
+        assert!(!has_effective_project_changes(
+            &project,
+            &ProjectChanges {
+                name: Some("Platform API".into()),
+                ..Default::default()
+            }
+        ));
+        assert!(has_effective_project_changes(
+            &project,
+            &ProjectChanges {
+                description: Some("API de plataforma".into()),
+                ..Default::default()
+            }
+        ));
     }
 }
