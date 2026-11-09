@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
-import { Building2, LogOut, Menu, ShieldCheck, X } from 'lucide-react';
+import { Building2, KeyRound, LogOut, Menu, ShieldCheck, X } from 'lucide-react';
 
 import { useAuth } from '../auth/useAuth';
 import { useToast } from '../components/useToast';
@@ -9,6 +9,7 @@ import { cn } from '../utils/cn';
 
 const navigation = [
   { to: '/app/organizations', label: 'Organizaciones', icon: Building2 },
+  { to: '/enroll', label: 'Enrolar dispositivo', icon: KeyRound },
   { to: '/account/security', label: 'Cuenta y seguridad', icon: ShieldCheck },
 ];
 
@@ -109,7 +110,11 @@ export function AppShell() {
           <div className="topbar__context">
             <span>Portal comercial</span>
             <strong>
-              {location.pathname.startsWith('/account') ? 'Cuenta y seguridad' : 'Organizaciones'}
+              {location.pathname.startsWith('/account')
+                ? 'Cuenta y seguridad'
+                : location.pathname.startsWith('/enroll')
+                  ? 'Enrolar dispositivo'
+                  : 'Organizaciones'}
             </strong>
           </div>
           <span className="topbar__status">

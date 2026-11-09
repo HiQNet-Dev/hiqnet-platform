@@ -8,6 +8,8 @@ import { OrganizationsPage } from '../features/organizations/OrganizationsPage';
 import { OrganizationLayout } from '../features/organizations/OrganizationLayout';
 import { OrganizationOverviewPage } from '../features/organizations/OrganizationOverviewPage';
 import { MembersPage } from '../features/members/MembersPage';
+import { EnrollmentPage } from '../features/enrollment/EnrollmentPage';
+import { InstallationsPage } from '../features/installations/InstallationsPage';
 import { NotFoundPage } from './NotFoundPage';
 
 export function AppRoutes() {
@@ -22,7 +24,9 @@ export function AppRoutes() {
           <Route path="/app/organizations/:organizationId" element={<OrganizationLayout />}>
             <Route index element={<OrganizationOverviewPage />} />
             <Route path="members" element={<MembersPage />} />
+            <Route path="installations" element={<InstallationsPage />} />
           </Route>
+          <Route path="/enroll" element={<EnrollmentPage />} />
           <Route path="/account" element={<Navigate to="/account/security" replace />} />
           <Route path="/account/security" element={<AccountSecurityPage />} />
         </Route>

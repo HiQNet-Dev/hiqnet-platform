@@ -81,16 +81,19 @@ export function OrganizationOverviewPage() {
             </span>
             <ArrowRight size={17} aria-hidden="true" />
           </Link>
-          <div className="action-list__item action-list__item--disabled" aria-disabled="true">
+          <Link
+            className="action-list__item"
+            to={`/app/organizations/${organization.id}/installations`}
+          >
             <span className="action-list__icon" aria-hidden="true">
               <Server size={18} />
             </span>
             <span>
               <strong>Instalaciones vinculadas</strong>
-              <small>Disponible cuando el enrolamiento G4.2-B esté integrado en main.</small>
+              <small>Consulta los equipos enrolados y su identidad.</small>
             </span>
-            <span className="section-tabs__soon">Próximamente</span>
-          </div>
+            <ArrowRight size={17} aria-hidden="true" />
+          </Link>
         </div>
       </section>
     </div>
