@@ -89,6 +89,57 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/enrollment-requests": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Inicia un challenge de enrolamiento público; los secretos se entregan una sola vez. */
+        post: operations["beginEnrollment"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/enrollment-requests/{device_code}/proof": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Verifica la firma Ed25519 del dispositivo y consume el challenge una sola vez. */
+        post: operations["proveEnrollment"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/enrollment-requests/{user_code}/approve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Aprueba un challenge desde una sesión comercial; sólo el owner fija el tenant. */
+        post: operations["approveEnrollment"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/installations": {
         parameters: {
             query?: never;
@@ -185,6 +236,23 @@ export interface paths {
         };
         /** Consulta una organización propia; un UUID ajeno responde 404 neutral. */
         get: operations["getOrganization"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/organizations/{id}/installations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Lista installations de una organización con aislamiento en SQL y cursor keyset. */
+        get: operations["listOrganizationInstallations"];
         put?: never;
         post?: never;
         delete?: never;
@@ -293,6 +361,38 @@ export interface components {
             /** @example member */
             role: string;
         };
+        ApproveEnrollmentBody: {
+            /**
+             * Format: uuid
+             * @example 123e4567-e89b-42d3-a456-426614174010
+             */
+            organization_id: string;
+        };
+        ApprovedEnrollmentResponse: {
+            /** Format: uuid */
+            enrollment_request_id: string;
+            /** Format: uuid */
+            installation_id: string;
+            /** Format: uuid */
+            organization_id: string;
+            /** @example approved */
+            status: string;
+        };
+        BeginEnrollmentBody: {
+            /** @example 0.1.0 */
+            app_version: string;
+            /** @example Caja mostrador */
+            device_label: string;
+            /**
+             * Format: uuid
+             * @example 123e4567-e89b-42d3-a456-426614174000
+             */
+            installation_id: string;
+            /** @example windows */
+            platform: string;
+            /** @example ed25519:v1:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA */
+            public_key: string;
+        };
         ChangeMemberRoleRequest: {
             /** @example admin */
             role: string;
@@ -307,6 +407,37 @@ export interface components {
             /** @example Mi negocio */
             display_name: string;
         };
+        EnrollmentChallengeResponse: {
+            /** @example sintetico-device-code */
+            device_code: string;
+            /**
+             * Format: int64
+             * @example 600
+             */
+            expires_in: number;
+            /** @example sintetico-nonce */
+            nonce: string;
+            /** @example ABCD-EFGH */
+            user_code: string;
+            /** @example http://127.0.0.1:8080/device */
+            verification_uri: string;
+        };
+        EnrollmentCompletedResponse: {
+            /** Format: date-time */
+            bound_at: string;
+            /** Format: uuid */
+            enrollment_request_id: string;
+            /** Format: uuid */
+            installation_binding_id: string;
+            /** Format: uuid */
+            installation_id: string;
+            /** Format: uuid */
+            installation_identity_id: string;
+            /** Format: uuid */
+            organization_id: string;
+            /** @example completed */
+            status: string;
+        };
         ErrorResponse: {
             /** @example not_found */
             code: string;
@@ -318,6 +449,17 @@ export interface components {
             status: string;
             /** @example 0.1.0 */
             version: string;
+        };
+        InstallationListItemResponse: {
+            /** Format: date-time */
+            bound_at?: string | null;
+            device_label: string;
+            identity_status: string;
+            /** Format: uuid */
+            installation_id: string;
+            /** Format: date-time */
+            last_seen_at?: string | null;
+            status: string;
         };
         InstallationResponse: {
             /** @example Caja de pruebas */
@@ -340,6 +482,10 @@ export interface components {
             trial_ends_at?: string | null;
             /** Format: date-time */
             trial_started_at?: string | null;
+        };
+        InstallationsResponse: {
+            items: components["schemas"]["InstallationListItemResponse"][];
+            next_cursor?: string | null;
         };
         IssueLicenseBody: {
             /** @example trial */
@@ -454,6 +600,19 @@ export interface components {
             features: string[];
             /** @example trial */
             plan: string;
+        };
+        ProofBody: {
+            /**
+             * Format: uuid
+             * @example 123e4567-e89b-42d3-a456-426614174000
+             */
+            installation_id: string;
+            /** @example sintetico-nonce */
+            nonce: string;
+            /** @example ed25519:v1:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA */
+            public_key: string;
+            /** @example firma-sintetica-base64url */
+            signature: string;
         };
         ReadinessResponse: {
             /** @example up */
@@ -720,6 +879,243 @@ export interface operations {
                 };
             };
             /** @description Almacenamiento no disponible */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    beginEnrollment: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Clave de idempotencia; máximo 128 caracteres ASCII visibles */
+                "Idempotency-Key"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        /** @description Identidad pública de la instalación y metadatos no secretos */
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BeginEnrollmentBody"];
+            };
+        };
+        responses: {
+            /** @description Challenge creado; secretos entregados una sola vez */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EnrollmentChallengeResponse"];
+                };
+            };
+            /** @description Payload, clave pública, plataforma o Idempotency-Key inválidos */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Reinicio requerido o conflicto de idempotencia */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Rate limit técnico de enrolamiento */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description PostgreSQL no disponible */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    proveEnrollment: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Código largo entregado al POS */
+                device_code: string;
+            };
+            cookie?: never;
+        };
+        /** @description Firma sobre el mensaje canónico hiqnet-enrollment-proof:v1 */
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProofBody"];
+            };
+        };
+        responses: {
+            /** @description Instalación vinculada */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EnrollmentCompletedResponse"];
+                };
+            };
+            /** @description Firma o payload inválidos */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Challenge inexistente */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Replay, conflicto o enrollment_invalid si la autoridad decayó */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Challenge expirado o consumido */
+            410: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Rate limit técnico por peer */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description PostgreSQL no disponible */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    approveEnrollment: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Código de usuario mostrado al POS */
+                user_code: string;
+            };
+            cookie?: never;
+        };
+        /** @description Organización propietaria elegida por el owner */
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ApproveEnrollmentBody"];
+            };
+        };
+        responses: {
+            /** @description Solicitud aprobada */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApprovedEnrollmentResponse"];
+                };
+            };
+            /** @description Código, organización o JSON inválidos */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Sesión inválida */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Origen no permitido o rol distinto de owner */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Código, organización o membresía inexistente (neutral) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Challenge expirado */
+            410: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Rate limit técnico por cuenta */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description PostgreSQL no disponible */
             503: {
                 headers: {
                     [name: string]: unknown;
@@ -1251,6 +1647,79 @@ export interface operations {
                 };
             };
             /** @description No existe o pertenece a otra cuenta */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description PostgreSQL no disponible */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    listOrganizationInstallations: {
+        parameters: {
+            query?: {
+                /** @description Tamaño de página, 1–100 (default 50) */
+                limit?: number;
+                /** @description Cursor opaco keyset ligado a la organización */
+                cursor?: string;
+            };
+            header?: never;
+            path: {
+                /** @description Identificador UUID de la organización */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Listado de installations visibles para el actor */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InstallationsResponse"];
+                };
+            };
+            /** @description UUID, cursor o límite inválidos */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Sesión inválida */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Origen no permitido */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Organización ajena o inexistente (neutral) */
             404: {
                 headers: {
                     [name: string]: unknown;
