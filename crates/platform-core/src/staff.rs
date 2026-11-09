@@ -46,9 +46,8 @@ impl StaffRole {
     /// Capabilities concedidas por el rol. Deny by default: lo ausente se niega.
     pub fn capabilities(self) -> &'static [Capability] {
         use Capability::*;
-        const READ_ALL: [Capability; 9] = [
+        const READ_ALL: [Capability; 8] = [
             ProductsRead,
-            ProjectsRead,
             OrganizationsRead,
             AccountsRead,
             InstallationsRead,
@@ -61,8 +60,6 @@ impl StaffRole {
             StaffRole::SuperAdmin => &[
                 ProductsRead,
                 ProductsManage,
-                ProjectsRead,
-                ProjectsManage,
                 OrganizationsRead,
                 OrganizationsManage,
                 AccountsRead,
@@ -81,8 +78,6 @@ impl StaffRole {
             StaffRole::PlatformAdmin => &[
                 ProductsRead,
                 ProductsManage,
-                ProjectsRead,
-                ProjectsManage,
                 OrganizationsRead,
                 OrganizationsManage,
                 AccountsRead,
@@ -98,7 +93,6 @@ impl StaffRole {
             ],
             StaffRole::Operator => &[
                 ProductsRead,
-                ProjectsRead,
                 OrganizationsRead,
                 AccountsRead,
                 InstallationsRead,
@@ -112,7 +106,6 @@ impl StaffRole {
             StaffRole::Support => &READ_ALL,
             StaffRole::SecurityAuditor => &[
                 ProductsRead,
-                ProjectsRead,
                 OrganizationsRead,
                 AccountsRead,
                 InstallationsRead,
@@ -163,8 +156,6 @@ impl FromStr for StaffRole {
 pub enum Capability {
     ProductsRead,
     ProductsManage,
-    ProjectsRead,
-    ProjectsManage,
     OrganizationsRead,
     OrganizationsManage,
     AccountsRead,
@@ -186,8 +177,6 @@ impl Capability {
         match self {
             Capability::ProductsRead => "products.read",
             Capability::ProductsManage => "products.manage",
-            Capability::ProjectsRead => "projects.read",
-            Capability::ProjectsManage => "projects.manage",
             Capability::OrganizationsRead => "organizations.read",
             Capability::OrganizationsManage => "organizations.manage",
             Capability::AccountsRead => "accounts.read",
@@ -264,15 +253,11 @@ mod tests {
         assert!(!StaffRole::PlatformAdmin.has(Capability::SecurityManage));
         assert!(StaffRole::Operator.has(Capability::InstallationsManage));
         assert!(!StaffRole::Operator.has(Capability::OrganizationsManage));
-        assert!(StaffRole::PlatformAdmin.has(Capability::ProjectsManage));
-        assert!(StaffRole::Operator.has(Capability::ProjectsRead));
-        assert!(!StaffRole::Operator.has(Capability::ProjectsManage));
         assert!(!StaffRole::Support.has(Capability::InstallationsManage));
         assert!(StaffRole::SecurityAuditor.has(Capability::SecurityManage));
         assert!(!StaffRole::SecurityAuditor.has(Capability::AccountsManage));
         for read in [
             Capability::ProductsRead,
-            Capability::ProjectsRead,
             Capability::OrganizationsRead,
             Capability::AccountsRead,
             Capability::InstallationsRead,

@@ -155,7 +155,7 @@ impl<R: ProductRepository> ProductService<R> {
         limit: Option<u32>,
         cursor: Option<String>,
     ) -> ProductResult<Page<Project>> {
-        actor.require(Capability::ProjectsRead)?;
+        actor.require(Capability::ProductsRead)?;
         if let Some(key) = product_key.as_deref() {
             if !is_valid_key(key) {
                 return Err(ProductError::InvalidInput);
@@ -171,7 +171,7 @@ impl<R: ProductRepository> ProductService<R> {
     }
 
     pub async fn get_project(&self, actor: &StaffActor, key: &str) -> ProductResult<Project> {
-        actor.require(Capability::ProjectsRead)?;
+        actor.require(Capability::ProductsRead)?;
         self.repository
             .get_project(key)
             .await?
@@ -184,7 +184,7 @@ impl<R: ProductRepository> ProductService<R> {
         project: NewProject,
         now: OffsetDateTime,
     ) -> ProductResult<Project> {
-        actor.require(Capability::ProjectsManage)?;
+        actor.require(Capability::ProductsManage)?;
         validate_new_project(&project)?;
         self.repository.create_project(actor, &project, now).await
     }
@@ -196,7 +196,7 @@ impl<R: ProductRepository> ProductService<R> {
         changes: ProjectChanges,
         now: OffsetDateTime,
     ) -> ProductResult<Project> {
-        actor.require(Capability::ProjectsManage)?;
+        actor.require(Capability::ProductsManage)?;
         validate_project_changes(&changes)?;
         self.repository
             .update_project(actor, key, &changes, now)
@@ -236,6 +236,9 @@ fn validate_new_product(product: &NewProduct) -> ProductResult<()> {
 }
 
 fn validate_product_changes(changes: &ProductChanges) -> ProductResult<()> {
+    if changes.name.is_none() && changes.description.is_none() && changes.status.is_none() {
+        return Err(ProductError::InvalidInput);
+    }
     if let Some(name) = changes.name.as_deref() {
         validate_name(name)?;
     }
@@ -254,6 +257,9 @@ fn validate_new_project(project: &NewProject) -> ProductResult<()> {
 }
 
 fn validate_project_changes(changes: &ProjectChanges) -> ProductResult<()> {
+    if changes.name.is_none() && changes.description.is_none() && changes.status.is_none() {
+        return Err(ProductError::InvalidInput);
+    }
     if let Some(name) = changes.name.as_deref() {
         validate_name(name)?;
     }
@@ -287,12 +293,12 @@ mod tests {
             Err(ProductError::Forbidden)
         );
         assert_eq!(
-            actor(StaffRole::Operator).require(Capability::ProjectsManage),
+            actor(StaffRole::Operator).require(Capability::ProductsManage),
             Err(ProductError::Forbidden)
         );
         assert!(
             actor(StaffRole::Operator)
-                .require(Capability::ProjectsRead)
+                .require(Capability::ProductsRead)
                 .is_ok()
         );
     }
@@ -344,6 +350,25 @@ mod tests {
         assert_eq!(
             validate_new_product(&bad_description),
             Err(ProductError::InvalidInput)
+        );
+    }
+
+    #[test]
+    fn rechaza_patch_sin_cambios_efectivos() {
+        assert_eq!(
+            validate_product_changes(&ProductChanges::default()),
+            Err(ProductError::InvalidInput)
+        );
+        assert_eq!(
+            validate_project_changes(&ProjectChanges::default()),
+            Err(ProductError::InvalidInput)
+        );
+        assert_eq!(
+            validate_product_changes(&ProductChanges {
+                name: Some("Nuevo".into()),
+                ..Default::default()
+            }),
+            Ok(())
         );
     }
 }

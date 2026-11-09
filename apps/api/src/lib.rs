@@ -3907,6 +3907,36 @@ mod tests {
         assert_eq!(status, StatusCode::UNAUTHORIZED);
     }
 
+    #[test]
+    fn control_openapi_exposes_product_enums() {
+        let document = serde_json::to_value(openapi_document()).unwrap();
+        let status = &document["components"]["schemas"]["ProductStatusDto"]["enum"];
+        let statuses: Vec<&str> = status
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|value| value.as_str().unwrap())
+            .collect();
+        assert!(statuses.contains(&"active"));
+        assert!(statuses.contains(&"retired"));
+        let product_type = &document["components"]["schemas"]["ProductTypeDto"]["enum"];
+        assert!(
+            product_type
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|value| value == "desktop")
+        );
+        let project_type = &document["components"]["schemas"]["ProjectTypeDto"]["enum"];
+        assert!(
+            project_type
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|value| value == "infrastructure")
+        );
+    }
+
     #[tokio::test]
     async fn control_products_and_projects_enforce_rbac_and_audit() {
         let pool = open(&isolated_test_url()).await.unwrap();
@@ -4005,6 +4035,19 @@ mod tests {
         .await;
         assert_eq!(status, StatusCode::OK);
         assert_eq!(body["status"], "maintenance");
+
+        // PATCH sin cambios efectivos → 400 (no se audita una mutación inexistente).
+        let (status, _, body) = send_method(
+            &router,
+            Method::PATCH,
+            &format!("/api/v1/control/products/{product_key}"),
+            Some(&admin_cookie),
+            Some(origin),
+            Some(json!({})),
+        )
+        .await;
+        assert_eq!(status, StatusCode::BAD_REQUEST);
+        assert_eq!(body["code"], "validation_error");
 
         let project_key = format!("api-{}", Uuid::new_v4().simple());
         let (status, _, body) = send_method(

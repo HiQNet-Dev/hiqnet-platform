@@ -36,7 +36,8 @@ audit.read
 staff.manage
 ```
 
-Los roles son **presets** de capabilities. En C1 se persiste el rol; el modelo debe permitir añadir capabilities explícitas y overrides en fases posteriores sin migración destructiva.
+- Los roles son **presets** de capabilities. En C1 se persiste el rol; el modelo debe permitir añadir capabilities explícitas y overrides en fases posteriores sin migración destructiva.
+- Los **proyectos del registro** (`Project`) se gestionan con `products.read`/`products.manage`; no se introducen capabilities `projects.*` en C2. Si una fase posterior necesita delegar proyectos de forma independiente, se añadirá mediante cambio explícito de este ADR y de la matriz.
 
 ### 2.3 Reglas
 

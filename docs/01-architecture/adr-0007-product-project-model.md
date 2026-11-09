@@ -50,7 +50,7 @@ Ejemplos: `platform-api`, `platform-portal`, `control-center`, `pos-desktop`, un
 | `name`                      | TEXT                                                              |
 | `description`               | TEXT                                                              |
 | `project_type`              | enum (`service                                                    | application | integration | infrastructure | initiative`) |
-| `product_id`                | UUID nullable (un proyecto puede soportar uno o varios productos) |
+| `product_id` | UUID nullable — **0..1 producto**; un producto puede tener varios proyectos |
 | `status`                    | enum                                                              |
 | `created_at` / `updated_at` | TIMESTAMPTZ                                                       |
 
@@ -97,6 +97,8 @@ erDiagram
 
 - Invariantes en columnas y constraints relacionales; JSONB sólo para metadata realmente extensible (ej. `entitlements`).
 - `key` estable e inmutable; el nombre visible puede cambiar.
+- `product_type`, `project_type` y la asociación Proyecto → Producto son **inmutables** en el registro (C2). Cambiarlos requiere un proceso administrativo futuro, no un PATCH.
+- `Project` pertenece a **cero o un** `Product`; un `Product` puede agrupar varios `Project`. Si en el futuro un proyecto debe servir a varios productos, se introducirá una tabla `project_product`, no una FK múltiple.
 - Tenant isolation intacta: `organization_product` conserva `organization_id` y FKs.
 - Permisos (qué puede hacer un actor) ≠ entitlements (qué capacidad comercial tiene una organización).
 
@@ -109,7 +111,7 @@ erDiagram
 ## 6. Decisiones ratificadas
 
 - **`product_type`:** `desktop | saas | web | mobile | service | integration | internal`; **`status`:** `development | active | maintenance | deprecated | retired`.
-- **`Project`:** independiente, con `product_id` opcional (puede soportar uno o varios productos).
+- **`Project`:** independiente, con `product_id` opcional: cardinalidad **0..1 producto** por proyecto; un producto puede agrupar varios proyectos.
 - **`entitlements`:** estructura extensible (JSONB) sin pricing; invariantes relacionales en columnas.
 - **DDL:** se implementa en C2 (`0006_product_project.sql`) tras esta ratificación; no se creó en C0.
 

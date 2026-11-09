@@ -71,22 +71,119 @@ fn require_origin(headers: &HeaderMap, auth_state: &AuthState) -> Result<(), Htt
     }
 }
 
-fn parse_status(value: &str) -> Result<LifecycleStatus, HttpError> {
-    value
-        .parse()
-        .map_err(|_| product_error(ProductError::InvalidInput))
+// Enums de contrato: exponen los valores permitidos al cliente generado.
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize, utoipa::ToSchema,
+)]
+#[serde(rename_all = "snake_case")]
+pub enum ProductStatusDto {
+    Development,
+    Active,
+    Maintenance,
+    Deprecated,
+    Retired,
 }
 
-fn parse_product_type(value: &str) -> Result<ProductType, HttpError> {
-    value
-        .parse()
-        .map_err(|_| product_error(ProductError::InvalidInput))
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize, utoipa::ToSchema,
+)]
+#[serde(rename_all = "snake_case")]
+pub enum ProductTypeDto {
+    Desktop,
+    Saas,
+    Web,
+    Mobile,
+    Service,
+    Integration,
+    Internal,
 }
 
-fn parse_project_type(value: &str) -> Result<ProjectType, HttpError> {
-    value
-        .parse()
-        .map_err(|_| product_error(ProductError::InvalidInput))
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize, utoipa::ToSchema,
+)]
+#[serde(rename_all = "snake_case")]
+pub enum ProjectTypeDto {
+    Service,
+    Application,
+    Integration,
+    Infrastructure,
+    Initiative,
+}
+
+impl From<LifecycleStatus> for ProductStatusDto {
+    fn from(value: LifecycleStatus) -> Self {
+        match value {
+            LifecycleStatus::Development => Self::Development,
+            LifecycleStatus::Active => Self::Active,
+            LifecycleStatus::Maintenance => Self::Maintenance,
+            LifecycleStatus::Deprecated => Self::Deprecated,
+            LifecycleStatus::Retired => Self::Retired,
+        }
+    }
+}
+
+impl From<ProductStatusDto> for LifecycleStatus {
+    fn from(value: ProductStatusDto) -> Self {
+        match value {
+            ProductStatusDto::Development => Self::Development,
+            ProductStatusDto::Active => Self::Active,
+            ProductStatusDto::Maintenance => Self::Maintenance,
+            ProductStatusDto::Deprecated => Self::Deprecated,
+            ProductStatusDto::Retired => Self::Retired,
+        }
+    }
+}
+
+impl From<ProductType> for ProductTypeDto {
+    fn from(value: ProductType) -> Self {
+        match value {
+            ProductType::Desktop => Self::Desktop,
+            ProductType::Saas => Self::Saas,
+            ProductType::Web => Self::Web,
+            ProductType::Mobile => Self::Mobile,
+            ProductType::Service => Self::Service,
+            ProductType::Integration => Self::Integration,
+            ProductType::Internal => Self::Internal,
+        }
+    }
+}
+
+impl From<ProductTypeDto> for ProductType {
+    fn from(value: ProductTypeDto) -> Self {
+        match value {
+            ProductTypeDto::Desktop => Self::Desktop,
+            ProductTypeDto::Saas => Self::Saas,
+            ProductTypeDto::Web => Self::Web,
+            ProductTypeDto::Mobile => Self::Mobile,
+            ProductTypeDto::Service => Self::Service,
+            ProductTypeDto::Integration => Self::Integration,
+            ProductTypeDto::Internal => Self::Internal,
+        }
+    }
+}
+
+impl From<ProjectType> for ProjectTypeDto {
+    fn from(value: ProjectType) -> Self {
+        match value {
+            ProjectType::Service => Self::Service,
+            ProjectType::Application => Self::Application,
+            ProjectType::Integration => Self::Integration,
+            ProjectType::Infrastructure => Self::Infrastructure,
+            ProjectType::Initiative => Self::Initiative,
+        }
+    }
+}
+
+impl From<ProjectTypeDto> for ProjectType {
+    fn from(value: ProjectTypeDto) -> Self {
+        match value {
+            ProjectTypeDto::Service => Self::Service,
+            ProjectTypeDto::Application => Self::Application,
+            ProjectTypeDto::Integration => Self::Integration,
+            ProjectTypeDto::Infrastructure => Self::Infrastructure,
+            ProjectTypeDto::Initiative => Self::Initiative,
+        }
+    }
 }
 
 #[derive(serde::Serialize, utoipa::ToSchema)]
@@ -96,8 +193,8 @@ pub struct ProductResponse {
     pub key: String,
     pub name: String,
     pub description: String,
-    pub status: String,
-    pub product_type: String,
+    pub status: ProductStatusDto,
+    pub product_type: ProductTypeDto,
     pub created_at: time::OffsetDateTime,
     pub updated_at: time::OffsetDateTime,
 }
@@ -115,8 +212,8 @@ pub struct ProjectResponse {
     pub key: String,
     pub name: String,
     pub description: String,
-    pub project_type: String,
-    pub status: String,
+    pub project_type: ProjectTypeDto,
+    pub status: ProductStatusDto,
     pub product_id: Option<uuid::Uuid>,
     pub product_key: Option<String>,
     pub created_at: time::OffsetDateTime,
@@ -136,17 +233,22 @@ pub struct CreateProductRequest {
     pub name: String,
     #[serde(default)]
     pub description: String,
-    pub status: String,
+    pub status: ProductStatusDto,
     #[serde(rename = "type")]
-    pub product_type: String,
+    pub product_type: ProductTypeDto,
 }
 
+/// `key` y `type` son inmutables. Los campos omitidos o `null` no cambian; al
+/// menos un campo efectivo es obligatorio.
 #[derive(serde::Deserialize, utoipa::ToSchema)]
 #[serde(deny_unknown_fields)]
 pub struct UpdateProductRequest {
+    #[schema(nullable = false)]
     pub name: Option<String>,
+    #[schema(nullable = false)]
     pub description: Option<String>,
-    pub status: Option<String>,
+    #[schema(nullable = false)]
+    pub status: Option<ProductStatusDto>,
 }
 
 #[derive(serde::Deserialize, utoipa::ToSchema)]
@@ -156,17 +258,22 @@ pub struct CreateProjectRequest {
     pub name: String,
     #[serde(default)]
     pub description: String,
-    pub project_type: String,
-    pub status: String,
+    pub project_type: ProjectTypeDto,
+    pub status: ProductStatusDto,
     pub product_key: Option<String>,
 }
 
+/// `key`, `project_type` y la asociación Product son inmutables. Los campos
+/// omitidos o `null` no cambian; al menos un campo efectivo es obligatorio.
 #[derive(serde::Deserialize, utoipa::ToSchema)]
 #[serde(deny_unknown_fields)]
 pub struct UpdateProjectRequest {
+    #[schema(nullable = false)]
     pub name: Option<String>,
+    #[schema(nullable = false)]
     pub description: Option<String>,
-    pub status: Option<String>,
+    #[schema(nullable = false)]
+    pub status: Option<ProductStatusDto>,
 }
 
 #[derive(serde::Deserialize, utoipa::IntoParams)]
@@ -189,14 +296,26 @@ pub struct ProjectListQuery {
     pub product_key: Option<String>,
 }
 
+fn parse_status(value: &str) -> Result<LifecycleStatus, HttpError> {
+    value
+        .parse()
+        .map_err(|_| product_error(ProductError::InvalidInput))
+}
+
+fn parse_product_type(value: &str) -> Result<ProductType, HttpError> {
+    value
+        .parse()
+        .map_err(|_| product_error(ProductError::InvalidInput))
+}
+
 fn product_response(product: Product) -> ProductResponse {
     ProductResponse {
         id: product.id.as_uuid(),
         key: product.key,
         name: product.name,
         description: product.description,
-        status: product.status.as_str().to_owned(),
-        product_type: product.product_type.as_str().to_owned(),
+        status: ProductStatusDto::from(product.status),
+        product_type: ProductTypeDto::from(product.product_type),
         created_at: product.created_at,
         updated_at: product.updated_at,
     }
@@ -208,8 +327,8 @@ fn project_response(project: Project) -> ProjectResponse {
         key: project.key,
         name: project.name,
         description: project.description,
-        project_type: project.project_type.as_str().to_owned(),
-        status: project.status.as_str().to_owned(),
+        project_type: ProjectTypeDto::from(project.project_type),
+        status: ProductStatusDto::from(project.status),
         product_id: project.product_id.map(|id| id.as_uuid()),
         product_key: project.product_key,
         created_at: project.created_at,
@@ -272,8 +391,8 @@ pub(crate) async fn create_control_product(
         key: request.key,
         name: request.name,
         description: request.description,
-        status: parse_status(&request.status)?,
-        product_type: parse_product_type(&request.product_type)?,
+        status: LifecycleStatus::from(request.status),
+        product_type: ProductType::from(request.product_type),
     };
     let created = auth_state
         .staff
@@ -318,7 +437,7 @@ pub(crate) async fn get_control_product(
     request_body(content = UpdateProductRequest),
     responses(
         (status = 200, description = "Producto actualizado", body = ProductResponse),
-        (status = 400, description = "Cambios inválidos", body = ErrorResponse),
+        (status = 400, description = "Cambios inválidos o sin cambios efectivos", body = ErrorResponse),
         (status = 401, description = "Sesión staff requerida", body = ErrorResponse),
         (status = 403, description = "Capability insuficiente u origen no permitido", body = ErrorResponse),
         (status = 404, description = "Producto no encontrado", body = ErrorResponse),
@@ -338,7 +457,7 @@ pub(crate) async fn update_control_product(
     let changes = ProductChanges {
         name: request.name,
         description: request.description,
-        status: request.status.as_deref().map(parse_status).transpose()?,
+        status: request.status.map(LifecycleStatus::from),
     };
     let updated = auth_state
         .staff
@@ -398,8 +517,8 @@ pub(crate) async fn create_control_project(
         key: request.key,
         name: request.name,
         description: request.description,
-        project_type: parse_project_type(&request.project_type)?,
-        status: parse_status(&request.status)?,
+        project_type: ProjectType::from(request.project_type),
+        status: LifecycleStatus::from(request.status),
         product_key: request.product_key,
     };
     let created = auth_state
@@ -445,7 +564,7 @@ pub(crate) async fn get_control_project(
     request_body(content = UpdateProjectRequest),
     responses(
         (status = 200, description = "Proyecto actualizado", body = ProjectResponse),
-        (status = 400, description = "Cambios inválidos", body = ErrorResponse),
+        (status = 400, description = "Cambios inválidos o sin cambios efectivos", body = ErrorResponse),
         (status = 401, description = "Sesión staff requerida", body = ErrorResponse),
         (status = 403, description = "Capability insuficiente u origen no permitido", body = ErrorResponse),
         (status = 404, description = "Proyecto no encontrado", body = ErrorResponse),
@@ -465,7 +584,7 @@ pub(crate) async fn update_control_project(
     let changes = ProjectChanges {
         name: request.name,
         description: request.description,
-        status: request.status.as_deref().map(parse_status).transpose()?,
+        status: request.status.map(LifecycleStatus::from),
     };
     let updated = auth_state
         .staff

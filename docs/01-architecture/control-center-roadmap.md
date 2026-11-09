@@ -26,9 +26,10 @@ Cada fase debe compilar, testear, exponer OpenAPI, usar migraciones propias y pa
 
 ## C2 — Product registry
 
-- Migración `0006_product_project.sql` (Product, Project, Environment, `organization_product`).
-- Endpoints `control` de lectura/gestión con RBAC.
-- OpenAPI + tests de aislamiento.
+- Migración `0006_product_registry.sql`: **Product + Project** con clave estable inmutable y relación 0..1 Project → Product.
+- Endpoints `control` de lectura/gestión con RBAC (`products.read`/`products.manage`).
+- OpenAPI + tests de RBAC, duplicados, paginación y auditoría.
+- `Environment` se difiere a C7; `organization_product` se difiere a C4/C5. El registro C2 no incluye organizaciones, billing ni entitlements.
 
 ## C3 — Control Center frontend foundation
 
@@ -43,6 +44,7 @@ Cada fase debe compilar, testear, exponer OpenAPI, usar migraciones propias y pa
 - Vista global staff con endpoints administrativos explícitos.
 - Paginación/filtros server-side, 404 neutral.
 - Sin reutilizar endpoints comerciales.
+- Incluye `organization_product` (qué organización usa qué producto) cuando exista la vista de organizaciones.
 
 ## C5 — POS control module
 
