@@ -16,9 +16,21 @@ export type ControlOrganizationDetail = components["schemas"]["ControlOrganizati
 export type ControlAccount = components["schemas"]["ControlAccountSummaryResponse"];
 export type ControlAccountPage = components["schemas"]["ControlAccountListResponse"];
 export type ControlAccountDetail = components["schemas"]["ControlAccountDetailResponse"];
+export type InstallationAdministrativeStatus = components["schemas"]["AdministrativeStatusDto"];
+export type InstallationIdentityStatus = components["schemas"]["IdentityStatusDto"];
+export type InstallationRehostStatus = components["schemas"]["RehostStatusDto"];
+export type ControlInstallation = components["schemas"]["ControlInstallationSummaryResponse"];
+export type ControlInstallationPage = components["schemas"]["ControlInstallationListResponse"];
+export type ControlInstallationDetail = components["schemas"]["ControlInstallationDetailResponse"];
+export type InstallationRehostAuthorization = components["schemas"]["InstallationRehostResponse"];
+export type RehostRequest = components["schemas"]["RehostRequest"];
 
 export class ControlApiError extends Error {
-  constructor(public readonly status: number, message: string) {
+  constructor(
+    public readonly status: number,
+    message: string,
+    public readonly code?: string,
+  ) {
     super(message);
   }
 }
@@ -37,9 +49,9 @@ async function request<T>(path: string, init: RequestInit = {}, invalidateSessio
     headers: { "Content-Type": "application/json", ...init.headers },
   });
   if (!response.ok) {
-    const body = (await response.json().catch(() => null)) as { message?: string } | null;
+    const body = (await response.json().catch(() => null)) as { code?: string; message?: string } | null;
     if (invalidateSession && response.status === 401) dispatchSessionEvent(sessionExpiredEvent);
-    throw new ControlApiError(response.status, body?.message ?? "No fue posible completar la solicitud.");
+    throw new ControlApiError(response.status, body?.message ?? "No fue posible completar la solicitud.", body?.code);
   }
   return response.status === 204 ? (undefined as T) : (response.json() as Promise<T>);
 }
@@ -80,6 +92,35 @@ export const controlClient = {
     return request<ControlAccountPage>(`/accounts?${search.toString()}`);
   },
   account: (id: string) => request<ControlAccountDetail>(`/accounts/${encodeURIComponent(id)}`),
+  installations: (filters: {
+    cursor?: string;
+    status?: InstallationAdministrativeStatus;
+    identityStatus?: InstallationIdentityStatus;
+    organizationId?: string;
+    productId?: string;
+    search?: string;
+    limit?: number;
+  }) => {
+    const search = new URLSearchParams();
+    search.set("limit", String(filters.limit ?? 50));
+    if (filters.cursor) search.set("cursor", filters.cursor);
+    if (filters.status) search.set("status", filters.status);
+    if (filters.identityStatus) search.set("identity_status", filters.identityStatus);
+    if (filters.organizationId) search.set("organization_id", filters.organizationId);
+    if (filters.productId) search.set("product_id", filters.productId);
+    if (filters.search) search.set("search", filters.search);
+    return request<ControlInstallationPage>(`/installations?${search.toString()}`);
+  },
+  installation: (id: string) => request<ControlInstallationDetail>(`/installations/${encodeURIComponent(id)}`),
+  suspendInstallation: (id: string) =>
+    request<ControlInstallationDetail>(`/installations/${encodeURIComponent(id)}/suspend`, { method: "POST" }),
+  reactivateInstallation: (id: string) =>
+    request<ControlInstallationDetail>(`/installations/${encodeURIComponent(id)}/reactivate`, { method: "POST" }),
+  authorizeInstallationRehost: (id: string, body: RehostRequest) =>
+    request<InstallationRehostAuthorization>(`/installations/${encodeURIComponent(id)}/rehost`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
 };
 
 export const controlSessionEvents = { expired: sessionExpiredEvent, restored: sessionRestoredEvent };

@@ -616,6 +616,524 @@
         ]
       }
     },
+    "/api/v1/control/installations": {
+      "get": {
+        "tags": [
+          "Control Center"
+        ],
+        "summary": "Lista instalaciones POS",
+        "operationId": "listControlInstallations",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "maximum": 100,
+              "minimum": 1
+            },
+            "example": 50
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "identity_status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "organization_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "product_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "search",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Instalaciones paginadas por alta e identificador",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ControlInstallationListResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Filtro, búsqueda o cursor inválido",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sesión staff requerida",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Capability insuficiente",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Almacenamiento no disponible",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "staffSession": []
+          }
+        ]
+      }
+    },
+    "/api/v1/control/installations/{installation_id}": {
+      "get": {
+        "tags": [
+          "Control Center"
+        ],
+        "summary": "Obtiene una instalación POS",
+        "operationId": "getControlInstallation",
+        "parameters": [
+          {
+            "name": "installation_id",
+            "in": "path",
+            "description": "UUID de la instalación",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Instalación con identidad y binding actuales",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ControlInstallationDetailResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "UUID inválido",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sesión staff requerida",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Capability insuficiente",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Instalación no encontrada",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Almacenamiento no disponible",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "staffSession": []
+          }
+        ]
+      }
+    },
+    "/api/v1/control/installations/{installation_id}/reactivate": {
+      "post": {
+        "tags": [
+          "Control Center"
+        ],
+        "summary": "Reactiva administrativamente una instalación",
+        "operationId": "reactivateControlInstallation",
+        "parameters": [
+          {
+            "name": "installation_id",
+            "in": "path",
+            "description": "UUID de la instalación",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Instalación reactivada o ya activa",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ControlInstallationDetailResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "UUID inválido",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sesión staff requerida",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Capability insuficiente u origen no permitido",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Instalación no encontrada",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Transición no permitida",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Almacenamiento no disponible",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "staffSession": []
+          }
+        ]
+      }
+    },
+    "/api/v1/control/installations/{installation_id}/rehost": {
+      "post": {
+        "tags": [
+          "Control Center"
+        ],
+        "summary": "Autoriza el rehost de una instalación",
+        "operationId": "rehostControlInstallation",
+        "parameters": [
+          {
+            "name": "installation_id",
+            "in": "path",
+            "description": "UUID de la instalación",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RehostRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Autorización de rehost vigente o ya consumida",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InstallationRehostResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "UUID o motivo inválido",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sesión staff requerida",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Capability insuficiente u origen no permitido",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Instalación no encontrada",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflicto de rehost, transición o producto",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Almacenamiento no disponible",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "staffSession": []
+          }
+        ]
+      }
+    },
+    "/api/v1/control/installations/{installation_id}/suspend": {
+      "post": {
+        "tags": [
+          "Control Center"
+        ],
+        "summary": "Suspende administrativamente una instalación",
+        "operationId": "suspendControlInstallation",
+        "parameters": [
+          {
+            "name": "installation_id",
+            "in": "path",
+            "description": "UUID de la instalación",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Instalación suspendida o ya suspendida",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ControlInstallationDetailResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "UUID inválido",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sesión staff requerida",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Capability insuficiente u origen no permitido",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Instalación no encontrada",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Transición no permitida",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Almacenamiento no disponible",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "staffSession": []
+          }
+        ]
+      }
+    },
     "/api/v1/control/organizations": {
       "get": {
         "tags": [
@@ -1561,7 +2079,7 @@
           }
         ],
         "requestBody": {
-          "description": "Identidad pública de la instalación y metadatos no secretos",
+          "description": "Identidad pública, product_key resuelto por Platform y metadatos no secretos",
           "content": {
             "application/json": {
               "schema": {
@@ -3225,6 +3743,14 @@
         },
         "additionalProperties": false
       },
+      "AdministrativeStatusDto": {
+        "type": "string",
+        "enum": [
+          "active",
+          "suspended",
+          "unregistered"
+        ]
+      },
       "ApproveEnrollmentBody": {
         "type": "object",
         "required": [
@@ -3277,6 +3803,7 @@
         "type": "object",
         "required": [
           "installation_id",
+          "product_key",
           "public_key",
           "device_label",
           "app_version",
@@ -3299,6 +3826,10 @@
           "platform": {
             "type": "string",
             "example": "windows"
+          },
+          "product_key": {
+            "type": "string",
+            "example": "pos"
           },
           "public_key": {
             "type": "string",
@@ -3455,6 +3986,139 @@
           },
           "status": {
             "$ref": "#/components/schemas/AccountStatusDto"
+          }
+        }
+      },
+      "ControlInstallationDetailResponse": {
+        "type": "object",
+        "required": [
+          "summary"
+        ],
+        "properties": {
+          "current_binding": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/InstallationBindingResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "current_identity_created_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "rehost": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/InstallationRehostResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "summary": {
+            "$ref": "#/components/schemas/ControlInstallationSummaryResponse"
+          }
+        }
+      },
+      "ControlInstallationListResponse": {
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ControlInstallationSummaryResponse"
+            }
+          },
+          "next_cursor": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "ControlInstallationSummaryResponse": {
+        "type": "object",
+        "required": [
+          "id",
+          "device_label",
+          "organization",
+          "administrative_status",
+          "identity_status",
+          "registered_at",
+          "binding_active"
+        ],
+        "properties": {
+          "administrative_status": {
+            "$ref": "#/components/schemas/AdministrativeStatusDto"
+          },
+          "binding_active": {
+            "type": "boolean"
+          },
+          "device_label": {
+            "type": "string"
+          },
+          "enrolled_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "fingerprint": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "identity_generation": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "minimum": 0
+          },
+          "identity_status": {
+            "$ref": "#/components/schemas/IdentityStatusDto"
+          },
+          "last_known_activity_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "organization": {
+            "$ref": "#/components/schemas/InstallationOrganizationResponse"
+          },
+          "product": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/InstallationProductResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "registered_at": {
+            "type": "string",
+            "format": "date-time"
           }
         }
       },
@@ -3804,6 +4468,31 @@
           }
         }
       },
+      "IdentityStatusDto": {
+        "type": "string",
+        "enum": [
+          "unenrolled",
+          "active",
+          "retired"
+        ]
+      },
+      "InstallationBindingResponse": {
+        "type": "object",
+        "required": [
+          "bound_at",
+          "approved_by_account_id"
+        ],
+        "properties": {
+          "approved_by_account_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "bound_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
       "InstallationListItemResponse": {
         "type": "object",
         "required": [
@@ -3839,6 +4528,81 @@
           },
           "status": {
             "type": "string"
+          }
+        }
+      },
+      "InstallationOrganizationResponse": {
+        "type": "object",
+        "required": [
+          "id",
+          "display_name",
+          "status"
+        ],
+        "properties": {
+          "display_name": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "status": {
+            "type": "string"
+          }
+        }
+      },
+      "InstallationProductResponse": {
+        "type": "object",
+        "required": [
+          "id",
+          "key",
+          "name"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "key": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        }
+      },
+      "InstallationRehostResponse": {
+        "type": "object",
+        "required": [
+          "id",
+          "enrollment_request_id",
+          "status",
+          "reason",
+          "created_at",
+          "expires_at"
+        ],
+        "properties": {
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "enrollment_request_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "expires_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "reason": {
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/RehostStatusDto"
           }
         }
       },
@@ -4459,6 +5223,32 @@
           }
         },
         "additionalProperties": false
+      },
+      "RehostRequest": {
+        "type": "object",
+        "required": [
+          "enrollment_request_id",
+          "reason"
+        ],
+        "properties": {
+          "enrollment_request_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "reason": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "RehostStatusDto": {
+        "type": "string",
+        "enum": [
+          "pending",
+          "consumed",
+          "expired",
+          "cancelled"
+        ]
       },
       "StaffLoginRequest": {
         "type": "object",

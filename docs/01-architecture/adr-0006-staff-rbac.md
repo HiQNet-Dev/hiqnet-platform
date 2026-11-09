@@ -28,7 +28,7 @@ El RBAC comercial (`owner/admin/member`) pertenece a organizaciones cliente y **
 products.read         products.manage
 organizations.read    organizations.manage
 accounts.read         accounts.manage
-installations.read    installations.manage
+installations.read    installations.manage    installations.rehost
 subscriptions.read    subscriptions.manage
 deployments.read      deployments.manage
 security.read         security.manage
@@ -38,6 +38,7 @@ staff.manage
 
 - Los roles son **presets** de capabilities. En C1 se persiste el rol; el modelo debe permitir añadir capabilities explícitas y overrides en fases posteriores sin migración destructiva.
 - Los **proyectos del registro** (`Project`) se gestionan con `products.read`/`products.manage`; no se introducen capabilities `projects.*` en C2. Si una fase posterior necesita delegar proyectos de forma independiente, se añadirá mediante cambio explícito de este ADR y de la matriz.
+- **`installations.rehost`** (C5) separa el reemplazo de identidad criptográfica de la operación administrativa (`installations.manage`). Sólo `super_admin` y `platform_admin` lo reciben; `operator` puede suspender/reactivar pero no reautorizar una identidad de dispositivo.
 
 ### 2.3 Reglas
 
@@ -63,6 +64,7 @@ Resumen de capabilities:
 | accounts.manage      | ✓           | ✓              | —        | —       | —                | —         |
 | installations.read   | ✓           | ✓              | ✓        | ✓       | ✓                | ✓         |
 | installations.manage | ✓           | ✓              | ✓        | —       | —                | —         |
+| installations.rehost | ✓           | ✓              | —        | —       | —                | —         |
 | subscriptions.read   | ✓           | ✓              | ✓        | ✓       | ✓                | ✓         |
 | subscriptions.manage | ✓           | ✓              | —        | —       | —                | —         |
 | deployments.read     | ✓           | ✓              | ✓        | ✓       | ✓                | ✓         |

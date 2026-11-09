@@ -4,13 +4,16 @@ import { formatDate, formatDateTime } from "../../lib/format-date";
 import { controlModules } from "../../modules/registry";
 
 describe("registry del Control Center", () => {
-  it("registra Organizations y Accounts con sus capabilities independientes", () => {
+  it("registra Organizations, Accounts e Installations con sus capabilities independientes", () => {
     const organizations = controlModules.find((module) => module.id === "organizations");
     const accounts = controlModules.find((module) => module.id === "accounts");
+    const installations = controlModules.find((module) => module.id === "installations");
     expect(organizations?.requiredCapability).toBe("organizations.read");
     expect(accounts?.requiredCapability).toBe("accounts.read");
+    expect(installations?.requiredCapability).toBe("installations.read");
     expect(organizations?.route).toBe("/control/organizations");
     expect(accounts?.route).toBe("/control/accounts");
+    expect(installations?.route).toBe("/control/installations");
   });
 });
 
@@ -46,5 +49,22 @@ describe("filtros del directorio", () => {
     expect(next.get("search")).toBe("pos");
     expect(next.get("cursor")).toBe("next-cursor");
     expect(withDirectoryCursor(next, null).get("cursor")).toBeNull();
+  });
+
+  it("los filtros de installations usan los nombres del contrato y resetean el cursor", () => {
+    const initial = new URLSearchParams("status=active&cursor=stale&search=pos");
+    const next = applyDirectoryFilter(initial, {
+      identityStatus: "unenrolled",
+      organizationId: "org-1",
+      productId: "product-1",
+    });
+    expect(next.get("identity_status")).toBe("unenrolled");
+    expect(next.get("organization_id")).toBe("org-1");
+    expect(next.get("product_id")).toBe("product-1");
+    expect(next.get("status")).toBe("active");
+    expect(next.get("cursor")).toBeNull();
+    const cleared = applyDirectoryFilter(next, { identityStatus: "" });
+    expect(cleared.get("identity_status")).toBeNull();
+    expect(cleared.get("cursor")).toBeNull();
   });
 });

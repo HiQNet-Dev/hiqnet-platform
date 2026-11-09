@@ -8,6 +8,7 @@ pub mod commercial;
 pub mod control;
 pub mod enrollment;
 pub mod error;
+pub mod installation_control;
 pub mod ports;
 pub mod product;
 pub mod security;

@@ -2,6 +2,8 @@ import { Navigate, Route, Routes } from "react-router-dom";
 import { useSession } from "../auth/session";
 import { ErrorState, LoadingState } from "../components/states";
 import { AccountDetailPage, AccountsPage } from "../features/accounts/accounts-page";
+import { InstallationDetailPage } from "../features/installations/installation-detail-page";
+import { InstallationsPage } from "../features/installations/installations-page";
 import { OrganizationDetailPage, OrganizationsPage } from "../features/organizations/organizations-page";
 import { ProductDetailPage, ProductsPage } from "../features/products/products-pages";
 import { AppShell } from "../layouts/app-shell";
@@ -33,6 +35,8 @@ export function AppRouter() {
         <Route path="organizations/:organizationId" element={<OrganizationDetailPage />} />
         <Route path="accounts" element={<AccountsPage />} />
         <Route path="accounts/:accountId" element={<AccountDetailPage />} />
+        <Route path="installations" element={<InstallationsPage />} />
+        <Route path="installations/:installationId" element={<InstallationDetailPage />} />
         <Route path="forbidden" element={<AccessDenied />} />
       </Route>
       <Route path="*" element={<Navigate to="/control" replace />} />

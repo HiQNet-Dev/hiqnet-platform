@@ -13,6 +13,8 @@ use sqlx::PgPool;
 use time::OffsetDateTime;
 use uuid::Uuid;
 
+const TEST_PRODUCT_KEY: &str = "enrollment-fixture-product";
+
 fn test_url() -> String {
     let url = std::env::var("TEST_DATABASE_URL").expect("base aislada requerida");
     assert!(
@@ -55,6 +57,30 @@ async fn fixture(pool: &PgPool) -> (Uuid, Uuid, CommercialAccountId) {
     .execute(pool)
     .await
     .unwrap();
+    sqlx::query(
+        "INSERT INTO product (id, key, name, description, status, product_type, created_at, updated_at) \
+         VALUES ($1, $2, 'Fixture product', '', 'active', 'saas', now(), now()) \
+         ON CONFLICT (key) DO NOTHING",
+    )
+    .bind(Uuid::new_v4())
+    .bind(TEST_PRODUCT_KEY)
+    .execute(pool)
+    .await
+    .unwrap();
+    let product_id: Uuid = sqlx::query_scalar("SELECT id FROM product WHERE key = $1")
+        .bind(TEST_PRODUCT_KEY)
+        .fetch_one(pool)
+        .await
+        .unwrap();
+    sqlx::query(
+        "INSERT INTO organization_product (organization_id, product_id, status, activated_at) \
+         VALUES ($1, $2, 'active', now()) ON CONFLICT DO NOTHING",
+    )
+    .bind(organization_id)
+    .bind(product_id)
+    .execute(pool)
+    .await
+    .unwrap();
     (
         organization_id,
         account_id,
@@ -82,6 +108,7 @@ async fn enrolamiento_completo_persiste_solo_hashes_y_permite_listar() {
         .begin_enrollment(
             BeginEnrollmentRequest {
                 installation_id,
+                product_key: TEST_PRODUCT_KEY.into(),
                 public_key: public_key.clone(),
                 device_label: "Caja fixture".into(),
                 app_version: "0.1.0".into(),
@@ -208,6 +235,7 @@ async fn idempotencia_rbac_firma_duplicate_key_y_aislamiento() {
     let key = format!("idem-{installation}");
     let request = BeginEnrollmentRequest {
         installation_id: installation,
+        product_key: TEST_PRODUCT_KEY.into(),
         public_key: public_key.clone(),
         device_label: "Caja idem".into(),
         app_version: "0.1.0".into(),
@@ -226,6 +254,7 @@ async fn idempotencia_rbac_firma_duplicate_key_y_aislamiento() {
     ));
     let different = BeginEnrollmentRequest {
         installation_id: InstallationId::new(),
+        product_key: TEST_PRODUCT_KEY.into(),
         public_key: public_key.clone(),
         device_label: "Otra caja".into(),
         app_version: "0.1.0".into(),
@@ -362,6 +391,7 @@ async fn idempotencia_rbac_firma_duplicate_key_y_aislamiento() {
         .begin_enrollment(
             BeginEnrollmentRequest {
                 installation_id: second,
+                product_key: TEST_PRODUCT_KEY.into(),
                 public_key: public_key.clone(),
                 device_label: "Caja clonada".into(),
                 app_version: "0.1.0".into(),
@@ -462,6 +492,7 @@ async fn deshabilitacion_de_cuenta_confirmada_antes_del_proof_impide_binding() {
         .begin_enrollment(
             BeginEnrollmentRequest {
                 installation_id: installation,
+                product_key: TEST_PRODUCT_KEY.into(),
                 public_key: public_key.clone(),
                 device_label: "Caja cuenta deshabilitada".into(),
                 app_version: "0.1.0".into(),
@@ -581,6 +612,7 @@ async fn challenge_expirado_no_crea_binding() {
         .begin_enrollment(
             BeginEnrollmentRequest {
                 installation_id: installation,
+                product_key: TEST_PRODUCT_KEY.into(),
                 public_key: public_key.clone(),
                 device_label: "Caja expirada".into(),
                 app_version: "0.1.0".into(),
@@ -665,6 +697,7 @@ async fn approved_proof_fixture(
         .begin_enrollment(
             BeginEnrollmentRequest {
                 installation_id: installation,
+                product_key: TEST_PRODUCT_KEY.into(),
                 public_key: public_key.clone(),
                 device_label: label.into(),
                 app_version: "0.1.0".into(),

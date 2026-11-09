@@ -174,6 +174,91 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/control/installations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Lista instalaciones POS */
+        get: operations["listControlInstallations"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/control/installations/{installation_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Obtiene una instalación POS */
+        get: operations["getControlInstallation"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/control/installations/{installation_id}/reactivate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Reactiva administrativamente una instalación */
+        post: operations["reactivateControlInstallation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/control/installations/{installation_id}/rehost": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Autoriza el rehost de una instalación */
+        post: operations["rehostControlInstallation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/control/installations/{installation_id}/suspend": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Suspende administrativamente una instalación */
+        post: operations["suspendControlInstallation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/control/organizations": {
         parameters: {
             query?: never;
@@ -554,6 +639,8 @@ export interface components {
             /** @example member */
             role: string;
         };
+        /** @enum {string} */
+        AdministrativeStatusDto: "active" | "suspended" | "unregistered";
         ApproveEnrollmentBody: {
             /**
              * Format: uuid
@@ -585,6 +672,8 @@ export interface components {
             installation_id: string;
             /** @example windows */
             platform: string;
+            /** @example pos */
+            product_key: string;
             /** @example ed25519:v1:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA */
             public_key: string;
         };
@@ -631,6 +720,36 @@ export interface components {
             /** Format: uuid */
             id: string;
             status: components["schemas"]["AccountStatusDto"];
+        };
+        ControlInstallationDetailResponse: {
+            current_binding?: components["schemas"]["InstallationBindingResponse"] | null;
+            /** Format: date-time */
+            current_identity_created_at?: string | null;
+            rehost?: components["schemas"]["InstallationRehostResponse"] | null;
+            summary: components["schemas"]["ControlInstallationSummaryResponse"];
+        };
+        ControlInstallationListResponse: {
+            items: components["schemas"]["ControlInstallationSummaryResponse"][];
+            next_cursor?: string | null;
+        };
+        ControlInstallationSummaryResponse: {
+            administrative_status: components["schemas"]["AdministrativeStatusDto"];
+            binding_active: boolean;
+            device_label: string;
+            /** Format: date-time */
+            enrolled_at?: string | null;
+            fingerprint?: string | null;
+            /** Format: uuid */
+            id: string;
+            /** Format: int32 */
+            identity_generation?: number | null;
+            identity_status: components["schemas"]["IdentityStatusDto"];
+            /** Format: date-time */
+            last_known_activity_at?: string | null;
+            organization: components["schemas"]["InstallationOrganizationResponse"];
+            product?: components["schemas"]["InstallationProductResponse"] | null;
+            /** Format: date-time */
+            registered_at: string;
         };
         ControlMembershipResponse: {
             /** Format: uuid */
@@ -739,6 +858,14 @@ export interface components {
             /** @example 0.1.0 */
             version: string;
         };
+        /** @enum {string} */
+        IdentityStatusDto: "unenrolled" | "active" | "retired";
+        InstallationBindingResponse: {
+            /** Format: uuid */
+            approved_by_account_id: string;
+            /** Format: date-time */
+            bound_at: string;
+        };
         InstallationListItemResponse: {
             /** Format: date-time */
             bound_at?: string | null;
@@ -749,6 +876,30 @@ export interface components {
             /** Format: date-time */
             last_seen_at?: string | null;
             status: string;
+        };
+        InstallationOrganizationResponse: {
+            display_name: string;
+            /** Format: uuid */
+            id: string;
+            status: string;
+        };
+        InstallationProductResponse: {
+            /** Format: uuid */
+            id: string;
+            key: string;
+            name: string;
+        };
+        InstallationRehostResponse: {
+            /** Format: date-time */
+            created_at: string;
+            /** Format: uuid */
+            enrollment_request_id: string;
+            /** Format: date-time */
+            expires_at: string;
+            /** Format: uuid */
+            id: string;
+            reason: string;
+            status: components["schemas"]["RehostStatusDto"];
         };
         InstallationResponse: {
             /** @example Caja de pruebas */
@@ -972,6 +1123,13 @@ export interface components {
              */
             organization_id: string;
         };
+        RehostRequest: {
+            /** Format: uuid */
+            enrollment_request_id: string;
+            reason: string;
+        };
+        /** @enum {string} */
+        RehostStatusDto: "pending" | "consumed" | "expired" | "cancelled";
         StaffLoginRequest: {
             /** @example staff@hiqnet.test */
             email: string;
@@ -1496,6 +1654,374 @@ export interface operations {
             };
             /** @description Sesión staff inválida, expirada o revocada */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Almacenamiento no disponible */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    listControlInstallations: {
+        parameters: {
+            query?: {
+                /** @example 50 */
+                limit?: number;
+                cursor?: string;
+                status?: string;
+                identity_status?: string;
+                organization_id?: string;
+                product_id?: string;
+                search?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Instalaciones paginadas por alta e identificador */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ControlInstallationListResponse"];
+                };
+            };
+            /** @description Filtro, búsqueda o cursor inválido */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Sesión staff requerida */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Capability insuficiente */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Almacenamiento no disponible */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    getControlInstallation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description UUID de la instalación */
+                installation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Instalación con identidad y binding actuales */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ControlInstallationDetailResponse"];
+                };
+            };
+            /** @description UUID inválido */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Sesión staff requerida */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Capability insuficiente */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Instalación no encontrada */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Almacenamiento no disponible */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    reactivateControlInstallation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description UUID de la instalación */
+                installation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Instalación reactivada o ya activa */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ControlInstallationDetailResponse"];
+                };
+            };
+            /** @description UUID inválido */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Sesión staff requerida */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Capability insuficiente u origen no permitido */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Instalación no encontrada */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Transición no permitida */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Almacenamiento no disponible */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    rehostControlInstallation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description UUID de la instalación */
+                installation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RehostRequest"];
+            };
+        };
+        responses: {
+            /** @description Autorización de rehost vigente o ya consumida */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InstallationRehostResponse"];
+                };
+            };
+            /** @description UUID o motivo inválido */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Sesión staff requerida */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Capability insuficiente u origen no permitido */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Instalación no encontrada */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Conflicto de rehost, transición o producto */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Almacenamiento no disponible */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    suspendControlInstallation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description UUID de la instalación */
+                installation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Instalación suspendida o ya suspendida */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ControlInstallationDetailResponse"];
+                };
+            };
+            /** @description UUID inválido */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Sesión staff requerida */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Capability insuficiente u origen no permitido */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Instalación no encontrada */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Transición no permitida */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -2195,7 +2721,7 @@ export interface operations {
             path?: never;
             cookie?: never;
         };
-        /** @description Identidad pública de la instalación y metadatos no secretos */
+        /** @description Identidad pública, product_key resuelto por Platform y metadatos no secretos */
         requestBody: {
             content: {
                 "application/json": components["schemas"]["BeginEnrollmentBody"];

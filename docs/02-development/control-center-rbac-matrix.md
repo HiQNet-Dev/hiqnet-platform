@@ -11,8 +11,8 @@ Esta matriz define, por rol, qué puede **leer**, qué puede **modificar** y qu�
 | Rol                | Puede leer                         | Puede modificar                                                                                 | Nunca puede                                                                                     |
 | ------------------ | ---------------------------------- | ----------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
 | `super_admin`      | Todo                               | Productos, organizaciones, cuentas, instalaciones, suscripciones, despliegues, seguridad, staff | Saltarse autenticación, auditoría o controles de sesión; acciones destructivas sin confirmación |
-| `platform_admin`   | Todo                               | Productos, organizaciones, cuentas, instalaciones, suscripciones, despliegues                   | Gestionar staff; mutar configuración de seguridad                                               |
-| `operator`         | Todo                               | Instalaciones, despliegues                                                                      | Gestionar productos, organizaciones, cuentas, staff o seguridad                                 |
+| `platform_admin`   | Todo                               | Productos, organizaciones, cuentas, instalaciones (incluido rehost), suscripciones, despliegues | Gestionar staff; mutar configuración de seguridad                                               |
+| `operator`         | Todo                               | Instalaciones (suspender/reactivar), despliegues                                                | Reautorizar identidad de dispositivo (`installations.rehost`); gestionar productos, organizaciones, cuentas, staff o seguridad |
 | `support`          | Todo (sin secretos)                | Nada destructivo (acciones de soporte no destructivas, si se aprueban)                          | Mutar cuentas/organizaciones/productos, gestionar staff o seguridad                             |
 | `security_auditor` | Todo, incluida auditoría y eventos | Configuración de seguridad y triage de eventos                                                  | Mutar datos de negocio (organizaciones, cuentas, instalaciones)                                 |
 | `read_only`        | Todo (sin secretos)                | Nada                                                                                            | Cualquier mutación                                                                              |
@@ -29,6 +29,7 @@ Esta matriz define, por rol, qué puede **leer**, qué puede **modificar** y qu�
 | accounts.manage      | ✓           | ✓              | —        | —       | —                | —         |
 | installations.read   | ✓           | ✓              | ✓        | ✓       | ✓                | ✓         |
 | installations.manage | ✓           | ✓              | ✓        | —       | —                | —         |
+| installations.rehost | ✓           | ✓              | —        | —       | —                | —         |
 | subscriptions.read   | ✓           | ✓              | ✓        | ✓       | ✓                | ✓         |
 | subscriptions.manage | ✓           | ✓              | —        | —       | —                | —         |
 | deployments.read     | ✓           | ✓              | ✓        | ✓       | ✓                | ✓         |
@@ -48,6 +49,7 @@ Leyenda: `✓` permitido · `—` denegado.
 - **Step-up** (futuro) para acciones críticas; en C1, confirmación tipada.
 - **Sin bypasses:** `super_admin` se autentica, se audita y respeta sesión/Origin.
 - **Least privilege:** ante duda, denegar y revisar.
+- **`installations.rehost` (C5):** capability independiente de `installations.manage`; reemplaza la identidad criptográfica de una instalación. Exige además un `enrollment_request_id` aprobado por el owner comercial; el staff no sustituye esa autoridad.
 
 ## 4. Decisiones ratificadas
 
