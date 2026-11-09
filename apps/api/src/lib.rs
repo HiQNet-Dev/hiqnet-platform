@@ -4581,6 +4581,47 @@ mod tests {
         assert_eq!(audit_before, audit_after, "las lecturas no auditan");
     }
 
+    #[tokio::test]
+    async fn control_directory_rejects_invalid_query_bounds() {
+        let pool = open(&isolated_test_url()).await.unwrap();
+        let email = format!("staff-bounds-{}@hiqnet.test", Uuid::new_v4());
+        let password = "contraseña-staff-larga";
+        seed_staff(
+            &pool,
+            &email,
+            password,
+            platform_core::staff::StaffRole::ReadOnly,
+        )
+        .await;
+        let router = build_router(state(pool.clone()), false, test_auth_state(pool.clone()));
+        let (status, headers, _) = send_auth(
+            &router,
+            "/api/v1/control/auth/login",
+            None,
+            Some("http://127.0.0.1:8080"),
+            Some(json!({"email": email, "password": password})),
+        )
+        .await;
+        assert_eq!(status, StatusCode::NO_CONTENT);
+        let cookie = staff_session_from(&headers);
+
+        for path in ["/api/v1/control/organizations", "/api/v1/control/accounts"] {
+            for query in ["limit=0", "limit=101", "limit=no-es-numero"] {
+                let (status, _, body) = send_method(
+                    &router,
+                    Method::GET,
+                    &format!("{path}?{query}"),
+                    Some(&cookie),
+                    None,
+                    None,
+                )
+                .await;
+                assert_eq!(status, StatusCode::BAD_REQUEST, "{path}?{query}");
+                assert_eq!(body["code"], "validation_error", "{path}?{query}");
+            }
+        }
+    }
+
     #[test]
     fn control_directory_openapi_exposes_closed_enums() {
         let document = serde_json::to_value(openapi_document()).unwrap();

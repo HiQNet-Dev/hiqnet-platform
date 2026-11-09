@@ -5,7 +5,10 @@
 
 use axum::{
     Extension, Json,
-    extract::{Path, Query, rejection::PathRejection},
+    extract::{
+        Path, Query,
+        rejection::{PathRejection, QueryRejection},
+    },
     http::StatusCode,
 };
 use platform_application::control::{
@@ -44,6 +47,14 @@ fn control_error(error: ControlError) -> HttpError {
             "no fue posible completar la operación",
         ),
     }
+}
+
+fn query_error(_rejection: QueryRejection) -> HttpError {
+    auth::error(
+        StatusCode::BAD_REQUEST,
+        "validation_error",
+        "solicitud inválida",
+    )
 }
 
 fn path_error(_rejection: PathRejection) -> HttpError {
@@ -377,8 +388,9 @@ fn account_detail_response(value: ControlAccountDetail) -> ControlAccountDetailR
 pub(crate) async fn list_control_organizations(
     Extension(auth_state): Extension<AuthState>,
     context: StaffContext,
-    Query(query): Query<ControlDirectoryQuery>,
+    query: Result<Query<ControlDirectoryQuery>, QueryRejection>,
 ) -> Result<Json<ControlOrganizationListResponse>, HttpError> {
+    let Query(query) = query.map_err(query_error)?;
     let actor = actor(&auth_state, &context).await?;
     let status = query
         .status
@@ -435,8 +447,9 @@ pub(crate) async fn get_control_organization(
 pub(crate) async fn list_control_accounts(
     Extension(auth_state): Extension<AuthState>,
     context: StaffContext,
-    Query(query): Query<ControlDirectoryQuery>,
+    query: Result<Query<ControlDirectoryQuery>, QueryRejection>,
 ) -> Result<Json<ControlAccountListResponse>, HttpError> {
+    let Query(query) = query.map_err(query_error)?;
     let actor = actor(&auth_state, &context).await?;
     let status = query
         .status

@@ -316,7 +316,10 @@ fn page_params(
     limit: Option<u32>,
     cursor: Option<String>,
 ) -> ControlResult<(u32, Option<ControlCursor>)> {
-    let limit = limit.unwrap_or(DEFAULT_PAGE_LIMIT).clamp(1, MAX_PAGE_LIMIT);
+    let limit = limit.unwrap_or(DEFAULT_PAGE_LIMIT);
+    if !(1..=MAX_PAGE_LIMIT).contains(&limit) {
+        return Err(ControlError::InvalidInput);
+    }
     let after = cursor
         .map(|value| ControlCursor::decode(&value))
         .transpose()?;
@@ -416,6 +419,17 @@ mod tests {
             ControlCursor::decode(&"x".repeat(MAX_CURSOR_LEN + 1)),
             Err(ControlError::InvalidInput)
         );
+    }
+
+    #[test]
+    fn limite_de_pagina_es_estricto() {
+        assert_eq!(page_params(Some(0), None), Err(ControlError::InvalidInput));
+        assert_eq!(
+            page_params(Some(MAX_PAGE_LIMIT + 1), None),
+            Err(ControlError::InvalidInput)
+        );
+        assert_eq!(page_params(Some(1), None).unwrap().0, 1);
+        assert_eq!(page_params(None, None).unwrap().0, DEFAULT_PAGE_LIMIT);
     }
 
     #[test]
