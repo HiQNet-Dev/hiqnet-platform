@@ -9,9 +9,10 @@ use axum::{
     http::{HeaderMap, StatusCode, header, request::Parts},
     response::IntoResponse,
 };
+use platform_application::product::ProductService;
 use platform_application::staff::StaffAuthService;
 use platform_core::staff::{AuthenticatedStaffSession, StaffError};
-use platform_storage_postgres::PgStaffRepository;
+use platform_storage_postgres::{PgProductRepository, PgStaffRepository};
 use std::sync::Arc;
 
 use crate::auth::{self, AuthState, LoginLimiter};
@@ -22,6 +23,7 @@ pub const STAFF_SESSION_COOKIE: &str = "hiqnet_staff_session";
 #[derive(Clone)]
 pub struct StaffState {
     pub service: Arc<StaffAuthService<PgStaffRepository>>,
+    pub product: Arc<ProductService<PgProductRepository>>,
     pub limiter: Arc<LoginLimiter>,
     pub session_ttl: time::Duration,
     pub argon2_slots: Arc<tokio::sync::Semaphore>,
@@ -110,7 +112,7 @@ fn clear_cookie(state: &AuthState) -> String {
     cookie
 }
 
-fn staff_error(error: StaffError) -> (StatusCode, Json<ErrorResponse>) {
+pub(crate) fn staff_error(error: StaffError) -> (StatusCode, Json<ErrorResponse>) {
     match error {
         StaffError::InvalidCredentials => auth::error(
             StatusCode::UNAUTHORIZED,

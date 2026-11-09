@@ -70,6 +70,11 @@ id_type!(
     StaffAccountId,
     "Identificador de una cuenta de personal interno HiQNet; no es una cuenta comercial."
 );
+id_type!(ProductId, "Identificador de un producto de HiQNet.");
+id_type!(
+    ProjectId,
+    "Identificador de un proyecto operativo o técnico de HiQNet."
+);
 
 #[cfg(test)]
 mod tests {
