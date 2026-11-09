@@ -285,6 +285,146 @@
         ]
       }
     },
+    "/api/v1/control/auth/login": {
+      "post": {
+        "tags": [
+          "Control Center"
+        ],
+        "summary": "Inicia una sesión staff con credenciales verificadas.",
+        "operationId": "staffLogin",
+        "requestBody": {
+          "description": "Credenciales de personal interno; la contraseña nunca se registra",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StaffLoginRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "Sesión staff creada; cookie HttpOnly hiqnet_staff_session"
+          },
+          "401": {
+            "description": "Credenciales inválidas, cuenta deshabilitada o bloqueada",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Origen no permitido",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Demasiados intentos",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Almacenamiento no disponible o verificación saturada",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/control/auth/logout": {
+      "post": {
+        "tags": [
+          "Control Center"
+        ],
+        "summary": "Cierra la sesión staff y borra la cookie. Idempotente.",
+        "operationId": "staffLogout",
+        "responses": {
+          "204": {
+            "description": "Sesión staff revocada y cookie eliminada"
+          },
+          "403": {
+            "description": "Origen no permitido",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "staffSession": []
+          }
+        ]
+      }
+    },
+    "/api/v1/control/auth/me": {
+      "get": {
+        "tags": [
+          "Control Center"
+        ],
+        "summary": "Identidad staff derivada exclusivamente de la sesión verificada.",
+        "operationId": "staffMe",
+        "responses": {
+          "200": {
+            "description": "Identidad staff autenticada con sus capabilities",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StaffMeResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sesión staff inválida, expirada o revocada",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Almacenamiento no disponible",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "staffSession": []
+          }
+        ]
+      }
+    },
     "/api/v1/enrollment-requests": {
       "post": {
         "tags": [
@@ -2654,6 +2794,54 @@
           }
         },
         "additionalProperties": false
+      },
+      "StaffLoginRequest": {
+        "type": "object",
+        "required": [
+          "email",
+          "password"
+        ],
+        "properties": {
+          "email": {
+            "type": "string",
+            "example": "staff@hiqnet.test"
+          },
+          "password": {
+            "type": "string",
+            "example": "contraseña-staff-sintética"
+          }
+        }
+      },
+      "StaffMeResponse": {
+        "type": "object",
+        "required": [
+          "account_id",
+          "email",
+          "display_name",
+          "role",
+          "capabilities"
+        ],
+        "properties": {
+          "account_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "capabilities": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "display_name": {
+            "type": "string"
+          },
+          "email": {
+            "type": "string"
+          },
+          "role": {
+            "type": "string"
+          }
+        }
       }
     },
     "securitySchemes": {
@@ -2667,6 +2855,12 @@
         "type": "http",
         "scheme": "bearer",
         "description": "Token administrativo temporal para pruebas DEV; no es una sesión de usuario."
+      },
+      "staffSession": {
+        "type": "apiKey",
+        "in": "cookie",
+        "name": "hiqnet_staff_session",
+        "description": "Cookie de sesión de personal interno emitida por /api/v1/control/auth/login."
       }
     }
   }

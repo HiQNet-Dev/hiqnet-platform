@@ -15,6 +15,7 @@ use axum::{
 mod auth;
 mod contract;
 mod enrollment;
+mod staff;
 use auth::{AuthContext, AuthState};
 use contract::{
     ErrorResponse, HealthResponse, InstallationResponse, IssueLicenseBody, IssuedLicenseResponse,
@@ -154,6 +155,9 @@ fn api_routes() -> (Router<AppState>, OpenApiDocument) {
         .routes(routes!(enrollment::approve_enrollment))
         .routes(routes!(enrollment::prove_enrollment))
         .routes(routes!(enrollment::list_installations))
+        .routes(routes!(staff::staff_login))
+        .routes(routes!(staff::staff_logout))
+        .routes(routes!(staff::staff_me))
         .split_for_parts();
     document.info = Info::new("HiQNet Platform API", env!("CARGO_PKG_VERSION"));
     document.info.description = Some("Plano de control técnico con identidad comercial y sesiones; sin facturación, suscripciones ni sincronización productivas. El token administrativo es temporal y exclusivo de desarrollo.".into());
@@ -179,6 +183,16 @@ fn api_routes() -> (Router<AppState>, OpenApiDocument) {
             SecurityScheme::ApiKey(ApiKey::Cookie(ApiKeyValue::with_description(
                 "hiqnet_session",
                 "Cookie de sesión comercial HttpOnly emitida por /api/v1/auth/login.",
+            ))),
+        );
+    document
+        .components
+        .get_or_insert_with(Default::default)
+        .add_security_scheme(
+            "staffSession",
+            SecurityScheme::ApiKey(ApiKey::Cookie(ApiKeyValue::with_description(
+                "hiqnet_staff_session",
+                "Cookie de sesión de personal interno emitida por /api/v1/control/auth/login.",
             ))),
         );
     (router, document)
@@ -1277,7 +1291,7 @@ pub async fn run() -> anyhow::Result<()> {
         )),
         admin_token,
         licensing_enabled,
-        db_pool: pool,
+        db_pool: pool.clone(),
     };
     let auth_state = AuthState {
         service: auth_service,
@@ -1290,6 +1304,23 @@ pub async fn run() -> anyhow::Result<()> {
             std::time::Duration::from_secs(60),
         )),
         argon2_slots: Arc::new(tokio::sync::Semaphore::new(auth_concurrency)),
+        staff: staff::StaffState {
+            service: Arc::new(platform_application::staff::StaffAuthService::new(
+                platform_storage_postgres::PgStaffRepository::new(pool.clone()),
+            )),
+            limiter: Arc::new(auth::LoginLimiter::new(
+                10,
+                std::time::Duration::from_secs(60),
+            )),
+            session_ttl: time::Duration::hours(
+                std::env::var("HIQNET_PLATFORM_STAFF_SESSION_TTL_HOURS")
+                    .ok()
+                    .and_then(|value| value.parse::<i64>().ok())
+                    .unwrap_or(8)
+                    .clamp(1, 24),
+            ),
+            argon2_slots: Arc::new(tokio::sync::Semaphore::new(auth_concurrency)),
+        },
     };
 
     // La documentación sólo se expone cuando el entorno la habilita explícitamente.
@@ -1375,7 +1406,7 @@ mod tests {
     fn test_auth_state(pool: PgPool) -> AuthState {
         AuthState {
             service: Arc::new(platform_application::AuthService::new(
-                platform_storage_postgres::PgAuthRepository::new(pool),
+                platform_storage_postgres::PgAuthRepository::new(pool.clone()),
             )),
             cookie_secure: false,
             allowed_origin: Some("http://127.0.0.1:8080".into()),
@@ -1386,6 +1417,17 @@ mod tests {
                 std::time::Duration::from_secs(60),
             )),
             argon2_slots: Arc::new(tokio::sync::Semaphore::new(4)),
+            staff: staff::StaffState {
+                service: Arc::new(platform_application::staff::StaffAuthService::new(
+                    platform_storage_postgres::PgStaffRepository::new(pool),
+                )),
+                limiter: Arc::new(auth::LoginLimiter::new(
+                    10,
+                    std::time::Duration::from_secs(60),
+                )),
+                session_ttl: time::Duration::hours(1),
+                argon2_slots: Arc::new(tokio::sync::Semaphore::new(4)),
+            },
         }
     }
 
@@ -1517,6 +1559,9 @@ mod tests {
             ("/api/v1/enrollment-requests/{user_code}/approve", "post"),
             ("/api/v1/enrollment-requests/{device_code}/proof", "post"),
             ("/api/v1/organizations/{id}/installations", "get"),
+            ("/api/v1/control/auth/login", "post"),
+            ("/api/v1/control/auth/logout", "post"),
+            ("/api/v1/control/auth/me", "get"),
         ];
         let actual: Vec<(&str, &str)> = current["paths"]
             .as_object()
@@ -1543,6 +1588,13 @@ mod tests {
             );
             if path.starts_with("/api/v1/installations") {
                 assert_eq!(operation["security"], json!([{"devAdminToken": []}]));
+            } else if path == "/api/v1/control/auth/login" {
+                assert!(operation.get("security").is_none());
+            } else if matches!(
+                path,
+                "/api/v1/control/auth/logout" | "/api/v1/control/auth/me"
+            ) {
+                assert_eq!(operation["security"], json!([{"staffSession": []}]));
             } else if path == "/api/v1/auth/login"
                 || path == "/api/v1/enrollment-requests"
                 || path.ends_with("/proof")
@@ -3653,5 +3705,177 @@ mod tests {
         )
         .await;
         assert_eq!(status, StatusCode::NOT_FOUND);
+    }
+
+    async fn seed_staff(
+        pool: &PgPool,
+        email: &str,
+        password: &str,
+        role: platform_core::staff::StaffRole,
+    ) {
+        let now = time::OffsetDateTime::now_utc();
+        let hash = platform_application::security::hash_password(password.to_owned())
+            .await
+            .unwrap();
+        platform_storage_postgres::PgStaffRepository::new(pool.clone())
+            .create_staff(email, "Staff API", role, &hash, now)
+            .await
+            .unwrap();
+    }
+
+    fn staff_session_from(headers: &HeaderMap) -> String {
+        let raw = headers.get(header::SET_COOKIE).unwrap().to_str().unwrap();
+        assert!(raw.contains("HttpOnly"));
+        assert!(raw.contains("SameSite=Strict"));
+        assert!(raw.contains("Path=/api/v1/control"));
+        assert!(raw.starts_with("hiqnet_staff_session="));
+        raw.split(';').next().unwrap().to_owned()
+    }
+
+    #[tokio::test]
+    async fn staff_auth_is_separate_and_revocable() {
+        let pool = open(&isolated_test_url()).await.unwrap();
+        let email = format!("staff-{}@hiqnet.test", Uuid::new_v4());
+        let password = "contraseña-staff-larga";
+        seed_staff(
+            &pool,
+            &email,
+            password,
+            platform_core::staff::StaffRole::SuperAdmin,
+        )
+        .await;
+        let router = build_router(state(pool.clone()), false, test_auth_state(pool.clone()));
+
+        // Origen ajeno rechazado antes de tocar credenciales.
+        let (status, headers, _) = send_auth(
+            &router,
+            "/api/v1/control/auth/login",
+            None,
+            Some("https://evil.example"),
+            Some(json!({"email": email, "password": password})),
+        )
+        .await;
+        assert_eq!(status, StatusCode::FORBIDDEN);
+        assert!(headers.get(header::SET_COOKIE).is_none());
+
+        // Login staff correcto: cookie propia, SameSite=Strict, Path del Control Center.
+        let (status, headers, _) = send_auth(
+            &router,
+            "/api/v1/control/auth/login",
+            None,
+            Some("http://127.0.0.1:8080"),
+            Some(json!({"email": email, "password": password})),
+        )
+        .await;
+        assert_eq!(status, StatusCode::NO_CONTENT);
+        let staff_cookie = staff_session_from(&headers);
+
+        // /me deriva identidad y capabilities de la sesión verificada.
+        let (status, _, body) = send_method(
+            &router,
+            Method::GET,
+            "/api/v1/control/auth/me",
+            Some(&staff_cookie),
+            None,
+            None,
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(body["role"], "super_admin");
+        assert!(
+            body["capabilities"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|capability| capability.as_str() == Some("staff.manage"))
+        );
+
+        // El token DEV no concede acceso staff.
+        let mut request = Request::builder()
+            .method(Method::GET)
+            .uri("/api/v1/control/auth/me")
+            .header(header::AUTHORIZATION, "Bearer token-sintetico-p01")
+            .body(Body::empty())
+            .unwrap();
+        request
+            .extensions_mut()
+            .insert(axum::extract::ConnectInfo(std::net::SocketAddr::from((
+                [127, 0, 0, 1],
+                40000,
+            ))));
+        let response = router.clone().oneshot(request).await.unwrap();
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+
+        // Una cookie comercial no accede al Control Center.
+        let commercial_email = format!("api-{}@example.test", Uuid::new_v4());
+        seed_credential(&pool, &commercial_email, "contraseña-api-larga").await;
+        let (status, commercial_headers, _) = send_auth(
+            &router,
+            "/api/v1/auth/login",
+            None,
+            Some("http://127.0.0.1:8080"),
+            Some(json!({"email": commercial_email, "password": "contraseña-api-larga"})),
+        )
+        .await;
+        assert_eq!(status, StatusCode::NO_CONTENT);
+        let commercial_cookie = session_from(&commercial_headers);
+        let (status, _, _) = send_method(
+            &router,
+            Method::GET,
+            "/api/v1/control/auth/me",
+            Some(&commercial_cookie),
+            None,
+            None,
+        )
+        .await;
+        assert_eq!(status, StatusCode::UNAUTHORIZED);
+
+        // Logout revoca la sesión staff.
+        let (status, _, _) = send_auth(
+            &router,
+            "/api/v1/control/auth/logout",
+            Some(&staff_cookie),
+            Some("http://127.0.0.1:8080"),
+            None,
+        )
+        .await;
+        assert_eq!(status, StatusCode::NO_CONTENT);
+        let (status, _, _) = send_method(
+            &router,
+            Method::GET,
+            "/api/v1/control/auth/me",
+            Some(&staff_cookie),
+            None,
+            None,
+        )
+        .await;
+        assert_eq!(status, StatusCode::UNAUTHORIZED);
+
+        // Deshabilitar la cuenta invalida de inmediato cualquier sesión nueva.
+        let (status, headers, _) = send_auth(
+            &router,
+            "/api/v1/control/auth/login",
+            None,
+            Some("http://127.0.0.1:8080"),
+            Some(json!({"email": email, "password": password})),
+        )
+        .await;
+        assert_eq!(status, StatusCode::NO_CONTENT);
+        let active_cookie = staff_session_from(&headers);
+        sqlx::query("UPDATE staff_account SET status = 'disabled' WHERE email = $1")
+            .bind(&email)
+            .execute(&pool)
+            .await
+            .unwrap();
+        let (status, _, _) = send_method(
+            &router,
+            Method::GET,
+            "/api/v1/control/auth/me",
+            Some(&active_cookie),
+            None,
+            None,
+        )
+        .await;
+        assert_eq!(status, StatusCode::UNAUTHORIZED);
     }
 }

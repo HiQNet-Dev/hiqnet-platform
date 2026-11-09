@@ -66,6 +66,10 @@ id_type!(
     GrantId,
     "Identificador de una autorización comercial emitida."
 );
+id_type!(
+    StaffAccountId,
+    "Identificador de una cuenta de personal interno HiQNet; no es una cuenta comercial."
+);
 
 #[cfg(test)]
 mod tests {
