@@ -344,6 +344,8 @@ No `severity`, `risk`, `status`, `resolved`, `acknowledged` (no existen).
 
 Se optimizan las queries dominantes; no se crea un índice por cada parámetro. No se eliminan índices existentes en C6.
 
+**Regla contractual de ejecución:** toda ordenación, keyset y `LIMIT` de C6 se ejecutan en **PostgreSQL**. Los índices existentes que no cubran completamente el `ORDER BY` pueden requerir un sort del planner, pero el backend **nunca** carga un conjunto ilimitado para ordenarlo o paginarlo en la aplicación. Todas las queries de listado (Audit, Commercial Security y Staff Auth) usan keyset + `LIMIT` acotado en la base de datos.
+
 | # | Query | Ordering | Filtros | Índice existente | ¿Nuevo índice? | Justificación |
 |---|---|---|---|---|---|---|
 | A1 | Audit global | `occurred_at DESC, id DESC` | — | — | `(occurred_at DESC, id DESC)` | listado principal |
@@ -351,7 +353,7 @@ Se optimizan las queries dominantes; no se crea un índice por cada parámetro. 
 | A3 | Audit por action | `occurred_at DESC, id DESC` | `action` | — | `(action, occurred_at DESC, id DESC)` | filtro dominante |
 | A4 | Audit por organization | `occurred_at DESC, id DESC` | `organization_id` | — | `(organization_id, occurred_at DESC, id DESC)` | filtro dominante |
 | A5 | Audit por product | `occurred_at DESC, id DESC` | `product_id` | — | `(product_id, occurred_at DESC, id DESC)` | filtro dominante |
-| A6 | Audit por resource | `occurred_at DESC, id DESC` | `resource_type, resource_id` | `(resource_type, resource_id)` | No | resultado pequeño; ordenar en memoria |
+| A6 | Audit por resource | `occurred_at DESC, id DESC` | `resource_type, resource_id` | `(resource_type, resource_id)` | No | El índice existente acota el conjunto por recurso. PostgreSQL mantiene `ORDER BY occurred_at DESC, id DESC` y aplica keyset + `LIMIT`; C6 no ordena ni pagina en memoria. |
 | A7 | Audit por result/rango | `occurred_at DESC, id DESC` | `result`, `from/to` | A1 | No | `result` es baja cardinalidad; A1 cubre el rango |
 | S1 | Security global | `created_at DESC, id DESC` | — | — | `(created_at DESC, id DESC)` | listado principal |
 | S2 | Security por organization | `created_at DESC, id DESC` | `organization_id` | `(organization_id, created_at DESC)` | No | reutilizar |
