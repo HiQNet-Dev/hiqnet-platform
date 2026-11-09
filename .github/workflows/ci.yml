@@ -78,6 +78,33 @@ jobs:
       - name: Validar SemVer sin publicar
         run: python3 -m unittest discover -s scripts -p 'test_*.py'
 
+  portal:
+    name: Portal (lint, tipos, tests, build)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.28.5
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+      - name: Instalar dependencias
+        run: pnpm install --frozen-lockfile
+      - name: Cliente OpenAPI sin drift
+        run: pnpm --filter @hiqnet/platform-portal api:check
+      - name: Lint
+        run: pnpm --filter @hiqnet/platform-portal lint
+      - name: Formato
+        run: pnpm --filter @hiqnet/platform-portal format:check
+      - name: Tipos
+        run: pnpm --filter @hiqnet/platform-portal typecheck
+      - name: Tests
+        run: pnpm --filter @hiqnet/platform-portal test
+      - name: Build
+        run: pnpm --filter @hiqnet/platform-portal build
+
   supply-chain:
     name: Archivos prohibidos
     runs-on: ubuntu-latest

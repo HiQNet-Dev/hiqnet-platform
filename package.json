@@ -1,0 +1,13 @@
+{
+  "name": "hiqnet-platform-workspace",
+  "private": true,
+  "packageManager": "pnpm@11.28.5",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "portal:dev": "pnpm --filter @hiqnet/platform-portal dev",
+    "portal:build": "pnpm --filter @hiqnet/platform-portal build",
+    "portal:test": "pnpm --filter @hiqnet/platform-portal test"
+  }
+}
