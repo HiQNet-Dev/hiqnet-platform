@@ -47,7 +47,9 @@ pub struct AppState {
     pub commercial: Arc<CommercialService<PgCommercialRepository>>,
     pub enrollment: Arc<EnrollmentService<PgEnrollmentRepository>>,
     pub organization_limiter: Arc<auth::LoginLimiter>,
-    pub enrollment_limiter: Arc<auth::LoginLimiter>,
+    pub enrollment_begin_limiter: Arc<auth::LoginLimiter>,
+    pub enrollment_proof_limiter: Arc<auth::LoginLimiter>,
+    pub enrollment_approve_limiter: Arc<auth::LoginLimiter>,
     pub admin_token: Option<String>,
     pub licensing_enabled: bool,
     pub db_pool: PgPool,
@@ -1232,11 +1234,27 @@ pub async fn run() -> anyhow::Result<()> {
         enrollment_ttl,
         verification_uri,
     ));
-    let enrollment_rate_limit = std::env::var("HIQNET_PLATFORM_ENROLLMENT_RATE_LIMIT")
+    let enrollment_begin_rate_limit = std::env::var("HIQNET_PLATFORM_ENROLLMENT_BEGIN_RATE_LIMIT")
         .ok()
         .and_then(|value| value.parse::<usize>().ok())
         .unwrap_or(30)
         .clamp(1, 1000);
+    let enrollment_proof_rate_limit = std::env::var("HIQNET_PLATFORM_ENROLLMENT_PROOF_RATE_LIMIT")
+        .ok()
+        .and_then(|value| value.parse::<usize>().ok())
+        .unwrap_or(60)
+        .clamp(1, 1000);
+    let enrollment_approve_rate_limit =
+        std::env::var("HIQNET_PLATFORM_ENROLLMENT_APPROVE_RATE_LIMIT")
+            .ok()
+            .and_then(|value| value.parse::<usize>().ok())
+            .unwrap_or(30)
+            .clamp(1, 1000);
+    let enrollment_rate_window = std::env::var("HIQNET_PLATFORM_ENROLLMENT_RATE_WINDOW_SECONDS")
+        .ok()
+        .and_then(|value| value.parse::<u64>().ok())
+        .unwrap_or(60)
+        .clamp(1, 3600);
     let state = AppState {
         service,
         commercial,
@@ -1245,9 +1263,17 @@ pub async fn run() -> anyhow::Result<()> {
             5,
             std::time::Duration::from_secs(60),
         )),
-        enrollment_limiter: Arc::new(auth::LoginLimiter::new(
-            enrollment_rate_limit,
-            std::time::Duration::from_secs(60),
+        enrollment_begin_limiter: Arc::new(auth::LoginLimiter::new(
+            enrollment_begin_rate_limit,
+            std::time::Duration::from_secs(enrollment_rate_window),
+        )),
+        enrollment_proof_limiter: Arc::new(auth::LoginLimiter::new(
+            enrollment_proof_rate_limit,
+            std::time::Duration::from_secs(enrollment_rate_window),
+        )),
+        enrollment_approve_limiter: Arc::new(auth::LoginLimiter::new(
+            enrollment_approve_rate_limit,
+            std::time::Duration::from_secs(enrollment_rate_window),
         )),
         admin_token,
         licensing_enabled,
@@ -1276,7 +1302,13 @@ pub async fn run() -> anyhow::Result<()> {
         .unwrap_or(8080);
     let listener = tokio::net::TcpListener::bind(("0.0.0.0", port)).await?;
     tracing::info!(port, "HiQNet Platform API listening");
-    axum::serve(listener, app).await?;
+    // ConnectInfo permite limitar begin/proof por peer real. No se confían
+    // X-Forwarded-For ni Forwarded sin una lista explícita de proxies.
+    axum::serve(
+        listener,
+        app.into_make_service_with_connect_info::<std::net::SocketAddr>(),
+    )
+    .await?;
     Ok(())
 }
 
@@ -1288,6 +1320,7 @@ mod tests {
         http::{Method, Request, header},
     };
     use base64::Engine as _;
+    use platform_application::enrollment::EnrollmentError;
     use serde_json::{Value, json};
     use std::time::Duration;
     use tower::ServiceExt;
@@ -1321,7 +1354,15 @@ mod tests {
                 5,
                 std::time::Duration::from_secs(60),
             )),
-            enrollment_limiter: Arc::new(auth::LoginLimiter::new(
+            enrollment_begin_limiter: Arc::new(auth::LoginLimiter::new(
+                1000,
+                std::time::Duration::from_secs(60),
+            )),
+            enrollment_proof_limiter: Arc::new(auth::LoginLimiter::new(
+                1000,
+                std::time::Duration::from_secs(60),
+            )),
+            enrollment_approve_limiter: Arc::new(auth::LoginLimiter::new(
                 1000,
                 std::time::Duration::from_secs(60),
             )),
@@ -1376,7 +1417,15 @@ mod tests {
                 5,
                 std::time::Duration::from_secs(60),
             )),
-            enrollment_limiter: Arc::new(auth::LoginLimiter::new(
+            enrollment_begin_limiter: Arc::new(auth::LoginLimiter::new(
+                1000,
+                std::time::Duration::from_secs(60),
+            )),
+            enrollment_proof_limiter: Arc::new(auth::LoginLimiter::new(
+                1000,
+                std::time::Duration::from_secs(60),
+            )),
+            enrollment_approve_limiter: Arc::new(auth::LoginLimiter::new(
                 1000,
                 std::time::Duration::from_secs(60),
             )),
@@ -1959,6 +2008,13 @@ mod tests {
     }
 
     #[test]
+    fn enrollment_invalid_maps_to_conflict_not_forbidden() {
+        let (status, body) = enrollment::enrollment_error(EnrollmentError::EnrollmentInvalid);
+        assert_eq!(status, StatusCode::CONFLICT);
+        assert_eq!(body.0.code, "enrollment_invalid");
+    }
+
+    #[test]
     fn storage_errors_are_not_client_errors() {
         assert_eq!(err(AppError::Storage).0, StatusCode::SERVICE_UNAVAILABLE);
     }
@@ -2014,6 +2070,27 @@ mod tests {
         origin: Option<&str>,
         body: Option<Value>,
     ) -> (StatusCode, HeaderMap, Value) {
+        send_method_from(
+            router,
+            method,
+            uri,
+            cookie,
+            origin,
+            body,
+            std::net::SocketAddr::from(([127, 0, 0, 1], 40000)),
+        )
+        .await
+    }
+
+    async fn send_method_from(
+        router: &Router,
+        method: Method,
+        uri: &str,
+        cookie: Option<&str>,
+        origin: Option<&str>,
+        body: Option<Value>,
+        peer: std::net::SocketAddr,
+    ) -> (StatusCode, HeaderMap, Value) {
         let mut request = Request::builder().method(method).uri(uri);
         if let Some(cookie) = cookie {
             request = request.header(header::COOKIE, cookie);
@@ -2027,11 +2104,14 @@ mod tests {
         } else {
             Body::empty()
         };
-        let response = router
-            .clone()
-            .oneshot(request.body(payload).unwrap())
-            .await
-            .unwrap();
+        let mut request = request.body(payload).unwrap();
+        request
+            .extensions_mut()
+            .insert(axum::extract::ConnectInfo(peer));
+        request
+            .extensions_mut()
+            .insert(crate::enrollment::PeerIp::for_test(peer.ip()));
+        let response = router.clone().oneshot(request).await.unwrap();
         let status = response.status();
         let headers = response.headers().clone();
         let bytes = to_bytes(response.into_body(), 1024 * 1024).await.unwrap();
@@ -3235,43 +3315,168 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn enrollment_begin_is_rate_limited() {
+    async fn enrollment_rate_limiters_are_scoped_by_peer_and_account() {
         let pool = open(&isolated_test_url()).await.unwrap();
+        let email_a = format!("rate-a-{}@example.test", Uuid::new_v4());
+        let email_b = format!("rate-b-{}@example.test", Uuid::new_v4());
+        let password = "contraseña-inicial-1";
+        seed_credential(&pool, &email_a, password).await;
+        seed_credential(&pool, &email_b, password).await;
         let mut app_state = state(pool.clone());
-        app_state.enrollment_limiter = Arc::new(auth::LoginLimiter::new(
+        app_state.enrollment_begin_limiter = Arc::new(auth::LoginLimiter::new(
+            1,
+            std::time::Duration::from_secs(60),
+        ));
+        app_state.enrollment_proof_limiter = Arc::new(auth::LoginLimiter::new(
+            1,
+            std::time::Duration::from_secs(60),
+        ));
+        app_state.enrollment_approve_limiter = Arc::new(auth::LoginLimiter::new(
             1,
             std::time::Duration::from_secs(60),
         ));
         let router = build_router(app_state, false, test_auth_state(pool));
+        let peer_a = std::net::SocketAddr::from(([127, 0, 0, 2], 41001));
+        let peer_b = std::net::SocketAddr::from(([127, 0, 0, 3], 41002));
+        let origin = Some("http://127.0.0.1:8080");
         let signing_key = ed25519_dalek::SigningKey::generate(&mut rand_core::OsRng);
-        let body = json!({
-            "installation_id": Uuid::new_v4(),
-            "public_key": format!("ed25519:v1:{}", base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(signing_key.verifying_key().as_bytes())),
-            "device_label": "Caja rate",
-            "app_version": "0.1.0",
-            "platform": "linux"
-        });
-        let (status, _, _) = send_method(
+        let public_key = format!(
+            "ed25519:v1:{}",
+            base64::engine::general_purpose::URL_SAFE_NO_PAD
+                .encode(signing_key.verifying_key().as_bytes())
+        );
+        let body = |label: &str| {
+            json!({
+                "installation_id": Uuid::new_v4(),
+                "public_key": public_key.clone(),
+                "device_label": label,
+                "app_version": "0.1.0",
+                "platform": "linux"
+            })
+        };
+        let (status, _, _) = send_method_from(
             &router,
             Method::POST,
             "/api/v1/enrollment-requests",
             None,
             None,
-            Some(body.clone()),
+            Some(body("Caja rate A")),
+            peer_a,
         )
         .await;
         assert_eq!(status, StatusCode::CREATED);
-        let (status, _, response) = send_method(
+        let (status, _, response) = send_method_from(
             &router,
             Method::POST,
             "/api/v1/enrollment-requests",
             None,
             None,
-            Some(body),
+            Some(body("Caja rate A2")),
+            peer_a,
         )
         .await;
         assert_eq!(status, StatusCode::TOO_MANY_REQUESTS);
         assert_eq!(response["code"], "rate_limited");
+        let (status, _, _) = send_method_from(
+            &router,
+            Method::POST,
+            "/api/v1/enrollment-requests",
+            None,
+            None,
+            Some(body("Caja rate B")),
+            peer_b,
+        )
+        .await;
+        assert_eq!(status, StatusCode::CREATED);
+
+        let proof_body = json!({
+            "installation_id": Uuid::new_v4(),
+            "public_key": public_key,
+            "nonce": "nonce-rate",
+            "signature": "firma-rate"
+        });
+        let (status, _, _) = send_method_from(
+            &router,
+            Method::POST,
+            "/api/v1/enrollment-requests/device-rate/proof",
+            None,
+            None,
+            Some(proof_body.clone()),
+            peer_a,
+        )
+        .await;
+        assert_ne!(status, StatusCode::TOO_MANY_REQUESTS);
+        let (status, _, _) = send_method_from(
+            &router,
+            Method::POST,
+            "/api/v1/enrollment-requests/device-rate/proof",
+            None,
+            None,
+            Some(proof_body.clone()),
+            peer_a,
+        )
+        .await;
+        assert_eq!(status, StatusCode::TOO_MANY_REQUESTS);
+        let (status, _, _) = send_method_from(
+            &router,
+            Method::POST,
+            "/api/v1/enrollment-requests/device-rate/proof",
+            None,
+            None,
+            Some(proof_body),
+            peer_b,
+        )
+        .await;
+        assert_ne!(status, StatusCode::TOO_MANY_REQUESTS);
+
+        let login = |email: String| {
+            let router = router.clone();
+            async move {
+                let (status, headers, _) = send_auth(
+                    &router,
+                    "/api/v1/auth/login",
+                    None,
+                    Some("http://127.0.0.1:8080"),
+                    Some(json!({"email": email, "password": password})),
+                )
+                .await;
+                assert_eq!(status, StatusCode::NO_CONTENT);
+                session_from(&headers)
+            }
+        };
+        let cookie_a = login(email_a).await;
+        let cookie_b = login(email_b).await;
+        let approve_body = json!({"organization_id": Uuid::new_v4()});
+        let (status, _, _) = send_method(
+            &router,
+            Method::POST,
+            "/api/v1/enrollment-requests/AAAA-BBBB/approve",
+            Some(&cookie_a),
+            origin,
+            Some(approve_body.clone()),
+        )
+        .await;
+        assert_ne!(status, StatusCode::TOO_MANY_REQUESTS);
+        let (status, _, _) = send_method(
+            &router,
+            Method::POST,
+            "/api/v1/enrollment-requests/AAAA-BBBB/approve",
+            Some(&cookie_a),
+            origin,
+            Some(approve_body.clone()),
+        )
+        .await;
+        assert_eq!(status, StatusCode::TOO_MANY_REQUESTS);
+        let (status, _, _) = send_method(
+            &router,
+            Method::POST,
+            "/api/v1/enrollment-requests/AAAA-BBBB/approve",
+            Some(&cookie_b),
+            origin,
+            Some(approve_body),
+        )
+        .await;
+        assert_ne!(status, StatusCode::TOO_MANY_REQUESTS);
     }
 
     #[tokio::test]

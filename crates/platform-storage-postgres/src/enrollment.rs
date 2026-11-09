@@ -430,7 +430,12 @@ impl EnrollmentRepository for PgEnrollmentRepository {
             {
                 tracing::warn!(error = %event_error, "fallo al registrar revocación de autoridad");
             }
-            return Err(error);
+            // En proof, una aprobación que decayó no es un 403 de rol actual:
+            // se normaliza como 409 enrollment_invalid sin revelar la causa.
+            return Err(match error {
+                EnrollmentError::Forbidden => EnrollmentError::EnrollmentInvalid,
+                other => other,
+            });
         }
 
         let existing_installation =

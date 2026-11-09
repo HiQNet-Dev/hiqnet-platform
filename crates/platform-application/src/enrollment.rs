@@ -20,6 +20,8 @@ pub enum EnrollmentError {
     NotFound,
     #[error("la autoridad comercial ya no es válida")]
     Forbidden,
+    #[error("la aprobación de enrolamiento dejó de ser válida")]
+    EnrollmentInvalid,
     #[error("conflicto de identidad o vinculación")]
     Conflict,
     #[error("se requiere reiniciar el enrolamiento")]

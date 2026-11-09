@@ -538,7 +538,7 @@ async fn deshabilitacion_de_cuenta_confirmada_antes_del_proof_impide_binding() {
     blocker.commit().await.unwrap();
     let result = proof_task.await.unwrap();
     assert!(
-        matches!(result, Err(EnrollmentError::Forbidden)),
+        matches!(result, Err(EnrollmentError::EnrollmentInvalid)),
         "cuenta deshabilitada debe impedir el binding: {result:?}"
     );
     let bindings: i64 =
@@ -770,7 +770,7 @@ async fn revocacion_cambio_de_rol_y_archivado_concurrentes_impiden_binding() {
     blocker.commit().await.unwrap();
     assert!(matches!(
         task.await.unwrap(),
-        Err(EnrollmentError::Forbidden)
+        Err(EnrollmentError::EnrollmentInvalid)
     ));
     let count: i64 =
         sqlx::query_scalar("SELECT count(*) FROM installation_binding WHERE installation_id = $1")
@@ -802,7 +802,7 @@ async fn revocacion_cambio_de_rol_y_archivado_concurrentes_impiden_binding() {
     blocker.commit().await.unwrap();
     assert!(matches!(
         task.await.unwrap(),
-        Err(EnrollmentError::Forbidden)
+        Err(EnrollmentError::EnrollmentInvalid)
     ));
     let count: i64 =
         sqlx::query_scalar("SELECT count(*) FROM installation_binding WHERE installation_id = $1")
@@ -830,7 +830,7 @@ async fn revocacion_cambio_de_rol_y_archivado_concurrentes_impiden_binding() {
     blocker.commit().await.unwrap();
     assert!(matches!(
         task.await.unwrap(),
-        Err(EnrollmentError::Forbidden)
+        Err(EnrollmentError::EnrollmentInvalid)
     ));
     let count: i64 =
         sqlx::query_scalar("SELECT count(*) FROM installation_binding WHERE installation_id = $1")

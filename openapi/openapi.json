@@ -432,7 +432,7 @@
             }
           },
           "409": {
-            "description": "Replay, conflicto o autoridad revocada",
+            "description": "Replay, conflicto o enrollment_invalid si la autoridad decayó",
             "content": {
               "application/json": {
                 "schema": {
@@ -443,6 +443,16 @@
           },
           "410": {
             "description": "Challenge expirado o consumido",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit técnico por peer",
             "content": {
               "application/json": {
                 "schema": {
@@ -546,6 +556,16 @@
           },
           "410": {
             "description": "Challenge expirado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit técnico por cuenta",
             "content": {
               "application/json": {
                 "schema": {

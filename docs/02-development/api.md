@@ -188,6 +188,8 @@ La sección **Enrollment** de Swagger expone el flujo device-code + aprobación 
 
 La cabecera `Idempotency-Key` del inicio es opcional y tiene un máximo de 128 caracteres ASCII visibles. Si se repite con el mismo payload después de entregar secretos, la respuesta es `409 enrollment_restart_required`; con payload distinto es `409 idempotency_conflict`. Los códigos, el nonce y las claves privadas no se persisten ni se devuelven en endpoints posteriores.
 
+Si entre `/approve` y `/proof` la organización se archiva, la cuenta se deshabilita, la membresía se revoca o el actor deja de ser owner, `/proof` devuelve `409 enrollment_invalid`. `/approve` mantiene `403 forbidden` para un rol insuficiente conocido en ese momento; no se mezclan ambas semánticas.
+
 Mensaje firmado exacto (UTF-8, sin JSON):
 
 ```text
@@ -198,7 +200,7 @@ key=<public_key>
 nonce=<nonce>
 ```
 
-TTL por defecto: 600 segundos (`HIQNET_PLATFORM_ENROLLMENT_TTL_SECONDS`, 60–3600). El rate limit de enrolamiento es independiente del login y de organizaciones; sigue siendo memoria local por instancia (`HIQNET_PLATFORM_ENROLLMENT_RATE_LIMIT`, por defecto 30 por minuto). No es una cuota comercial.
+TTL por defecto: 600 segundos (`HIQNET_PLATFORM_ENROLLMENT_TTL_SECONDS`, 60–3600). Los rate limits de enrolamiento son independientes del login y de organizaciones y siguen siendo memoria local por instancia: begin y proof se limitan por peer real de la conexión TCP (`ConnectInfo`, no `X-Forwarded-For`) y approve por `account_id`. Variables: `HIQNET_PLATFORM_ENROLLMENT_BEGIN_RATE_LIMIT` (30), `HIQNET_PLATFORM_ENROLLMENT_PROOF_RATE_LIMIT` (60), `HIQNET_PLATFORM_ENROLLMENT_APPROVE_RATE_LIMIT` (30) y `HIQNET_PLATFORM_ENROLLMENT_RATE_WINDOW_SECONDS` (60). No son una cuota comercial. Multi-instancia requerirá un limitador distribuido en G4.2-E.
 
 Prueba real en local (sustituye los valores por los sintéticos de tu ejecución; no publiques secretos):
 

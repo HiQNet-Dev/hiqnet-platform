@@ -9,21 +9,67 @@ use crate::{
 use axum::{
     Json,
     extract::{
-        Path, Query, State,
+        ConnectInfo, FromRequestParts, Path, Query, State,
         rejection::{JsonRejection, PathRejection, QueryRejection},
     },
-    http::{HeaderMap, StatusCode},
+    http::{HeaderMap, StatusCode, request::Parts},
 };
 use platform_application::enrollment::{
     ApproveEnrollmentRequest, BeginEnrollmentRequest, EnrollmentError, ProofAttempt,
 };
 use platform_core::ids::{InstallationId, OrganizationId};
 use serde::{Deserialize, Serialize};
+use std::{
+    convert::Infallible,
+    net::{IpAddr, SocketAddr},
+};
 use time::OffsetDateTime;
 use utoipa::ToSchema;
 use uuid::Uuid;
 
 type HttpError = (StatusCode, Json<ErrorResponse>);
+
+/// Peer de la conexión TCP. En producción Axum la inyecta mediante
+/// `into_make_service_with_connect_info`; no se leen cabeceras de proxy.
+#[derive(Clone, Copy)]
+pub(crate) struct PeerIp(Option<IpAddr>);
+
+impl PeerIp {
+    #[cfg(test)]
+    pub(crate) fn for_test(ip: IpAddr) -> Self {
+        Self(Some(ip))
+    }
+}
+
+impl<S> FromRequestParts<S> for PeerIp
+where
+    S: Send + Sync,
+{
+    type Rejection = Infallible;
+
+    async fn from_request_parts(parts: &mut Parts, _state: &S) -> Result<Self, Self::Rejection> {
+        // Las pruebas inyectan el peer directamente; producción usa ConnectInfo.
+        if let Some(peer) = parts.extensions.get::<PeerIp>() {
+            return Ok(*peer);
+        }
+        Ok(Self(
+            parts
+                .extensions
+                .get::<ConnectInfo<SocketAddr>>()
+                .map(|connect| connect.0.ip()),
+        ))
+    }
+}
+
+impl PeerIp {
+    fn rate_key(&self, scope: &str) -> String {
+        let peer = self
+            .0
+            .map(|ip| ip.to_string())
+            .unwrap_or_else(|| "unknown-peer".into());
+        format!("enrollment:{scope}:{peer}")
+    }
+}
 
 #[derive(Debug, Deserialize, ToSchema)]
 #[serde(deny_unknown_fields)]
@@ -144,7 +190,12 @@ pub fn enrollment_error(error: EnrollmentError) -> HttpError {
         EnrollmentError::Forbidden => auth::error(
             StatusCode::FORBIDDEN,
             "forbidden",
-            "autoridad comercial insuficiente o revocada",
+            "autoridad comercial insuficiente",
+        ),
+        EnrollmentError::EnrollmentInvalid => auth::error(
+            StatusCode::CONFLICT,
+            "enrollment_invalid",
+            "la aprobación de enrolamiento dejó de ser válida",
         ),
         EnrollmentError::Conflict => auth::error(
             StatusCode::CONFLICT,
@@ -212,17 +263,19 @@ fn idempotency_key(headers: &HeaderMap) -> Result<Option<String>, HttpError> {
         (status = 503, description = "PostgreSQL no disponible", body = ErrorResponse)))]
 pub async fn begin_enrollment(
     State(state): State<AppState>,
+    peer: PeerIp,
     headers: HeaderMap,
     request: Result<Json<BeginEnrollmentBody>, JsonRejection>,
 ) -> Result<(StatusCode, Json<EnrollmentChallengeResponse>), HttpError> {
-    if state.enrollment_limiter.is_limited("enrollment-begin") {
+    let rate_key = peer.rate_key("begin");
+    if state.enrollment_begin_limiter.is_limited(&rate_key) {
         return Err(auth::error(
             StatusCode::TOO_MANY_REQUESTS,
             "rate_limited",
             "demasiados intentos de enrolamiento",
         ));
     }
-    state.enrollment_limiter.record("enrollment-begin");
+    state.enrollment_begin_limiter.record(&rate_key);
     let idempotency_key = idempotency_key(&headers)?;
     let Json(request) = request.map_err(json_error)?;
     let challenge = state
@@ -264,6 +317,7 @@ pub async fn begin_enrollment(
         (status = 403, description = "Origen no permitido o rol distinto de owner", body = ErrorResponse),
         (status = 404, description = "Código, organización o membresía inexistente (neutral)", body = ErrorResponse),
         (status = 410, description = "Challenge expirado", body = ErrorResponse),
+        (status = 429, description = "Rate limit técnico por cuenta", body = ErrorResponse),
         (status = 503, description = "PostgreSQL no disponible", body = ErrorResponse)))]
 pub async fn approve_enrollment(
     State(state): State<AppState>,
@@ -273,6 +327,18 @@ pub async fn approve_enrollment(
     user_code: Result<Path<String>, PathRejection>,
     request: Result<Json<ApproveEnrollmentBody>, JsonRejection>,
 ) -> Result<Json<ApprovedEnrollmentResponse>, HttpError> {
+    let rate_key = format!(
+        "enrollment:approve:{}",
+        auth_context.session.account_id.as_uuid()
+    );
+    if state.enrollment_approve_limiter.is_limited(&rate_key) {
+        return Err(auth::error(
+            StatusCode::TOO_MANY_REQUESTS,
+            "rate_limited",
+            "demasiadas aprobaciones de enrolamiento",
+        ));
+    }
+    state.enrollment_approve_limiter.record(&rate_key);
     if !auth::origin_allowed(&headers, &auth_state) {
         return Err(auth::error(
             StatusCode::FORBIDDEN,
@@ -310,14 +376,25 @@ pub async fn approve_enrollment(
         (status = 201, description = "Instalación vinculada", body = EnrollmentCompletedResponse),
         (status = 400, description = "Firma o payload inválidos", body = ErrorResponse),
         (status = 404, description = "Challenge inexistente", body = ErrorResponse),
-        (status = 409, description = "Replay, conflicto o autoridad revocada", body = ErrorResponse),
+        (status = 409, description = "Replay, conflicto o enrollment_invalid si la autoridad decayó", body = ErrorResponse),
         (status = 410, description = "Challenge expirado o consumido", body = ErrorResponse),
+        (status = 429, description = "Rate limit técnico por peer", body = ErrorResponse),
         (status = 503, description = "PostgreSQL no disponible", body = ErrorResponse)))]
 pub async fn prove_enrollment(
     State(state): State<AppState>,
+    peer: PeerIp,
     device_code: Result<Path<String>, PathRejection>,
     request: Result<Json<ProofBody>, JsonRejection>,
 ) -> Result<(StatusCode, Json<EnrollmentCompletedResponse>), HttpError> {
+    let rate_key = peer.rate_key("proof");
+    if state.enrollment_proof_limiter.is_limited(&rate_key) {
+        return Err(auth::error(
+            StatusCode::TOO_MANY_REQUESTS,
+            "rate_limited",
+            "demasiados intentos de proof",
+        ));
+    }
+    state.enrollment_proof_limiter.record(&rate_key);
     let Path(device_code) = device_code.map_err(path_error)?;
     let Json(request) = request.map_err(json_error)?;
     let completion = state

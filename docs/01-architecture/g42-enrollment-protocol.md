@@ -336,13 +336,15 @@ flowchart TD
 
 ## 12. Rate limiting propuesto
 
-| Endpoint | Límite propuesto | Estado |
+| Endpoint | Límite implementado | Estado |
 |---|---|---|
-| Inicio | 10/min por IP y 5/min por `installation_id` | PENDIENTE |
-| Aprobación | 20/min por cuenta | PENDIENTE |
-| Prueba | 10/min por IP y 5/min por solicitud | PENDIENTE |
+| Inicio | configurable por peer TCP (`ConnectInfo`) | IMPLEMENTADO |
+| Aprobación | configurable por `account_id` | IMPLEMENTADO |
+| Prueba | configurable por peer TCP (`ConnectInfo`) | IMPLEMENTADO |
 
-Los valores son técnicos y no representan cuotas comerciales.
+Los valores son técnicos y no representan cuotas comerciales. No se confían `X-Forwarded-For` ni `Forwarded` sin lista explícita de proxies. El limitador es por instancia; G4.2-E evaluará uno distribuido.
+
+Riesgo registrado: el `user_code` humano tiene del orden de 40 bits de entropía y se indexa mediante SHA-256. No se cambia silenciosamente a HMAC/pepper en G4.2-B; queda pendiente evaluar un blind index con secreto de servidor. `device_code` y `nonce` tienen alta entropía y no comparten esa limitación.
 
 ## 13. Relación con Trial y licencias
 
