@@ -1,0 +1,57 @@
+# Control Center — Matriz de roles y blast radius
+
+**Estado:** ACCEPTED (ratificado 2026-11-09)
+**Fecha:** 2026-11-09
+**Relacionado:** [ADR-0006](../01-architecture/adr-0006-staff-rbac.md), [Threat model](../01-architecture/control-center-threat-model.md)
+
+Esta matriz define, por rol, qué puede **leer**, qué puede **modificar** y qué **nunca** puede hacer. La autoridad final es el backend; la UI sólo refleja permisos.
+
+## 1. Matriz operativa
+
+| Rol                | Puede leer                         | Puede modificar                                                                                 | Nunca puede                                                                                     |
+| ------------------ | ---------------------------------- | ----------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| `super_admin`      | Todo                               | Productos, organizaciones, cuentas, instalaciones, suscripciones, despliegues, seguridad, staff | Saltarse autenticación, auditoría o controles de sesión; acciones destructivas sin confirmación |
+| `platform_admin`   | Todo                               | Productos, organizaciones, cuentas, instalaciones, suscripciones, despliegues                   | Gestionar staff; mutar configuración de seguridad                                               |
+| `operator`         | Todo                               | Instalaciones, despliegues                                                                      | Gestionar productos, organizaciones, cuentas, staff o seguridad                                 |
+| `support`          | Todo (sin secretos)                | Nada destructivo (acciones de soporte no destructivas, si se aprueban)                          | Mutar cuentas/organizaciones/productos, gestionar staff o seguridad                             |
+| `security_auditor` | Todo, incluida auditoría y eventos | Configuración de seguridad y triage de eventos                                                  | Mutar datos de negocio (organizaciones, cuentas, instalaciones)                                 |
+| `read_only`        | Todo (sin secretos)                | Nada                                                                                            | Cualquier mutación                                                                              |
+
+## 2. Detalle por capability
+
+| Capability           | super_admin | platform_admin | operator | support | security_auditor | read_only |
+| -------------------- | ----------- | -------------- | -------- | ------- | ---------------- | --------- |
+| products.read        | ✓           | ✓              | ✓        | ✓       | ✓                | ✓         |
+| products.manage      | ✓           | ✓              | —        | —       | —                | —         |
+| organizations.read   | ✓           | ✓              | ✓        | ✓       | ✓                | ✓         |
+| organizations.manage | ✓           | ✓              | —        | —       | —                | —         |
+| accounts.read        | ✓           | ✓              | ✓        | ✓       | ✓                | ✓         |
+| accounts.manage      | ✓           | ✓              | —        | —       | —                | —         |
+| installations.read   | ✓           | ✓              | ✓        | ✓       | ✓                | ✓         |
+| installations.manage | ✓           | ✓              | ✓        | —       | —                | —         |
+| subscriptions.read   | ✓           | ✓              | ✓        | ✓       | ✓                | ✓         |
+| subscriptions.manage | ✓           | ✓              | —        | —       | —                | —         |
+| deployments.read     | ✓           | ✓              | ✓        | ✓       | ✓                | ✓         |
+| deployments.manage   | ✓           | ✓              | ✓        | —       | —                | —         |
+| security.read        | ✓           | ✓              | ✓        | ✓       | ✓                | ✓         |
+| security.manage      | ✓           | —              | —        | —       | ✓                | —         |
+| audit.read           | ✓           | ✓              | ✓        | ✓       | ✓                | ✓         |
+| staff.manage         | ✓           | —              | —        | —       | —                | —         |
+
+Leyenda: `✓` permitido · `—` denegado.
+
+## 3. Reglas transversales
+
+- **Deny by default.** Una capability no concedida se rechaza con `403`.
+- **404 neutral** para recursos inexistentes o fuera de alcance (no distinguir cross-tenant).
+- **Auditoría obligatoria** en toda mutación: actor, acción, recurso, resultado, `organization_id`/`product_id` cuando aplique.
+- **Step-up** (futuro) para acciones críticas; en C1, confirmación tipada.
+- **Sin bypasses:** `super_admin` se autentica, se audita y respeta sesión/Origin.
+- **Least privilege:** ante duda, denegar y revisar.
+
+## 4. Decisiones ratificadas
+
+- Roles definitivos: los de la sección 1.
+- `support` no tiene mutaciones en C1.
+- `security_auditor` puede mutar configuración de seguridad y triage, no datos de negocio.
+- 4-eyes se difiere a C6.
