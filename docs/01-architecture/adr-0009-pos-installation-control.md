@@ -440,7 +440,7 @@ nuevo dispositivo
 → generation N+1 + nuevo binding + identity_status=active
 ```
 
-Nueva entidad propuesta:
+Entidad implementada:
 
 ```text
 installation_rehost_authorization
@@ -597,20 +597,27 @@ POST /api/v1/control/installations/{installation_id}/rehost
 |---|---|---|---|---|
 | suspend | administrative active | suspended | sin cambio de identidad | 200 |
 | reactivate | suspended | active | — | 200 |
-| rehost authorize | administrative active o suspended | mismo estado administrativo (identity unenrolled) | EnrollmentRequest aprobado del mismo installation_id; `identity_status=active` con exactly una identidad y un binding activos, **o** `identity_status=unenrolled` con `enrolled_at` no nulo y cero identidad/binding activos (reintento); sin autorización pending; Product allowlist | 200 + autorización |
+| rehost authorize | administrative active o suspended | mismo estado administrativo (identity unenrolled) | EnrollmentRequest aprobado del mismo installation_id; `identity_status=active` con exactly una identidad y un binding activos, **o** `identity_status=unenrolled` con `enrolled_at` no nulo y cero identidad/binding activos (reintento); sin otra autorización pending de otro enrollment_request; Product allowlist | 200 + autorización (la misma si es retry) |
 | rehost completion | identity unenrolled + autorización pending vigente | identity active | product/organization snapshot coinciden; proof válido | 200/201 enrollment completion |
 
-Idempotencia propuesta:
+Idempotencia:
 
 - `suspend` sobre `suspended` y `reactivate` sobre `active`: **200 idempotente**, sin nueva auditoría si no hubo cambio.
 - `unregistered`: suspend/reactivate → `409 transition_conflict`.
-- rehost con autorización pending existente → `409 rehost_conflict`.
+- **Retry seguro por identidad natural:** mismo `installation_id` + mismo `enrollment_request_id` devuelve la misma autorización/resultado sin repetir el cutover, la revocación del binding, el retiro de identidad ni la auditoría.
+  - con autorización `pending` existente → **200** con la misma autorización;
+  - con autorización `consumed` → **200** con el mismo resultado consumido, sin crear otra autorización ni repetir efectos.
+- Un `enrollment_request_id` distinto mientras existe otra autorización `pending` para la Installation → `409 rehost_conflict`.
+- Una autorización `expired` o `cancelled` no puede reutilizarse.
 - rehost sin identidad/binding activos, con `unregistered` o con `identity_status=retired` → `409 transition_conflict`.
 - rehost conserva el estado administrativo: `active → active`, `suspended → suspended`; nunca cambia a `active` por sí solo.
-- **Retry seguro por identidad natural:** mismo `installation_id` + mismo `enrollment_request_id` devuelve la misma autorización/resultado, no repite el cutover ni duplica auditoría. Otro `enrollment_request_id` mientras existe `pending` → `409 rehost_conflict`.
 - Un request cuyo EnrollmentRequest no pertenece a la Installation, no está `approved` o no tiene owner approval vigente → `409 rehost_conflict`.
 - completion sin autorización vigente → `409 enrollment_invalid` neutral.
 - segunda completion → `409`; la autorización ya está consumida.
+
+La idempotencia del authorize se serializa bloqueando primero el EnrollmentRequest concreto (`FOR UPDATE`) y reconsultando después la authorization asociada. Esto evita que dos retries concurrentes del mismo request ejecuten dos cutovers o produzcan un conflicto falso.
+
+**Mutation result vs. current read model:** un retry de `POST .../rehost` puede devolver una autorización `consumed`; el detalle (`GET`) sólo expone `rehost` mientras la autorización está `pending`.
 
 Cada mutación exitosa genera auditoría staff y, cuando aplique, evento de seguridad, atómicamente.
 
@@ -621,7 +628,7 @@ Cada mutación exitosa genera auditoría staff y, cuando aplique, evento de segu
 - `403 forbidden`: capability insuficiente.
 - `404 not_found`: Installation inexistente; neutral.
 - `409 transition_conflict`: transición no permitida.
-- `409 rehost_conflict`: autorización pending, completion duplicada o estado de identidad incompatible.
+- `409 rehost_conflict`: request distinto con otra autorización `pending`, completion duplicada o estado de identidad incompatible.
 - `409 rehost_expired`: autorización expirada al intentar consumir.
 - `409 product_unavailable`: Product inexistente, fuera de allowlist o `organization_product` no activa; mensaje neutral sin filtrar tenants.
 - `503 storage_error`.
@@ -650,7 +657,7 @@ Campos: staff, installation, organization, product (si existe), timestamp, befor
 
 ## C11. Plan de migración (`0009`, implementada en rama)
 
-Contenido previsto:
+Contenido implementado:
 
 1. `installation.product_id UUID NULL` + FK a `product`.
 2. FK compuesta `(organization_id, product_id) → organization_product`.
