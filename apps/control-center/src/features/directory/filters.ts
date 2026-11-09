@@ -1,18 +1,30 @@
-export type DirectoryFilterChange = { status?: string; search?: string };
+export type DirectoryFilterChange = {
+  status?: string;
+  search?: string;
+  identityStatus?: string;
+  organizationId?: string;
+  productId?: string;
+};
+
+const filterKeys = {
+  status: "status",
+  search: "search",
+  identityStatus: "identity_status",
+  organizationId: "organization_id",
+  productId: "product_id",
+} as const;
 
 export function applyDirectoryFilter(
   params: URLSearchParams,
   change: DirectoryFilterChange,
 ): URLSearchParams {
   const next = new URLSearchParams(params);
-  if (change.status !== undefined) {
-    if (change.status) next.set("status", change.status);
-    else next.delete("status");
-  }
-  if (change.search !== undefined) {
-    const search = change.search.trim();
-    if (search) next.set("search", search);
-    else next.delete("search");
+  for (const key of Object.keys(filterKeys) as (keyof DirectoryFilterChange)[]) {
+    if (!(key in change)) continue;
+    const raw = change[key];
+    const value = key === "search" ? raw?.trim() : raw;
+    if (value) next.set(filterKeys[key], value);
+    else next.delete(filterKeys[key]);
   }
   next.delete("cursor");
   return next;
