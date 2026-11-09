@@ -1,11 +1,12 @@
 # ADR-0009 — Control administrativo de instalaciones POS
 
-**Estado:** C5.0B APROBADO; C5.0C APROBADO; C5.1/C5.2 implementados y validados localmente. C5 no integrado en `main`.
+**Estado:** C5 CERRADO. C5.0B APROBADO; C5.0C APROBADO; C5.1/C5.2 implementados / validados en `main`; C5.3 APPROVED. PR #20 MERGED. `0009` integrada / validada en `main`.
+**Main:** `8a78105aaf6449a9791fa492333f024883f6b87c` (squash de PR #20, 2026-11-09)
 **Fecha:** 2026-11-09
 **Fase:** C5 — POS Control
 **Relacionado:** [ADR-0003](adr-0003-installation-enrollment.md), [ADR-0004](adr-0004-control-center-boundaries.md), [ADR-0007](adr-0007-product-project-model.md), [ADR-0008](adr-0008-control-center-frontend.md)
 
-> Este documento describe el contrato ratificado. La migración `0009` está implementada en la rama C5 y publicada en el PR #20, pero aún NO está integrada en `main`.
+> Este documento describe el contrato ratificado. La migración `0009` está implementada en la rama C5, integrada en `main` mediante el squash `8a78105` (PR #20, 2026-11-09) y validada por el CI de `main`.
 
 ## 1. Definición de Installation (D-C5-01)
 
@@ -410,14 +411,15 @@ Autorización; matriz de transiciones; atomicidad del rehost; consumo one-time d
 | D-C5-10 Sync boundary | APROBADA |
 | D-C5-11 Remote-control boundary | APROBADA |
 
-## 19. Estado del gate C5.0B
+## 19. Estado del gate C5.0B (actualizado tras el merge de PR #20)
 
 ```text
 C5.0B: APROBADO
 C5.0C: APROBADO
-C5.1: IMPLEMENTADO EN RAMA / VALIDADO LOCALMENTE + CI REMOTO
-C5.2: IMPLEMENTADO EN RAMA / VALIDADO LOCALMENTE + CI REMOTO
-0009: IMPLEMENTADA EN RAMA / NO integrada en main
+C5.1: IMPLEMENTADO / VALIDADO EN MAIN
+C5.2: IMPLEMENTADO / VALIDADO EN MAIN
+0009: INTEGRADA / VALIDADA EN MAIN
+main: 8a78105 (squash de PR #20, 2026-11-09)
 ```
 
 ---
@@ -655,7 +657,7 @@ Campos: staff, installation, organization, product (si existe), timestamp, befor
 - `clone_suspected` permanece conceptual; C5 no promete detección fiable.
 - Si se necesitan `rehost_authorized`/`rehost_expired`, se añadirán al CHECK de `commercial_security_event` en la migración futura.
 
-## C11. Plan de migración (`0009`, implementada en rama)
+## C11. Plan de migración (`0009`, integrada en main)
 
 Contenido implementado:
 
@@ -737,8 +739,9 @@ Acciones: Suspend / Reactivate / Rehost según capability
 ```text
 C5.0B: APROBADO
 C5.0C: APROBADO
-C5.1: IMPLEMENTADO EN RAMA / VALIDADO LOCALMENTE
-C5.2: IMPLEMENTADO EN RAMA / VALIDADO LOCALMENTE
-0009: IMPLEMENTADA EN RAMA / NO integrada en main
-commit/push: rama publicada en PR #20
+C5.1: IMPLEMENTADO / VALIDADO EN MAIN
+C5.2: IMPLEMENTADO / VALIDADO EN MAIN
+0009: INTEGRADA / VALIDADA EN MAIN
+main: 8a78105 (squash de PR #20, 2026-11-09)
+tag/release/deploy: NO
 ```
