@@ -1,0 +1,4 @@
+packages:
+  - apps/control-center
+allowBuilds:
+  esbuild: true

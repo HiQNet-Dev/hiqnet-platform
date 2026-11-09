@@ -78,6 +78,32 @@ jobs:
       - name: Validar SemVer sin publicar
         run: python3 -m unittest discover -s scripts -p 'test_*.py'
 
+  control-center:
+    name: Control Center (lint, typecheck, test, build, api, e2e)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.24.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - name: Instalar dependencias del Control Center
+        run: pnpm install --frozen-lockfile
+      - name: Lint, typecheck, tests, build y contrato OpenAPI
+        run: |
+          pnpm control:lint
+          pnpm control:typecheck
+          pnpm control:test
+          pnpm control:build
+          pnpm control:api:check
+      - name: Instalar Chromium para E2E
+        run: pnpm --filter @hiqnet/control-center exec playwright install --with-deps chromium
+      - name: E2E crítico del Control Center
+        run: pnpm --filter @hiqnet/control-center e2e
+
   supply-chain:
     name: Archivos prohibidos
     runs-on: ubuntu-latest

@@ -1,0 +1,13 @@
+{
+  "name": "hiqnet-platform-workspace",
+  "private": true,
+  "packageManager": "pnpm@11.24.0",
+
+  "scripts": {
+    "control:lint": "pnpm --filter @hiqnet/control-center lint",
+    "control:typecheck": "pnpm --filter @hiqnet/control-center typecheck",
+    "control:test": "pnpm --filter @hiqnet/control-center test",
+    "control:build": "pnpm --filter @hiqnet/control-center build",
+    "control:api:check": "pnpm --filter @hiqnet/control-center api:check"
+  }
+}
