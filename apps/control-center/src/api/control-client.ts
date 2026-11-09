@@ -8,6 +8,14 @@ export type Project = components["schemas"]["ProjectResponse"];
 export type ProjectPage = components["schemas"]["ProjectListResponse"];
 export type ProductStatus = components["schemas"]["ProductStatusDto"];
 export type ProductType = components["schemas"]["ProductTypeDto"];
+export type OrganizationStatus = components["schemas"]["OrganizationStatusDto"];
+export type AccountStatus = components["schemas"]["AccountStatusDto"];
+export type ControlOrganization = components["schemas"]["ControlOrganizationSummaryResponse"];
+export type ControlOrganizationPage = components["schemas"]["ControlOrganizationListResponse"];
+export type ControlOrganizationDetail = components["schemas"]["ControlOrganizationDetailResponse"];
+export type ControlAccount = components["schemas"]["ControlAccountSummaryResponse"];
+export type ControlAccountPage = components["schemas"]["ControlAccountListResponse"];
+export type ControlAccountDetail = components["schemas"]["ControlAccountDetailResponse"];
 
 export class ControlApiError extends Error {
   constructor(public readonly status: number, message: string) {
@@ -54,6 +62,24 @@ export const controlClient = {
   },
   product: (key: string) => request<Product>(`/products/${encodeURIComponent(key)}`),
   projects: (productKey: string) => request<ProjectPage>(`/projects?product_key=${encodeURIComponent(productKey)}&limit=50`),
+  organizations: (filters: { cursor?: string; status?: OrganizationStatus; search?: string }) => {
+    const search = new URLSearchParams();
+    search.set("limit", "50");
+    if (filters.cursor) search.set("cursor", filters.cursor);
+    if (filters.status) search.set("status", filters.status);
+    if (filters.search) search.set("search", filters.search);
+    return request<ControlOrganizationPage>(`/organizations?${search.toString()}`);
+  },
+  organization: (id: string) => request<ControlOrganizationDetail>(`/organizations/${encodeURIComponent(id)}`),
+  accounts: (filters: { cursor?: string; status?: AccountStatus; search?: string }) => {
+    const search = new URLSearchParams();
+    search.set("limit", "50");
+    if (filters.cursor) search.set("cursor", filters.cursor);
+    if (filters.status) search.set("status", filters.status);
+    if (filters.search) search.set("search", filters.search);
+    return request<ControlAccountPage>(`/accounts?${search.toString()}`);
+  },
+  account: (id: string) => request<ControlAccountDetail>(`/accounts/${encodeURIComponent(id)}`),
 };
 
 export const controlSessionEvents = { expired: sessionExpiredEvent, restored: sessionRestoredEvent };
