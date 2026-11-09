@@ -49,16 +49,27 @@ Cada fase debe compilar, testear, exponer OpenAPI, usar migraciones propias y pa
 
 ## C5 — POS control module
 
-- Overview, Organizations, Installations del producto POS.
-- Licenses/Trial/Subscriptions sólo cuando existan APIs reales.
+- **Estado: CERRADO** (integrado en `main` como `8a78105`, 2026-11-09, mediante PR #20; `0009` validada con PostgreSQL 17 real y CI de `main`).
+- Installation registry y read models (list/detail current-only).
+- Organization ↔ Installation ↔ Product.
+- Enrollment product-aware (`product_key → product_id`) con atribución write-once.
+- Suspend / reactivate administrativos.
+- Rehost con doble autoridad y autorización ligada a `enrollment_request_id`.
+- Capabilities `installations.read` / `installations.manage` / `installations.rehost`.
+- Staff audit y security events.
+- Control API y contrato OpenAPI.
+- Control Center Installations UI (list/detail, filtros, paginación, rehost).
+- Fuera de C5: billing, pagos, sync control, releases, deployments, terminal remoto, consola de BD e impersonación de clientes.
 
 ## C6 — Audit / security center
 
+- **Estado: NO INICIADO / PENDIENTE.**
 - Pantalla de auditoría staff, eventos de seguridad, filtros.
 - Sin datos inventados; sin secretos.
 
 ## C7 — Environments / releases / deployments
 
+- **Estado: NO INICIADO / PENDIENTE.**
 - Sólo cuando exista infraestructura real que representar.
 - Sin botones de despliegue libre ni consolas productivas.
 
