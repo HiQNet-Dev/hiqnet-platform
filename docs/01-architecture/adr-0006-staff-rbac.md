@@ -101,7 +101,7 @@ Esta sección complementa §5 y, una vez ratificada, prevalecerá sobre cualquie
 - **`security.manage`:** reservada para una futura superficie mutable de seguridad. C6 inicial es read-only y no la consume; no concede acceso adicional a los read models de C6 ni concede `installations.rehost`, y no implica incident management ni configuración de seguridad.
 - **`security_auditor`:** conserva `security.read`, `security.manage` y `audit.read`; en C6 sólo usa las dos de lectura. No tiene `installations.rehost`.
 - **4-eyes:** se difiere a la futura fase que introduzca una mutación administrativa o de seguridad suficientemente crítica. C6 es read-only y no requiere doble aprobación.
-- **Dominio comercial Beta:** no se crean capabilities nuevas. Planes usan `products.read`/`products.manage`; suscripciones, entitlements y OrganizationProduct usan `organizations.read`/`organizations.manage`. Ver [ADR-0011](adr-0011-commercial-domain.md).
+- **Dominio comercial Beta:** no se crean capabilities nuevas. Planes usan `products.read`/`products.manage`; suscripciones y entitlements usan `subscriptions.read`/`subscriptions.manage`; OrganizationProduct usa `organizations.manage`. Ver [ADR-0011](adr-0011-commercial-domain.md).
 - **Lectura de auditoría/seguridad:** `security.read` y `audit.read` se mantienen para todos los roles según la matriz ratificada. Es un riesgo de confidencialidad interna aceptado para la Beta controlada, condicionado a metadata saneada y superficie staff. Ver [Seguridad Beta](../02-development/platform-beta-security.md).
 
 En caso de conflicto con la redacción histórica de §5, prevalecerá esta enmienda una vez ratificada; PR #22 (C6) alinea la redacción anterior.

@@ -42,6 +42,7 @@ Reglas:
 3. Una sesión comercial no concede privilegios administrativos.
 4. Una instalación no representa un usuario.
 5. `devAdminToken` es LEGACY/DEV y no es un mecanismo de producción.
+6. El Customer Portal expone un read-only comercial por organización (`/api/v1/organizations/{id}/products`) con `commercialSession`; no reutiliza `/control` ni muestra datos de otros clientes.
 
 ## 4. Monolito modular
 
@@ -116,6 +117,7 @@ Reglas de frontera:
 - Una instalación no es un usuario ni una licencia.
 - `organization_product.status` habilita un producto; no concede derechos comerciales por sí solo.
 - `organization_product.entitlements` es metadata extensible en C4; en Beta la autoridad comercial es `Subscription + Plan` y el resolver de entitlements.
+- Capabilities comerciales: planes → `products.read`/`products.manage`; suscripciones/entitlements → `subscriptions.read`/`subscriptions.manage`; OrganizationProduct → `organizations.manage`.
 
 El contrato detallado está en [ADR-0011](adr-0011-commercial-domain.md).
 

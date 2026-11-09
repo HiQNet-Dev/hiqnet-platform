@@ -25,6 +25,32 @@
 | DEV | `devAdminToken`, `ALLOW_DEV_ISSUANCE`, bootstrap DEV | Debe deshabilitarse en producción |
 | HTTPS | Esperado en despliegue; cookie `Secure` | Configuración de despliegue |
 
+### 1.1 Perfiles de exposición
+
+| Perfil | Alcance | Decisión |
+|---|---|---|
+| **Beta interna restringida** | Sólo personal staff; sin clientes externos | Permitida con las condiciones comunes de §5.1 |
+| **Beta externa** | Customer Portal accesible a clientes invitados con datos reales | Permitida sólo con §5.1 + §5.2 + aceptación explícita de MFA pendiente |
+| **Producción pública** | Autoservicio o audiencia amplia | **No es Beta**; exige MFA/step-up, reducción de read caps, retención, escaneo de dependencias y hardening de `TRUNCATE` |
+
+Un riesgo aceptado para la Beta interna **no** se acepta automáticamente para la Beta externa ni para producción.
+
+### 1.2 Requisitos obligatorios por perfil
+
+| Control | Interna | Externa | Pública |
+|---|---|---|---|
+| HTTPS/TLS | Obligatorio | Obligatorio | Obligatorio |
+| HSTS, CSP, XFO, XCTO, Referrer-Policy | Obligatorio | Obligatorio | Obligatorio |
+| Cookies `Secure`, `HttpOnly`, `SameSite` y `Origin` exacto | Obligatorio | Obligatorio | Obligatorio |
+| Revocación de sesión y TTL acotado | Obligatorio | Obligatorio (TTL más corto) | Obligatorio |
+| Aislamiento tenant y 404 neutral | Obligatorio | Obligatorio | Obligatorio |
+| Configuración productiva sin DEV | Obligatorio | Obligatorio | Obligatorio |
+| Auditoría y metadata saneada | Obligatorio | Obligatorio | Obligatorio |
+| Migraciones y backup/restore validados | Obligatorio | Obligatorio | Obligatorio |
+| MFA/step-up | Pendiente aceptado | Pendiente con compensación + aceptación escrita | **Obligatorio** |
+| Reducción de `security.read`/`audit.read` | Recomendada | Recomendada | **Obligatoria** |
+| Retención, `TRUNCATE`, escaneo de dependencias | Diferido | Diferido con aceptación | **Obligatorio** |
+
 ## 2. Revisión de `security.read` y `audit.read`
 
 Hecho actual:
@@ -63,20 +89,20 @@ Una cuenta staff comprometida puede leer los datos permitidos por su rol, ejecut
 
 ### 2.3 Aceptación explícita de riesgos
 
-- **S2 (media):** aceptado para Beta restringida con metadata saneada y audiencia interna; no aceptado para contratistas o audiencia amplia.
-- **S1 (alta):** aceptado para Beta controlada con las mitigaciones existentes; **no aceptado** para producción pública sin MFA/step-up o mitigación equivalente.
-- **S3/S4/S12/S16/S19/S20:** bloqueantes; no se aceptan sin mitigación verificable.
-- **S5/S6/S7/S8/S9:** diferidos con justificación y revisión en B9.
+- **S2 (media):** aceptado para staff interno con metadata saneada; no aceptado para contratistas o audiencia amplia; el Customer Portal no accede a auditoría/seguridad.
+- **S1 (alta):** aceptado para Beta interna con las mitigaciones existentes; para Beta externa sólo con §5.2 y aceptación escrita; **no aceptado** para producción pública sin MFA/step-up o mitigación equivalente.
+- **S3/S4/S5/S12/S16/S19/S20:** bloqueantes; no se aceptan sin mitigación verificable.
+- **S6/S7/S8/S9:** diferidos con justificación y revisión en B9.
 
 ## 3. Matriz de riesgos
 
 | ID | Riesgo | Impacto | Probabilidad | ¿Bloquea Beta? | Mitigación / decisión |
 |---|---|---|---|---|---|
-| S1 | Robo de sesión staff sin MFA | Alto | Media | No para Beta controlada; sí antes de producción pública | Sesión corta, revocación, HttpOnly/Strict, Origin, lockout, rate limit; MFA posterior |
-| S2 | `support`/`read_only` leen auditoría/seguridad | Medio | Media | No con datos saneados | Mantener matriz; sanear metadata; revisar antes de ampliar audiencia |
+| S1 | Robo de sesión staff sin MFA | Alto | Media | No para Beta interna; externa sólo con compensación y aceptación; **sí** para producción pública | Sesión corta, revocación, HttpOnly/Strict, Origin, lockout, rate limit; externa: invitación, monitorización, TTL corto y aceptación escrita; pública: MFA/step-up |
+| S2 | `support`/`read_only` leen auditoría/seguridad | Medio | Media | No con datos saneados y staff interno | Mantener matriz; reducir antes de contratistas/audiencia amplia; el Customer Portal no accede a auditoría |
 | S3 | Endpoints DEV activos en producción | Alto | Baja con disciplina | **Sí** | Checklist de producción: token vacío, `ALLOW_DEV_ISSUANCE=false`, docs off, bootstrap off |
 | S4 | Custodia de clave de licencia / firma DEV | Alto | Media | No si no hay emisión productiva | No emitir en producción; ADR de custodia antes de POS |
-| S5 | Sin CSP/headers de seguridad en la app | Medio | Media | No para Beta interna; sí antes de producción pública | Configurar CSP, HSTS, XFO, XCTO, Referrer-Policy en proxy/static host |
+| S5 | Sin CSP/headers de seguridad en la app | Medio | Media | **Sí** para cualquier Beta desplegada | Configurar CSP, HSTS, XFO, XCTO, Referrer-Policy en proxy/static host (§5.1) |
 | S6 | `TRUNCATE` no bloqueado por triggers | Medio | Baja | No | Hardening de privilegios DB; backups; post-Beta |
 | S7 | Sin retención de auditoría | Bajo/Medio | Alta a largo plazo | No | Política de retención/particionado post-Beta |
 | S8 | Sin escaneo de dependencias/secretos completo | Medio | Media | No | Añadir `cargo audit`/`pnpm audit` o aceptar formalmente |
@@ -98,7 +124,7 @@ Una cuenta staff comprometida puede leer los datos permitidos por su rol, ejecut
 ### Bloqueantes de Beta
 
 1. Configuración productiva segura (S3, S16).
-2. TLS y cookies seguras; Origin exacto.
+2. TLS, cookies seguras, Origin exacto y headers HSTS/CSP/XFO/XCTO/Referrer-Policy (S5).
 3. Aislamiento tenant verificado (S12).
 4. Migraciones reproducibles y backup/restore validado (S19, S20).
 5. Sin emisión productiva de licencias sin custodia aprobada (S4, S17).
@@ -106,16 +132,17 @@ Una cuenta staff comprometida puede leer los datos permitidos por su rol, ejecut
 
 ### Diferibles con justificación
 
-- MFA/step-up (S1): Beta interna controlada; documentar y planificar.
-- CSP/headers (S5): se configuran en despliegue; bloquear producción pública, no Beta interna.
+- MFA/step-up (S1): Beta interna aceptada; Beta externa requiere compensación de §5.2 y aceptación escrita; producción pública requiere MFA.
 - `TRUNCATE`/privilegios DB (S6): riesgo bajo con backups y acceso restringido.
 - Retención (S7): no afecta funcionalidad; riesgo de crecimiento.
 - Escaneo de dependencias (S8, S18): añadir en B9 o aceptar formalmente.
 - Staff auth events faltantes (S9): C6 los documenta; no bloquean la Beta.
-- Restricción de `security.read`/`audit.read` (S2): aceptar para Beta interna; revisar antes de ampliar.
-- MFA, 4-eyes, incident management, SIEM: fuera de alcance.
+- Restricción de `security.read`/`audit.read` (S2): aceptar para staff interno; reducir antes de contratistas/audiencia amplia.
+- 4-eyes, incident management, SIEM: fuera de alcance.
 
 ## 5. Condiciones de seguridad para declarar Beta
+
+### 5.1 Comunes (interna y externa)
 
 - [ ] `HIQNET_PLATFORM_ENV=production`.
 - [ ] `HIQNET_PLATFORM_COOKIE_SECURE=true`.
@@ -125,11 +152,35 @@ Una cuenta staff comprometida puede leer los datos permitidos por su rol, ejecut
 - [ ] `HIQNET_PLATFORM_ENABLE_DOCS=false` salvo decisión explícita.
 - [ ] `HIQNET_PLATFORM_DEV_BOOTSTRAP` y `HIQNET_PLATFORM_DEV_STAFF_BOOTSTRAP` deshabilitados.
 - [ ] TLS terminado en proxy; HSTS, CSP, XFO, XCTO y Referrer-Policy configurados.
-- [ ] Sin emisión productiva de licencias hasta aprobar custodia de clave.
-- [ ] Auditoría/seguridad sin secretos y con metadata saneada.
-- [ ] Backup/restore ensayado en base desechable.
+- [ ] Cookies `Secure`, `HttpOnly`, `SameSite` y `Path` correctos en staff y comercial.
+- [ ] Revocación de sesión y TTL acotado verificados.
+- [ ] Aislamiento tenant y 404 neutral verificados.
 - [ ] Migración desde base limpia e incremental verificada.
-- [ ] Riesgos S1/S2/S5/S6/S7/S8/S9 aceptados por escrito o mitigados.
+- [ ] Backup/restore ensayado en base desechable.
+- [ ] Auditoría/seguridad sin secretos y con metadata saneada.
+- [ ] Sin emisión productiva de licencias hasta aprobar custodia de clave.
+- [ ] Riesgos S5/S6/S7/S8/S9 aceptados por escrito o mitigados.
+
+### 5.2 Externas (Customer Portal con clientes reales)
+
+- [ ] Acceso por invitación; tenants limitados; sin autoservicio de alta.
+- [ ] Monitorización de fallos de login y eventos de seguridad (C6).
+- [ ] TTL de sesión más corto que en la Beta interna.
+- [ ] Contacto de incidente y procedimiento de revocación de sesiones.
+- [ ] S1 aceptado por escrito con compensación (invitación, monitorización, TTL); MFA/step-up planificado.
+- [ ] S2: staff interno; reducción de `security.read`/`audit.read` recomendada antes de contratistas o audiencia amplia.
+- [ ] El Customer Portal no accede a `/control`, auditoría/seguridad ni datos de otras organizaciones.
+- [ ] Productos, plan, suscripción y entitlements se exponen en read-only y sin datos de pago.
+- [ ] Sin autoservicio de pagos, cambios de plan o cancelaciones.
+
+### 5.3 Pendientes documentados
+
+- MFA/step-up.
+- Reducción de `security.read`/`audit.read` para audiencias amplias.
+- Retención/particionado de auditoría.
+- Hardening de `TRUNCATE`/privilegios DB.
+- Escaneo de dependencias/secretos.
+- Writers faltantes de `staff_auth_event`.
 
 ## 6. Relación con POS
 

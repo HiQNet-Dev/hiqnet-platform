@@ -17,7 +17,7 @@ Platform Beta 0.1.0 es una plataforma administrativa **web** que permite a HiQNe
 5. asignar y transicionar suscripciones manualmente;
 6. resolver derechos efectivos;
 7. consultar instalaciones cuando el producto las use;
-8. ofrecer un Customer Portal para que un cliente consulte y administre sus recursos;
+8. ofrecer un Customer Portal para que un cliente consulte y administre sus recursos, incluidos productos contratados, plan, suscripción y entitlements relevantes en modo read-only;
 9. consultar auditoría y seguridad;
 10. operar el flujo completo con PostgreSQL real, no sólo mocks.
 
@@ -57,10 +57,11 @@ No hay módulos RETIRAR.
 | B3 | C6.1 backend | Migración `0010` (índices), read models, endpoints Audit/Security/Staff Auth, OpenAPI, tests | Contrato ADR-0010 implementado; RBAC y sanitización verdes |
 | B4 | OrganizationProduct | Backend activate/deactivate + UI en Control Center | `organizations.manage`; auditoría; sin DELETE; UI con estados |
 | B5 | C6.2 frontend | Módulos Audit y Security (Platform/Staff Auth) | Rutas, filtros, detalle, 401/403/404, 5 viewports |
-| B6 | Dominio comercial | Migración `0011+`: plan, subscription, subscription_event, entitlements; backend | ADR-0011 implementado; transiciones auditadas, trial único, expiración lógica e idempotencia |
+| B6 | Dominio comercial | Migración `0011+`: plan, subscription, subscription_event, entitlements; backend | ADR-0011 implementado; transiciones auditadas, trial único, expiración lógica, plan inmutable con subscriptions e idempotencia |
 | B7 | UI comercial | Plans y Subscriptions en Control Center | Crear plan, asignar suscripción, suspender/reactivar/cancelar/renovar |
+| B7b | Customer Portal comercial read-only | API `/organizations/{id}/products` y vista Portal con plan/suscripción/entitlements | Membresía activa, 404 neutral, sin endpoints staff ni datos de otras organizaciones |
 | B8 | Escenario E2E full-stack | Pasos de §4 con frontend, Axum y PostgreSQL reales | Escenario §4 completo; aislamiento cross-tenant |
-| B9 | Validación Beta | Migración limpia, backup/restore, seguridad, rendimiento, E2E | Checklist §5 verde |
+| B9 | Validación Beta | Migración limpia, backup/restore, seguridad, rendimiento, E2E | Checklist §5 y seguridad §5.1/§5.2 verdes |
 | B10 | Cierre documental | README, runbook deploy/reversión, notas de Beta, transición POS | Revisión y autorización de release |
 
 ### P1 — Necesarios para la calidad de Beta
@@ -69,7 +70,7 @@ No hay módulos RETIRAR.
 |---|---|---|
 | B11 | Segundo producto sintético | Producto no-POS con plan, suscripción y entitlements; sin instalaciones |
 | B12 | Evidencia Playwright | MCP si está disponible; si no, CLI con evidencia documentada |
-| B13 | Seguridad de despliegue | TLS, headers, configuración productiva, secretos, backups |
+| B13 | Seguridad de despliegue | TLS, headers, configuración productiva, secretos, backups; perfiles interno/externo |
 | B14 | Escaneo de dependencias/secretos | `cargo audit`/`pnpm audit` o decisión documentada |
 | B15 | Docs de Portal | `docs/02-development/portal.md` actualizado en `main` |
 
@@ -108,7 +109,7 @@ Con datos persistentes de prueba y servicios reales:
 6b. Si se prueba un trial, se verifica que no puede repetirse para el mismo par organización-producto y que al expirar deja de conceder derechos aunque el `status` persistido siga `active`.
 7. Se registra o vincula una instalación **sólo si el producto lo permite** (para `demo-service`, el flujo debe funcionar sin instalación; para `pos`, con instalación).
 8. El administrador consulta todo desde Control Center.
-9. Un cliente autorizado consulta sus datos desde Customer Portal.
+9. Un cliente autorizado consulta sus productos contratados, plan, estado de suscripción y entitlements desde Customer Portal.
 10. Otro cliente intenta acceder a la organización ajena y recibe rechazo neutral.
 11. Las mutaciones relevantes dejan auditoría staff y eventos de seguridad.
 12. Los resultados persisten tras reiniciar API y PostgreSQL.
@@ -127,6 +128,7 @@ El escenario se ejecuta con API Axum + PostgreSQL reales. Los mocks no son evide
 - [ ] Planes y suscripciones se administran manualmente.
 - [ ] Entitlements efectivos se resuelven correctamente.
 - [ ] Customer Portal autentica y consulta recursos propios.
+- [ ] Customer Portal muestra productos contratados, plan, estado de suscripción y entitlements sin datos de otras organizaciones.
 - [ ] Enrolamiento validado en entorno de pruebas.
 - [ ] Audit/Security ofrecen consultas mínimas.
 - [ ] Un producto no-POS funciona sin instalaciones/licencias offline.
@@ -169,11 +171,12 @@ El escenario se ejecuta con API Axum + PostgreSQL reales. Los mocks no son evide
 | 5 | B5 C6.2 frontend | B3 | No | Control Center |
 | 6 | B6 Commercial backend + `0011+` | B3/B4/ADR-0011 | `0011+` | API/OpenAPI |
 | 7 | B7 Commercial UI | B4/B6 | No | Control Center |
-| 8 | B8 E2E full-stack | B2/B5/B7 | No | Bajo |
+| 7b | B7b Portal comercial read-only | B6/B7/B2 | No | Portal/API |
+| 8 | B8 E2E full-stack | B2/B5/B7/B7b | No | Bajo |
 | 9 | B9 Validación + docs | B8 | No | Bajo |
 | 10 | B10 Cierre/release | B9 + autorización | No | Bajo |
 
-Orden de dependencia confirmado: **PR #22 → B1 → B2 → B3 → B4 → B6 → B5/B7 → B8 → B9 → B10**. B5 (C6.2 frontend) puede ejecutarse en paralelo con B4 tras B3; B6 no se adelanta a B4.
+Orden de dependencia confirmado: **PR #22 → B1 → B2 → B3 → B4 → B6 → B5/B7 → B7b → B8 → B9 → B10**. B5 (C6.2 frontend) puede ejecutarse en paralelo con B4 tras B3; B6 no se adelanta a B4.
 
 PR #22 (contrato C6) no es dependencia técnica de B1/B2; se ordena antes para estabilizar el contrato. Si PR #22 se retrasa, B1/B2 pueden avanzar sin C6.
 
