@@ -63,9 +63,17 @@ Cada fase debe compilar, testear, exponer OpenAPI, usar migraciones propias y pa
 
 ## C6 — Audit / security center
 
-- **Estado: NO INICIADO / PENDIENTE.**
-- Pantalla de auditoría staff, eventos de seguridad, filtros.
-- Sin datos inventados; sin secretos.
+- **Estado: NO IMPLEMENTADO.** C6.0A (inventario) COMPLETADO / VALIDADO; C6.0B (contrato) APROBADO en [ADR-0010](adr-0010-audit-security-center.md). C6.1 no iniciado.
+- Audit = `staff_audit_event`.
+- Security = `commercial_security_event` + `staff_auth_event`, como datasets separados (sin unión física ni pseudo-evento).
+- C6 inicial READ ONLY: sin acknowledge, triage mutable, incidentes ni configuración de seguridad.
+- Capabilities de lectura: `audit.read` y `security.read`; `security.manage` queda reservada sin superficie C6.
+- API: `/control/audit`, `/control/security-events`, `/control/staff-auth-events` (list/detail).
+- Migration `0010` requerida sólo para índices de lectura; diseñada, no creada.
+- Frontend: módulos Audit y Security (con tabs Platform events / Staff authentication).
+- Sin datos inventados: no severity, risk score, IP intelligence, geolocation ni clone detection fiable.
+- Sin retención/purga/particionado (política no definida).
+- C7 sigue NO INICIADO / DIFERIDO.
 
 ## C7 — Environments / releases / deployments
 
