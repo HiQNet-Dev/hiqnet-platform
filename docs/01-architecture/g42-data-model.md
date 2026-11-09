@@ -136,7 +136,7 @@ Reglas de transición (aplicadas por SQL, no solo en Rust):
 - `approved → completed` solo con `consumed_at` fijado, firma válida y **revalidación vigente** de organización activa, cuenta activa, membresía activa y rol `owner`; todo en la misma transacción que el binding.
 - `pending|approved → expired|cancelled` sin consumo.
 - `completed`, `expired`, `cancelled` son terminales.
-- Si la revalidación falla, no hay transición: la solicitud permanece `approved` hasta expirar y se registra un evento de seguridad.
+- Si la revalidación falla, no hay transición: la solicitud permanece `approved` hasta expirar y se registra un evento de seguridad en una transacción independiente (`authorization_revoked_during_proof` u otro evento equivalente). Ese registro es best-effort: si falla, el enrolamiento sigue denegado y el fallo se registra con tracing sanitizado, pero no puede convertir la ausencia de telemetría en autorización ni dejar una vinculación parcial.
 
 Retención propuesta: 90 días tras el estado terminal, salvo obligación de auditoría; los eventos de auditoría asociados se conservan.
 

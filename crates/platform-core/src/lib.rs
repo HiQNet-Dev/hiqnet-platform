@@ -6,6 +6,7 @@
 
 pub mod auth;
 pub mod commercial;
+pub mod enrollment;
 pub mod error;
 pub mod ids;
 pub mod installation;

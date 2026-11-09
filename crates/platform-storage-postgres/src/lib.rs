@@ -4,10 +4,12 @@ use sqlx::PgPool;
 
 pub mod auth;
 pub mod commercial;
+pub mod enrollment;
 pub mod repository;
 
 pub use auth::PgAuthRepository;
 pub use commercial::PgCommercialRepository;
+pub use enrollment::PgEnrollmentRepository;
 pub use repository::PgRepository;
 
 #[derive(Debug, thiserror::Error)]

@@ -247,6 +247,13 @@ Orden de bloqueos (compatible con P02.3):
 
 Ninguna ruta bloquea la organización y después la solicitud, por lo que no se crea un ciclo con la administración de membresías.
 
+Bloqueo explícito de la cuenta aprobadora y decisión transaccional:
+
+- La comprobación `commercial_account.status = 'active'` no puede leerse una sola vez fuera de la transacción ni servir como autoridad final. La `/proof` debe revalidarla después de bloquear la solicitud y la organización.
+- Para sincronizar una deshabilitación concurrente basta `SELECT ... FROM commercial_account WHERE id = $approved_by_account_id AND status = 'active' FOR SHARE`; `FOR KEY SHARE` no es suficiente, porque el UPDATE de `status` adquiere `FOR NO KEY UPDATE` y sólo `FOR SHARE` (o un modo superior) bloquea ese tipo de escritura. Se elige `FOR SHARE` por ser el mínimo compatible con los bloqueos ya usados por membresías, sin introducir un lock más fuerte del necesario.
+- El orden de locks en `/proof` es, además de los índices de identidad/binding, `enrollment_request` → `organization` → `commercial_account` → `organization_membership` → identidad/binding. No se bloquea `organization` después de la cuenta ni se bloquea la cuenta antes que la solicitud; así no se invierte el orden de P02.3 (cuenta → organización en creación de organización, organización → membresía en administración de membresías).
+- `FOR SHARE` sobre la cuenta permite leer otros bloqueos concurrentes pero impide el `UPDATE` de deshabilitación hasta que la transacción concluya; si la deshabilitación ya confirmó antes de la relectura, el predicado falla y la prueba se rechaza.
+
 Predicados mínimos de la transacción de `/proof`:
 
 ```sql
@@ -281,6 +288,8 @@ Si la relectura no devuelve fila, se revierte todo y se responde `409 enrollment
 Semántica de carreras:
 
 - Dos pruebas concurrentes: la primera adquiere el bloqueo de solicitud y consume; la segunda, al esperar y releer, ve `consumed_at` no nulo y recibe `409`.
+- Auditoría y evento de seguridad son cosas distintas: la auditoría `installation_enrolled` forma parte de la transacción exitosa y se revierte si falla el commit. El evento `authorization_revoked_during_proof` corresponde a un intento rechazado y se intenta escribir en una transacción separada después del rollback de la prueba; si no se persiste, el enrolamiento permanece denegado y el fallo sólo se registra con tracing sanitizado. Un fallo de telemetría nunca se interpreta como autorización para completar el binding.
+- Si el registro best-effort del evento de seguridad falla, la respuesta sigue siendo `409`; la operación no se repite a posteriori para completarla.
 - Revocación mientras `/proof` espera el bloqueo de organización: al obtenerlo, la siguiente sentencia usa una instantánea nueva (READ COMMITTED) y la relectura de membresía falla; se revierte y se registra `authorization_revoked_during_proof`.
 - Si `/proof` confirma antes del commit de la revocación, el binding queda; la revocación posterior no reescribe el historial y las consultas/licencias futuras vuelven a comprobar la autoridad.
 - Cancelación concurrente con prueba: gana quien confirme primero; el otro recibe `409`/`410`.
@@ -327,13 +336,15 @@ flowchart TD
 
 ## 12. Rate limiting propuesto
 
-| Endpoint | Límite propuesto | Estado |
+| Endpoint | Límite implementado | Estado |
 |---|---|---|
-| Inicio | 10/min por IP y 5/min por `installation_id` | PENDIENTE |
-| Aprobación | 20/min por cuenta | PENDIENTE |
-| Prueba | 10/min por IP y 5/min por solicitud | PENDIENTE |
+| Inicio | configurable por peer TCP (`ConnectInfo`) | IMPLEMENTADO |
+| Aprobación | configurable por `account_id` | IMPLEMENTADO |
+| Prueba | configurable por peer TCP (`ConnectInfo`) | IMPLEMENTADO |
 
-Los valores son técnicos y no representan cuotas comerciales.
+Los valores son técnicos y no representan cuotas comerciales. No se confían `X-Forwarded-For` ni `Forwarded` sin lista explícita de proxies. El limitador es por instancia; G4.2-E evaluará uno distribuido.
+
+Riesgo registrado: el `user_code` humano tiene del orden de 40 bits de entropía y se indexa mediante SHA-256. No se cambia silenciosamente a HMAC/pepper en G4.2-B; queda pendiente evaluar un blind index con secreto de servidor. `device_code` y `nonce` tienen alta entropía y no comparten esa limitación.
 
 ## 13. Relación con Trial y licencias
 

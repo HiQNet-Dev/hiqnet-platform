@@ -1,7 +1,7 @@
 # ADR-0003 — Identidad de instalaciones y enrolamiento seguro POS ↔ Platform
 
 - **Propósito:** definir la identidad criptográfica de una instalación y el protocolo propuesto para vincularla a una organización comercial.
-- **Estado:** PROPOSED — pendiente de aprobación del titular.
+- **Estado:** ACCEPTED (ratificado para el alcance aprobado de G4.2-B; decisiones de fases posteriores se mantienen PENDING donde corresponda).
 - **Fecha:** 2026-11-08.
 - **Alcance:** diseño documental G4.2-A. No implementa endpoints, migraciones ni cambios en el POS.
 - **Decisiones:** alternativas y recomendaciones en §6; pendientes en §12.

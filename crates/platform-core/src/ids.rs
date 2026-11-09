@@ -57,6 +57,10 @@ id_type!(
     CommercialAccountId,
     "Identificador de una cuenta comercial; no es un usuario POS."
 );
+id_type!(
+    EnrollmentRequestId,
+    "Identificador de una solicitud de enrolamiento de instalación."
+);
 id_type!(InstallationId, "Identificador de una instalación del POS.");
 id_type!(
     GrantId,

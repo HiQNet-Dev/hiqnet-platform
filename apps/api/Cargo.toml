@@ -36,3 +36,5 @@ utoipa-swagger-ui.workspace = true
 
 [dev-dependencies]
 tower = { version = "0.5", features = ["util"] }
+ed25519-dalek.workspace = true
+rand_core.workspace = true
