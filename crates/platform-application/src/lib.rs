@@ -10,6 +10,7 @@ pub mod error;
 pub mod ports;
 pub mod security;
 pub mod service;
+pub mod staff;
 
 pub use auth::{AuthRepository, AuthService};
 pub use enrollment::{
@@ -24,3 +25,4 @@ pub use ports::{
     RegisterInstallationRequest, SharedRepository, SharedSigner,
 };
 pub use service::{IssuedLicenseView, PlatformService};
+pub use staff::{StaffAuthService, StaffRepository};

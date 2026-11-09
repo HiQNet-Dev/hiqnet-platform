@@ -6,11 +6,13 @@ pub mod auth;
 pub mod commercial;
 pub mod enrollment;
 pub mod repository;
+pub mod staff;
 
 pub use auth::PgAuthRepository;
 pub use commercial::PgCommercialRepository;
 pub use enrollment::PgEnrollmentRepository;
 pub use repository::PgRepository;
+pub use staff::PgStaffRepository;
 
 #[derive(Debug, thiserror::Error)]
 pub enum StorageError {
