@@ -285,6 +285,197 @@
         ]
       }
     },
+    "/api/v1/control/accounts": {
+      "get": {
+        "tags": [
+          "Control Center"
+        ],
+        "summary": "Lista global de cuentas comerciales",
+        "operationId": "listControlAccounts",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "maximum": 100,
+              "minimum": 1
+            },
+            "example": 50
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "search",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Cuentas paginadas por antigüedad e identificador",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ControlAccountListResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Filtro, búsqueda o cursor inválido",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sesión staff requerida",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Capability insuficiente",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Almacenamiento no disponible",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "staffSession": []
+          }
+        ]
+      }
+    },
+    "/api/v1/control/accounts/{account_id}": {
+      "get": {
+        "tags": [
+          "Control Center"
+        ],
+        "summary": "Obtiene una cuenta comercial global",
+        "operationId": "getControlAccount",
+        "parameters": [
+          {
+            "name": "account_id",
+            "in": "path",
+            "description": "UUID de la cuenta comercial",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Cuenta con sus memberships históricas",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ControlAccountDetailResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "UUID inválido",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sesión staff requerida",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Capability insuficiente",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Cuenta no encontrada",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Almacenamiento no disponible",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "staffSession": []
+          }
+        ]
+      }
+    },
     "/api/v1/control/auth/login": {
       "post": {
         "tags": [
@@ -399,6 +590,197 @@
           },
           "401": {
             "description": "Sesión staff inválida, expirada o revocada",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Almacenamiento no disponible",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "staffSession": []
+          }
+        ]
+      }
+    },
+    "/api/v1/control/organizations": {
+      "get": {
+        "tags": [
+          "Control Center"
+        ],
+        "summary": "Lista global de organizaciones",
+        "operationId": "listControlOrganizations",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "maximum": 100,
+              "minimum": 1
+            },
+            "example": 50
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "search",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Organizaciones paginadas por antigüedad e identificador",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ControlOrganizationListResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Filtro, búsqueda o cursor inválido",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sesión staff requerida",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Capability insuficiente",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Almacenamiento no disponible",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "staffSession": []
+          }
+        ]
+      }
+    },
+    "/api/v1/control/organizations/{organization_id}": {
+      "get": {
+        "tags": [
+          "Control Center"
+        ],
+        "summary": "Obtiene una organización global",
+        "operationId": "getControlOrganization",
+        "parameters": [
+          {
+            "name": "organization_id",
+            "in": "path",
+            "description": "UUID de la organización",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Organización con memberships y products",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ControlOrganizationDetailResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "UUID inválido",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sesión staff requerida",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Capability insuficiente",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Organización no encontrada",
             "content": {
               "application/json": {
                 "schema": {
@@ -2817,6 +3199,13 @@
   },
   "components": {
     "schemas": {
+      "AccountStatusDto": {
+        "type": "string",
+        "enum": [
+          "active",
+          "disabled"
+        ]
+      },
       "AddMemberRequest": {
         "type": "object",
         "required": [
@@ -2876,6 +3265,13 @@
             "example": "approved"
           }
         }
+      },
+      "AssociationStatusDto": {
+        "type": "string",
+        "enum": [
+          "active",
+          "inactive"
+        ]
       },
       "BeginEnrollmentBody": {
         "type": "object",
@@ -2938,6 +3334,288 @@
           "new_password": {
             "type": "string",
             "example": "nueva-contraseña-2026"
+          }
+        }
+      },
+      "ControlAccountDetailResponse": {
+        "type": "object",
+        "required": [
+          "id",
+          "email",
+          "display_name",
+          "status",
+          "created_at",
+          "memberships"
+        ],
+        "properties": {
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "display_name": {
+            "type": "string"
+          },
+          "email": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "memberships": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ControlAccountMembershipResponse"
+            }
+          },
+          "status": {
+            "$ref": "#/components/schemas/AccountStatusDto"
+          }
+        }
+      },
+      "ControlAccountListResponse": {
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ControlAccountSummaryResponse"
+            }
+          },
+          "next_cursor": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "ControlAccountMembershipResponse": {
+        "type": "object",
+        "required": [
+          "organization_id",
+          "organization_display_name",
+          "organization_status",
+          "role",
+          "joined_at"
+        ],
+        "properties": {
+          "joined_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "organization_display_name": {
+            "type": "string"
+          },
+          "organization_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "organization_status": {
+            "$ref": "#/components/schemas/OrganizationStatusDto"
+          },
+          "revoked_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "role": {
+            "$ref": "#/components/schemas/MembershipRoleDto"
+          }
+        }
+      },
+      "ControlAccountSummaryResponse": {
+        "type": "object",
+        "required": [
+          "id",
+          "email",
+          "display_name",
+          "status",
+          "created_at"
+        ],
+        "properties": {
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "display_name": {
+            "type": "string"
+          },
+          "email": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "status": {
+            "$ref": "#/components/schemas/AccountStatusDto"
+          }
+        }
+      },
+      "ControlMembershipResponse": {
+        "type": "object",
+        "required": [
+          "account_id",
+          "email",
+          "display_name",
+          "account_status",
+          "role",
+          "joined_at"
+        ],
+        "properties": {
+          "account_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "account_status": {
+            "$ref": "#/components/schemas/AccountStatusDto"
+          },
+          "display_name": {
+            "type": "string"
+          },
+          "email": {
+            "type": "string"
+          },
+          "joined_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "revoked_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "role": {
+            "$ref": "#/components/schemas/MembershipRoleDto"
+          }
+        }
+      },
+      "ControlOrganizationDetailResponse": {
+        "type": "object",
+        "required": [
+          "id",
+          "display_name",
+          "status",
+          "created_at",
+          "memberships",
+          "products"
+        ],
+        "properties": {
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "display_name": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "memberships": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ControlMembershipResponse"
+            }
+          },
+          "products": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ControlOrganizationProductResponse"
+            }
+          },
+          "status": {
+            "$ref": "#/components/schemas/OrganizationStatusDto"
+          }
+        }
+      },
+      "ControlOrganizationListResponse": {
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ControlOrganizationSummaryResponse"
+            }
+          },
+          "next_cursor": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "ControlOrganizationProductResponse": {
+        "type": "object",
+        "required": [
+          "product_id",
+          "product_key",
+          "product_name",
+          "product_status",
+          "association_status",
+          "activated_at",
+          "entitlements"
+        ],
+        "properties": {
+          "activated_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "association_status": {
+            "$ref": "#/components/schemas/AssociationStatusDto"
+          },
+          "entitlements": {
+            "type": "object"
+          },
+          "product_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "product_key": {
+            "type": "string"
+          },
+          "product_name": {
+            "type": "string"
+          },
+          "product_status": {
+            "$ref": "#/components/schemas/ProductLifecycleDto"
+          }
+        }
+      },
+      "ControlOrganizationSummaryResponse": {
+        "type": "object",
+        "required": [
+          "id",
+          "display_name",
+          "status",
+          "created_at"
+        ],
+        "properties": {
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "display_name": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "status": {
+            "$ref": "#/components/schemas/OrganizationStatusDto"
           }
         }
       },
@@ -3435,6 +4113,14 @@
           }
         }
       },
+      "MembershipRoleDto": {
+        "type": "string",
+        "enum": [
+          "owner",
+          "admin",
+          "member"
+        ]
+      },
       "OrganizationListResponse": {
         "type": "object",
         "required": [
@@ -3485,6 +4171,14 @@
           }
         }
       },
+      "OrganizationStatusDto": {
+        "type": "string",
+        "enum": [
+          "active",
+          "legacy_unclaimed",
+          "archived"
+        ]
+      },
       "PlanResponse": {
         "type": "object",
         "required": [
@@ -3512,6 +4206,16 @@
             "example": "trial"
           }
         }
+      },
+      "ProductLifecycleDto": {
+        "type": "string",
+        "enum": [
+          "development",
+          "active",
+          "maintenance",
+          "deprecated",
+          "retired"
+        ]
       },
       "ProductListResponse": {
         "type": "object",

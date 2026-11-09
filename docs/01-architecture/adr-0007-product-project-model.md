@@ -110,6 +110,15 @@ erDiagram
 
 ## 6. Decisiones ratificadas
 
+### C4.0 — `organization_product` (APROBADO; implementación en curso — no IMPLEMENTADO hasta integrarse en `main` con pruebas PostgreSQL reales)
+
+- **Relación persistente:** una fila por `(organization_id, product_id)`; no se elimina físicamente. La desactivación y reactivación reutilizan la misma fila.
+- **`status`:** sólo `active | inactive`. No representa Trial, licencias, suscripciones, cobro, expiración ni estado de pago.
+- **`activated_at`:** timestamp obligatorio e inmutable de la primera activación; no cambia al reactivar. Un futuro `status_changed_at` o historial se añadirá explícitamente, sin sobrecargar este campo.
+- **`entitlements`:** objeto JSONB extensible con `{}` por defecto. En C4 no se interpreta como autoridad de negocio ni contiene pricing, planes, límites licenciados, Trial o billing.
+- **Independencia de ejes:** `organization.status` y `organization_product.status` no se propagan ni se derivan entre sí.
+- **C4 read-only:** la migración permitirá que `status` y `entitlements` evolucionen en fases posteriores, pero C4 no publica mutaciones administrativas para la relación.
+
 - **`product_type`:** `desktop | saas | web | mobile | service | integration | internal`; **`status`:** `development | active | maintenance | deprecated | retired`.
 - **`Project`:** independiente, con `product_id` opcional: cardinalidad **0..1 producto** por proyecto; un producto puede agrupar varios proyectos.
 - **`entitlements`:** estructura extensible (JSONB) sin pricing; invariantes relacionales en columnas.
