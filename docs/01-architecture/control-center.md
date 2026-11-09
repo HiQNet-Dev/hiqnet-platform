@@ -2,7 +2,7 @@
 
 Punto de entrada de la arquitectura interna de HiQNet. Define fronteras entre superficies y enlaza las decisiones (ADRs) y documentos de la fase **C0 — Architecture Foundation**.
 
-> **Estado:** C0 ACCEPTED (ratificado 2026-11-09). Los ADR están aceptados; la implementación comienza en C1 (identidad staff). `apps/control-center` y el DDL de producto se crean en fases posteriores.
+> **Estado:** C0 ACCEPTED (ratificado 2026-11-09). C1–C4 completados e integrados en `main` (último squash `00a6baa`, 2026-11-09): identidad staff, Product/Project, frontend foundation y directorio global Organizations/Accounts. C5 pendiente.
 
 ## 1. Superficies
 
