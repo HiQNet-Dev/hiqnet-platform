@@ -234,12 +234,16 @@ async fn isolates_organizations_and_audits_membership_mutations() {
     );
     tx.rollback().await.unwrap();
 
-    sqlx::query("DELETE FROM installation WHERE id IN ($1, $2)")
-        .bind(a_installation)
-        .bind(b_installation)
-        .execute(&pool)
-        .await
-        .unwrap();
+    // Desde 0009 el historial de instalaciones es inmutable: la limpieza no puede borrarlo.
+    assert!(
+        sqlx::query("DELETE FROM installation WHERE id IN ($1, $2)")
+            .bind(a_installation)
+            .bind(b_installation)
+            .execute(&pool)
+            .await
+            .is_err(),
+        "la instalación no admite eliminación física"
+    );
 }
 
 #[tokio::test]

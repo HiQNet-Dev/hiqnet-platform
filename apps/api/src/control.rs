@@ -59,7 +59,7 @@ async fn actor(auth_state: &AuthState, context: &StaffContext) -> Result<StaffAc
     })
 }
 
-fn require_origin(headers: &HeaderMap, auth_state: &AuthState) -> Result<(), HttpError> {
+pub(crate) fn require_origin(headers: &HeaderMap, auth_state: &AuthState) -> Result<(), HttpError> {
     if auth::origin_allowed(headers, auth_state) {
         Ok(())
     } else {

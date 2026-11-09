@@ -10,10 +10,13 @@ use axum::{
     response::IntoResponse,
 };
 use platform_application::control::ControlService;
+use platform_application::installation_control::InstallationControlService;
 use platform_application::product::ProductService;
 use platform_application::staff::StaffAuthService;
 use platform_core::staff::{AuthenticatedStaffSession, StaffError};
-use platform_storage_postgres::{PgControlRepository, PgProductRepository, PgStaffRepository};
+use platform_storage_postgres::{
+    PgControlRepository, PgInstallationControlRepository, PgProductRepository, PgStaffRepository,
+};
 use std::sync::Arc;
 
 use crate::auth::{self, AuthState, LoginLimiter};
@@ -26,6 +29,7 @@ pub struct StaffState {
     pub service: Arc<StaffAuthService<PgStaffRepository>>,
     pub product: Arc<ProductService<PgProductRepository>>,
     pub control: Arc<ControlService<PgControlRepository>>,
+    pub installations: Arc<InstallationControlService<PgInstallationControlRepository>>,
     pub limiter: Arc<LoginLimiter>,
     pub session_ttl: time::Duration,
     pub argon2_slots: Arc<tokio::sync::Semaphore>,
