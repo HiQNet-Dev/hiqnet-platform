@@ -138,3 +138,102 @@ jobs:
       - uses: actions/checkout@v4
       - name: Verificar archivos prohibidos y claves privadas
         run: python3 scripts/check_repository.py
+
+  portal-e2e:
+    name: Portal E2E full-stack
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: hiqnet
+          POSTGRES_PASSWORD: hiqnet_dev
+          POSTGRES_DB: hiqnet
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U hiqnet -d hiqnet"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Usar toolchain fijada en rust-toolchain.toml
+        run: rustup show active-toolchain
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: .
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.28.5
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+      - name: Instalar dependencias
+        run: pnpm install --frozen-lockfile
+      - name: Compilar API y bootstraps
+        run: cargo build -p hiqnet-platform-api --bin hiqnet-platform-api --bin dev-bootstrap-account --bin dev-bootstrap-staff
+      - name: Crear base E2E
+        env:
+          PGPASSWORD: hiqnet_dev
+        run: psql -h localhost -U hiqnet -d postgres -c 'CREATE DATABASE hiqnet_e2e'
+      - name: Arrancar API
+        env:
+          DATABASE_URL: postgres://hiqnet:hiqnet_dev@localhost:5432/hiqnet_e2e
+          HIQNET_PLATFORM_ENV: development
+          HIQNET_PLATFORM_COOKIE_SECURE: "false"
+          HIQNET_PLATFORM_ALLOWED_ORIGIN: http://127.0.0.1:5173
+          HIQNET_PLATFORM_ENABLE_DOCS: "true"
+          PORT: "8080"
+        run: |
+          nohup target/debug/hiqnet-platform-api > /tmp/api.log 2>&1 &
+          for i in $(seq 1 60); do
+            if curl -fsS http://127.0.0.1:8080/ready >/dev/null; then exit 0; fi
+            sleep 1
+          done
+          cat /tmp/api.log
+          exit 1
+      - name: Bootstrap de cuentas E2E
+        env:
+          DATABASE_URL: postgres://hiqnet:hiqnet_dev@localhost:5432/hiqnet_e2e
+          HIQNET_PLATFORM_ENV: development
+          HIQNET_PLATFORM_DEV_BOOTSTRAP: "true"
+          HIQNET_PLATFORM_DEV_STAFF_BOOTSTRAP: "true"
+        run: |
+          printf 'PortalE2E-2026!\n' | target/debug/dev-bootstrap-account portal-e2e@example.test 'Portal E2E'
+          printf 'StaffE2E-2026!\n' | target/debug/dev-bootstrap-staff staff-e2e@hiqnet.test 'Staff E2E' platform_admin
+      - name: Sembrar organización/producto para F02
+        env:
+          PGPASSWORD: hiqnet_dev
+        run: |
+          psql -h localhost -U hiqnet -d hiqnet_e2e -v ON_ERROR_STOP=1 <<'SQL'
+          INSERT INTO product (id,key,name,description,status,product_type,created_at,updated_at)
+          VALUES (gen_random_uuid(),'pos','HiQNet POS','Producto sintético E2E','active','desktop',now(),now());
+          INSERT INTO organization (id,display_name,status,created_at)
+          VALUES ('11111111-1111-4111-8111-111111111111','Enrollment E2E Base','active',now());
+          INSERT INTO organization_membership (organization_id,account_id,role,role_version,joined_at)
+          SELECT '11111111-1111-4111-8111-111111111111', id, 'owner', 1, now()
+          FROM commercial_account WHERE email='portal-e2e@example.test';
+          INSERT INTO organization_product (organization_id,product_id,status,activated_at)
+          SELECT '11111111-1111-4111-8111-111111111111', id, 'active', now()
+          FROM product WHERE key='pos';
+          SQL
+      - name: Instalar Chromium
+        run: pnpm --filter @hiqnet/platform-portal exec playwright install --with-deps chromium
+      - name: Arrancar Portal
+        run: |
+          nohup pnpm --filter @hiqnet/platform-portal dev > /tmp/portal.log 2>&1 &
+          for i in $(seq 1 60); do
+            if curl -fsS http://127.0.0.1:5173/ >/dev/null; then exit 0; fi
+            sleep 1
+          done
+          cat /tmp/portal.log
+          exit 1
+      - name: E2E full-stack
+        env:
+          PORTAL_E2E_EMAIL: portal-e2e@example.test
+          PORTAL_E2E_PASSWORD: PortalE2E-2026!
+          PLATFORM_STAFF_EMAIL: staff-e2e@hiqnet.test
+          PLATFORM_STAFF_PASSWORD: StaffE2E-2026!
+        run: pnpm --filter @hiqnet/platform-portal e2e --reporter=line
