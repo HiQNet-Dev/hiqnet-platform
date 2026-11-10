@@ -1,6 +1,6 @@
 # HiQNet Platform — Seguridad de Beta 0.1.0
 
-**Estado:** RATIFICADO (Fase 1, 2026-11-09)
+**Estado:** RATIFICADO (Fase 1, 2026-11-09) · VALIDADO (B9, 2026-11-09)
 **Alcance:** revisión de seguridad para la Beta administrativa web
 **Relacionado:** [Arquitectura rectora](../01-architecture/platform.md) · [ADR-0006](../01-architecture/adr-0006-staff-rbac.md) · [Matriz RBAC](control-center-rbac-matrix.md) · [Backlog Beta](platform-beta-backlog.md)
 
@@ -105,7 +105,7 @@ Una cuenta staff comprometida puede leer los datos permitidos por su rol, ejecut
 | S5 | Sin CSP/headers de seguridad en la app | Medio | Media | **Sí** para cualquier Beta desplegada | Configurar CSP, HSTS, XFO, XCTO, Referrer-Policy en proxy/static host (§5.1) |
 | S6 | `TRUNCATE` no bloqueado por triggers | Medio | Baja | No | Hardening de privilegios DB; backups; post-Beta |
 | S7 | Sin retención de auditoría | Bajo/Medio | Alta a largo plazo | No | Política de retención/particionado post-Beta |
-| S8 | Sin escaneo de dependencias/secretos completo | Medio | Media | No | Añadir `cargo audit`/`pnpm audit` o aceptar formalmente |
+| S8 | Sin escaneo de dependencias/secretos completo | Medio | Media | No | Ejecutado en B9 (§7.5); ver riesgos residuales aceptados |
 | S9 | `staff_auth_event` incompleto | Bajo | Alta | No | C6 documenta; añadir writers `session_revoked`/`account_locked`/`password_changed` |
 | S10 | `super_admin` con blast radius amplio | Alto | Baja | No | Auditoría, least privilege, step-up futuro; sin bypass |
 | S11 | XSS en frontends | Medio | Media | No | React escaping, CSP, no HTML crudo; revisar en B9 |
@@ -115,7 +115,7 @@ Una cuenta staff comprometida puede leer los datos permitidos por su rol, ejecut
 | S15 | Fuerza bruta/enumeración | Medio | Media | No | Rate limit, lockout, mensajes neutrales |
 | S16 | Configuración productiva incorrecta | Alto | Media | **Sí** | Runbook y checklist de despliegue |
 | S17 | Emisión de licencias sin elegibilidad | Alto | Baja | No si está deshabilitada | Mantener `ALLOW_DEV_ISSUANCE=false`; elegibilidad en fase POS |
-| S18 | Dependencias vulnerables | Medio | Media | No | Escaneo y actualización planificada |
+| S18 | Dependencias vulnerables | Medio | Media | No | Escaneo y actualización en B9 (§7.5) |
 | S19 | Backups no probados | Alto | Media | **Sí** | Validar backup/restore en B9 |
 | S20 | Migraciones no reproducibles | Alto | Baja | **Sí** | Migración limpia + incremental en B9 |
 
@@ -193,3 +193,60 @@ Una cuenta staff comprometida puede leer los datos permitidos por su rol, ejecut
   - operación offline y renovación;
   - prueba de posesión Ed25519.
 - No se introduce ninguna dependencia runtime de Platform para la venta local del POS.
+
+## 7. Resultados de validación B9 (2026-11-09)
+
+Esta sección no cambia las decisiones ratificadas. Registra la evidencia obtenida en B9 y los riesgos residuales que se aceptan formalmente para la Beta.
+
+### 7.1 Controles verificados en código
+
+| Control | Verificación | Resultado |
+|---|---|---|
+| Cookie staff | `STAFF_SESSION_COOKIE` con `HttpOnly; Path=/api/v1/control; SameSite=Strict` y `Secure` salvo DEV explícito | Conforme |
+| Cookie comercial | `SESSION_COOKIE` con `HttpOnly; Path=/api; SameSite=Lax` y `Secure` salvo DEV explícito | Conforme |
+| `Secure` en producción | `HIQNET_PLATFORM_COOKIE_SECURE=false` aborta el arranque si `HIQNET_PLATFORM_ENV!=development` | Conforme |
+| Origin | `origin_allowed` exige coincidencia exacta y rechaza múltiples cabeceras; sólo DEV permite ausencia | Conforme |
+| Mutaciones staff | `require_origin` precede toda mutación de Control Center (productos, proyectos, organización-producto, instalaciones, planes, suscripciones) | Conforme |
+| RBAC | 17 capabilities en `platform-core`; `security.manage` reservada sin superficie | Conforme |
+| DEV | `dev-bootstrap-account`/`dev-bootstrap-staff` exigen `ENV=development` + flag; token admin opcional vacío deshabilita mutaciones DEV; `/docs` tras `HIQNET_PLATFORM_ENABLE_DOCS` | Conforme |
+| SQL | Sin SQL construido con entrada de usuario; los `format!` sólo concatenan constantes `SELECT` con `WHERE` literal y bindings | Conforme |
+| Aislamiento tenant | Pruebas de organización-producto, instalaciones, dominio comercial y E2E de Portal cubren cross-tenant y 404 neutral | Conforme |
+
+### 7.2 Matriz RBAC
+
+La matriz de [control-center-rbac-matrix.md](control-center-rbac-matrix.md) coincide exactamente con `StaffRole::capabilities` en `crates/platform-core/src/staff.rs`. `security.read` y `audit.read` siguen concedidas a todos los roles según §2; `security.manage` no tiene endpoint. **No se requieren ajustes para la Beta restringida.**
+
+### 7.3 Riesgo de cuenta staff comprometida
+
+Sin MFA, el blast radius máximo es `super_admin` y el siguiente `platform_admin`. Las mitigaciones verificadas (sesión con TTL, revocación, lockout 5/15 min, rate limit de login, saturación Argon2id acotada, Origin exacto, cookies `HttpOnly`/`Strict`, auditoría append-only) se consideran suficientes **sólo** para el perfil de §5.1. La Beta externa exige §5.2 y aceptación escrita de S1; producción pública exige MFA/step-up.
+
+### 7.4 Aislamiento y persistencia
+
+- Migración desde base vacía: 11 migraciones aplicadas, tablas comerciales y de auditoría presentes.
+- Restauración real desde `pg_dump`: conteos (`migrations`, `plan`, `subscription`, `staff_audit_event`) coincidentes con el origen.
+- Consultas keyset con `0010` e índices comerciales: `Index Only Scan` con 50 000 eventos de auditoría sintéticos; páginas < 0,15 ms. Sin degradación por paginación profunda.
+
+### 7.5 Dependencias (S8/S18)
+
+- `pnpm audit --prod --audit-level high`: sin hallazgos.
+- `cargo audit`: 2 avisos **medios** residuales. Se actualizaron previamente `time` → `0.3.47` y `ctutils` → `0.4.4` para cerrar los dos primeros.
+
+| Advisory | Crate | Severidad | Estado | Justificación |
+|---|---|---|---|---|
+| RUSTSEC-2026-0459 | `libsqlite3-sys 0.30.1` | 6.8 media | Aceptado | Sólo aparece en `Cargo.lock` como dependencia opcional de `sqlx`; `cargo tree --workspace --all-targets -i libsqlite3-sys` no encuentra ruta de compilación. Platform usa exclusivamente la feature `postgres`. |
+| RUSTSEC-2023-0071 | `rsa 0.9.10` | 5.9 media | Aceptado | Igual: dependencia opcional de `sqlx-mysql` sin ruta de compilación. Platform no firma ni verifica RSA; el licenciamiento usa Ed25519. |
+
+**Deuda registrada:** al migrar a `sqlx 0.9` (cambio mayor) desaparecen ambos avisos. No se fuerza el salto en Beta por riesgo de regresión en SQLx/migraciones; se planifica para la fase POS.
+
+### 7.6 Riesgos residuales de la Beta
+
+| Riesgo | Perfil interno | Perfil externo |
+|---|---|---|
+| MFA pendiente (S1) | Aceptado | Requiere aceptación escrita + compensación §5.2 |
+| `support`/`read_only` leen auditoría (S2) | Aceptado | Reducir antes de contratistas |
+| `TRUNCATE` no bloqueado por triggers (S6) | Aceptado con backups | Aceptado con backups |
+| Sin retención de auditoría (S7) | Aceptado | Aceptado a corto plazo |
+| Headers en proxy (S5) | Obligatorio en despliegue | Obligatorio en despliegue |
+| Advisories S8/S18 | Aceptados (§7.5) | Aceptados (§7.5) |
+
+Ninguno de estos riesgos es explotable de forma remota y directa en el perfil interno declarado. S5 y la configuración productiva siguen siendo **bloqueantes de despliegue** y se resuelven en el runbook (`docs/03-operations/deployment.md`).
