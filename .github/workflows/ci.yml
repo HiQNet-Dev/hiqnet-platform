@@ -78,6 +78,32 @@ jobs:
       - name: Validar SemVer sin publicar
         run: python3 -m unittest discover -s scripts -p 'test_*.py'
 
+  control-center:
+    name: Control Center (lint, typecheck, test, build, api, e2e)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.28.5
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+      - name: Instalar dependencias del workspace
+        run: pnpm install --frozen-lockfile
+      - name: Lint, typecheck, tests, build y contrato OpenAPI
+        run: |
+          pnpm control:lint
+          pnpm control:typecheck
+          pnpm control:test
+          pnpm control:build
+          pnpm control:api:check
+      - name: Instalar Chromium para E2E
+        run: pnpm --filter @hiqnet/control-center exec playwright install --with-deps chromium
+      - name: E2E crítico del Control Center
+        run: pnpm --filter @hiqnet/control-center e2e
+
   portal:
     name: Portal (lint, tipos, tests, build)
     runs-on: ubuntu-latest
@@ -90,20 +116,20 @@ jobs:
         with:
           node-version-file: .node-version
           cache: pnpm
-      - name: Instalar dependencias
+      - name: Instalar dependencias del workspace
         run: pnpm install --frozen-lockfile
       - name: Cliente OpenAPI sin drift
-        run: pnpm --filter @hiqnet/platform-portal api:check
+        run: pnpm portal:api:check
       - name: Lint
-        run: pnpm --filter @hiqnet/platform-portal lint
+        run: pnpm portal:lint
       - name: Formato
-        run: pnpm --filter @hiqnet/platform-portal format:check
+        run: pnpm portal:format:check
       - name: Tipos
-        run: pnpm --filter @hiqnet/platform-portal typecheck
+        run: pnpm portal:typecheck
       - name: Tests
-        run: pnpm --filter @hiqnet/platform-portal test
+        run: pnpm portal:test
       - name: Build
-        run: pnpm --filter @hiqnet/platform-portal build
+        run: pnpm portal:build
 
   supply-chain:
     name: Archivos prohibidos

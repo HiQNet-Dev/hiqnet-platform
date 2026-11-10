@@ -4,12 +4,13 @@ use async_trait::async_trait;
 use base64::Engine as _;
 use platform_application::enrollment::{
     ApprovedEnrollment, BeginStorageOutcome, EnrollmentCompletion, EnrollmentError, EnrollmentPage,
-    EnrollmentRepository, EnrollmentResult, InstallationSummary, NewEnrollmentRequest,
-    ProofAttempt, SecurityEvent,
+    EnrollmentProduct, EnrollmentRepository, EnrollmentResult, InstallationAttribution,
+    InstallationSummary, NewEnrollmentRequest, ProofAttempt, SecurityEvent,
 };
 use platform_core::{
     enrollment::{self, DevicePublicKey, canonical_proof_message, verify_device_signature},
-    ids::{CommercialAccountId, EnrollmentRequestId, InstallationId, OrganizationId},
+    ids::{CommercialAccountId, EnrollmentRequestId, InstallationId, OrganizationId, ProductId},
+    product::LifecycleStatus,
 };
 use serde::{Deserialize, Serialize};
 use sqlx::{PgPool, Postgres, Row, Transaction};
@@ -147,8 +148,74 @@ async fn audit(
     Ok(())
 }
 
+async fn organization_product_active(
+    tx: &mut Transaction<'_, Postgres>,
+    organization: OrganizationId,
+    product: ProductId,
+) -> EnrollmentResult<bool> {
+    let active: Option<Uuid> = sqlx::query_scalar(
+        "SELECT product_id FROM organization_product \
+         WHERE organization_id = $1 AND product_id = $2 AND status = 'active'",
+    )
+    .bind(organization.as_uuid())
+    .bind(product.as_uuid())
+    .fetch_optional(&mut **tx)
+    .await
+    .map_err(storage)?;
+    Ok(active.is_some())
+}
+
+async fn product_status(
+    tx: &mut Transaction<'_, Postgres>,
+    product: ProductId,
+) -> EnrollmentResult<LifecycleStatus> {
+    let status: String = sqlx::query_scalar("SELECT status FROM product WHERE id = $1")
+        .bind(product.as_uuid())
+        .fetch_optional(&mut **tx)
+        .await
+        .map_err(storage)?
+        .ok_or(EnrollmentError::Invalid)?;
+    status.parse().map_err(|_| EnrollmentError::Invalid)
+}
+
 #[async_trait]
 impl EnrollmentRepository for PgEnrollmentRepository {
+    async fn product_for_enrollment(
+        &self,
+        product_key: &str,
+    ) -> EnrollmentResult<Option<EnrollmentProduct>> {
+        let row = sqlx::query("SELECT id, status FROM product WHERE key = $1")
+            .bind(product_key)
+            .fetch_optional(&self.pool)
+            .await
+            .map_err(storage)?;
+        let Some(row) = row else {
+            return Ok(None);
+        };
+        let status: String = row.get("status");
+        Ok(Some(EnrollmentProduct {
+            id: ProductId::from_uuid(row.get("id")),
+            status: status.parse().map_err(|_| EnrollmentError::Invalid)?,
+        }))
+    }
+
+    async fn installation_attribution(
+        &self,
+        id: InstallationId,
+    ) -> EnrollmentResult<InstallationAttribution> {
+        let product: Option<Option<Uuid>> =
+            sqlx::query_scalar("SELECT product_id FROM installation WHERE id = $1")
+                .bind(id.as_uuid())
+                .fetch_optional(&self.pool)
+                .await
+                .map_err(storage)?;
+        Ok(match product {
+            None => InstallationAttribution::Missing,
+            Some(None) => InstallationAttribution::Legacy,
+            Some(Some(product)) => InstallationAttribution::Product(ProductId::from_uuid(product)),
+        })
+    }
+
     async fn begin_request(
         &self,
         request: &NewEnrollmentRequest,
@@ -182,9 +249,9 @@ impl EnrollmentRepository for PgEnrollmentRepository {
              (id, installation_id, public_key, fingerprint, device_label, app_version, platform, \
               device_code_hash, user_code_hash, nonce_hash, status, organization_id, \
               approved_by_account_id, idempotency_scope, idempotency_key, request_hash, \
-              created_at, expires_at) \
+              created_at, expires_at, product_id) \
              VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'pending', NULL, NULL, \
-                     $11, $12, $13, $14, $15)",
+                     $11, $12, $13, $14, $15, $16)",
         )
         .bind(request.id.as_uuid())
         .bind(request.installation_id.as_uuid())
@@ -201,6 +268,7 @@ impl EnrollmentRepository for PgEnrollmentRepository {
         .bind(request.request_hash.to_vec())
         .bind(request.created_at)
         .bind(request.expires_at)
+        .bind(request.product_id.as_uuid())
         .execute(&mut *tx)
         .await
         .map_err(insertion)?;
@@ -239,7 +307,7 @@ impl EnrollmentRepository for PgEnrollmentRepository {
         let user_code_hash = enrollment::hash_secret(user_code);
         let mut tx = self.pool.begin().await.map_err(storage)?;
         let row = sqlx::query(
-            "SELECT id, installation_id, status, organization_id, approved_by_account_id, expires_at \
+            "SELECT id, installation_id, product_id, status, organization_id, approved_by_account_id, expires_at \
              FROM enrollment_request WHERE user_code_hash = $1 FOR UPDATE",
         )
         .bind(user_code_hash.to_vec())
@@ -284,6 +352,39 @@ impl EnrollmentRepository for PgEnrollmentRepository {
         }
 
         locked_authority(&mut tx, actor, organization).await?;
+        if let Some(product_id) = row.get::<Option<Uuid>, _>("product_id") {
+            let product = ProductId::from_uuid(product_id);
+            if !organization_product_active(&mut tx, organization, product).await? {
+                tx.rollback().await.map_err(storage)?;
+                return Err(EnrollmentError::EnrollmentInvalid);
+            }
+            let status = product_status(&mut tx, product).await?;
+            let attribution: Option<Option<Uuid>> =
+                sqlx::query_scalar("SELECT product_id FROM installation WHERE id = $1")
+                    .bind(installation_id)
+                    .fetch_optional(&mut *tx)
+                    .await
+                    .map_err(storage)?;
+            let allowed = match attribution {
+                None => matches!(status, LifecycleStatus::Active),
+                Some(None) => matches!(
+                    status,
+                    LifecycleStatus::Active | LifecycleStatus::Maintenance
+                ),
+                // Una instalación ya atribuida sólo admite su mismo Product.
+                Some(Some(installed)) => {
+                    installed == product_id
+                        && matches!(
+                            status,
+                            LifecycleStatus::Active | LifecycleStatus::Maintenance
+                        )
+                }
+            };
+            if !allowed {
+                tx.rollback().await.map_err(storage)?;
+                return Err(EnrollmentError::EnrollmentInvalid);
+            }
+        }
         sqlx::query(
             "UPDATE enrollment_request \
              SET status = 'approved', organization_id = $2, approved_by_account_id = $3, \
@@ -315,7 +416,7 @@ impl EnrollmentRepository for PgEnrollmentRepository {
         let device_code_hash = enrollment::hash_secret(&proof.device_code);
         let mut tx = self.pool.begin().await.map_err(storage)?;
         let row = sqlx::query(
-            "SELECT id, installation_id, public_key, fingerprint, device_label, status, \
+            "SELECT id, installation_id, product_id, public_key, fingerprint, device_label, status, \
                     organization_id, approved_by_account_id, nonce_hash, expires_at, consumed_at \
              FROM enrollment_request WHERE device_code_hash = $1 FOR UPDATE",
         )
@@ -329,6 +430,7 @@ impl EnrollmentRepository for PgEnrollmentRepository {
         };
         let request_id: Uuid = row.get("id");
         let installation_id: Uuid = row.get("installation_id");
+        let request_product_id: Option<Uuid> = row.get("product_id");
         let stored_public_key: Vec<u8> = row.get("public_key");
         let stored_fingerprint: Vec<u8> = row.get("fingerprint");
         let device_label: String = row.get("device_label");
@@ -351,10 +453,23 @@ impl EnrollmentRepository for PgEnrollmentRepository {
             let replay_signature_ok =
                 verify_device_signature(&parsed_key_for_replay, &replay_message, &proof.signature)
                     .is_ok();
+            // Una identidad retirada (rehost) no puede reclamar el binding vigente:
+            // sólo la clave criptográfica activa conserva la idempotencia del proof.
+            let active_public_key: Option<Vec<u8>> = sqlx::query_scalar(
+                "SELECT public_key FROM installation_identity \
+                 WHERE installation_id = $1 AND retired_at IS NULL",
+            )
+            .bind(installation_id)
+            .fetch_optional(&mut *tx)
+            .await
+            .map_err(storage)?;
+            let replay_uses_active_key =
+                active_public_key.as_deref() == Some(stored_public_key.as_slice());
             if installation_id == proof.installation_id.as_uuid()
                 && stored_public_key.as_slice() == parsed_key_for_replay.bytes().as_slice()
                 && replay_nonce_ok
                 && replay_signature_ok
+                && replay_uses_active_key
                 && organization_id.is_some()
             {
                 if let Some(binding) = active_binding(&mut tx, proof.installation_id).await? {
@@ -438,12 +553,13 @@ impl EnrollmentRepository for PgEnrollmentRepository {
             });
         }
 
-        let existing_installation =
-            sqlx::query("SELECT id, organization_id FROM installation WHERE id = $1 FOR UPDATE")
-                .bind(installation_id)
-                .fetch_optional(&mut *tx)
-                .await
-                .map_err(storage)?;
+        let existing_installation = sqlx::query(
+            "SELECT id, organization_id, product_id FROM installation WHERE id = $1 FOR UPDATE",
+        )
+        .bind(installation_id)
+        .fetch_optional(&mut *tx)
+        .await
+        .map_err(storage)?;
         if let Some(installation) = existing_installation.as_ref() {
             let existing_org: Uuid = installation.get("organization_id");
             if existing_org != organization_id {
@@ -465,6 +581,88 @@ impl EnrollmentRepository for PgEnrollmentRepository {
             }
         }
 
+        let existing_product = existing_installation
+            .as_ref()
+            .and_then(|row| row.get::<Option<Uuid>, _>("product_id"));
+        let effective_product = match (request_product_id, existing_product) {
+            (Some(requested), Some(existing)) if requested != existing => {
+                tx.rollback().await.map_err(storage)?;
+                return Err(EnrollmentError::Conflict);
+            }
+            (Some(requested), _) => requested,
+            (None, Some(existing)) => existing,
+            (None, None) => {
+                tx.rollback().await.map_err(storage)?;
+                return Err(EnrollmentError::EnrollmentInvalid);
+            }
+        };
+        let product = ProductId::from_uuid(effective_product);
+        let status = product_status(&mut tx, product).await?;
+        let product_allowed = if existing_installation.is_some() {
+            matches!(
+                status,
+                LifecycleStatus::Active | LifecycleStatus::Maintenance
+            )
+        } else {
+            matches!(status, LifecycleStatus::Active)
+        };
+        if !product_allowed {
+            tx.rollback().await.map_err(storage)?;
+            return Err(EnrollmentError::EnrollmentInvalid);
+        }
+        if !organization_product_active(&mut tx, organization, product).await? {
+            tx.rollback().await.map_err(storage)?;
+            return Err(EnrollmentError::EnrollmentInvalid);
+        }
+
+        let rehost_row = sqlx::query(
+            "SELECT id, status, expires_at, organization_id, product_id, \
+                    authorized_by_staff_account_id \
+             FROM installation_rehost_authorization \
+             WHERE enrollment_request_id = $1 FOR UPDATE",
+        )
+        .bind(request_id)
+        .fetch_optional(&mut *tx)
+        .await
+        .map_err(storage)?;
+        let mut rehost_staff = None;
+        let rehost_id = if let Some(row) = rehost_row {
+            let rehost_status: String = row.get("status");
+            let rehost_expires: OffsetDateTime = row.get("expires_at");
+            let rehost_org: Uuid = row.get("organization_id");
+            let rehost_product: Option<Uuid> = row.get("product_id");
+            if rehost_status == "consumed" {
+                tx.rollback().await.map_err(storage)?;
+                return Err(EnrollmentError::Conflict);
+            }
+            if rehost_status == "expired" || rehost_status == "cancelled" {
+                tx.rollback().await.map_err(storage)?;
+                return Err(EnrollmentError::EnrollmentInvalid);
+            }
+            if rehost_expires <= now {
+                sqlx::query(
+                    "UPDATE installation_rehost_authorization SET status = 'expired' \
+                     WHERE id = $1 AND status = 'pending'",
+                )
+                .bind(row.get::<Uuid, _>("id"))
+                .execute(&mut *tx)
+                .await
+                .map_err(storage)?;
+                tx.commit().await.map_err(storage)?;
+                return Err(EnrollmentError::EnrollmentInvalid);
+            }
+            if rehost_org != organization_id
+                || rehost_product.is_some_and(|value| value != effective_product)
+            {
+                tx.rollback().await.map_err(storage)?;
+                return Err(EnrollmentError::Conflict);
+            }
+            rehost_staff = Some(row.get::<Uuid, _>("authorized_by_staff_account_id"));
+            Some(row.get::<Uuid, _>("id"))
+        } else {
+            None
+        };
+
         let existing_binding =
             sqlx::query("SELECT id FROM installation_binding WHERE installation_id = $1 AND revoked_at IS NULL FOR UPDATE")
                 .bind(installation_id)
@@ -479,12 +677,13 @@ impl EnrollmentRepository for PgEnrollmentRepository {
         if existing_installation.is_none() {
             sqlx::query(
                 "INSERT INTO installation \
-                 (id, organization_id, device_label, status, registered_at, last_seen_at, \
+                 (id, organization_id, product_id, device_label, status, registered_at, last_seen_at, \
                   identity_status, enrolled_at, enrolled_by_account_id) \
-                 VALUES ($1, $2, $3, 'active', $4, $4, 'active', $4, $5)",
+                 VALUES ($1, $2, $3, $4, 'active', $5, $5, 'active', $5, $6)",
             )
             .bind(installation_id)
             .bind(organization_id)
+            .bind(effective_product)
             .bind(&device_label)
             .bind(now)
             .bind(actor.as_uuid())
@@ -501,6 +700,10 @@ impl EnrollmentRepository for PgEnrollmentRepository {
         .fetch_optional(&mut *tx)
         .await
         .map_err(storage)?;
+        if rehost_id.is_some() && identity_row.is_some() {
+            tx.rollback().await.map_err(storage)?;
+            return Err(EnrollmentError::Conflict);
+        }
         let identity_id = if let Some(identity) = identity_row {
             let existing_key: Vec<u8> = identity.get("public_key");
             let existing_fingerprint: Vec<u8> = identity.get("fingerprint");
@@ -586,6 +789,62 @@ impl EnrollmentRepository for PgEnrollmentRepository {
         .await
         .map_err(insertion)?;
 
+        if let Some(authorization_id) = rehost_id {
+            let consumed = sqlx::query(
+                "UPDATE installation_rehost_authorization \
+                 SET status = 'consumed', consumed_at = $2 \
+                 WHERE id = $1 AND status = 'pending'",
+            )
+            .bind(authorization_id)
+            .bind(now)
+            .execute(&mut *tx)
+            .await
+            .map_err(storage)?;
+            if consumed.rows_affected() != 1 {
+                tx.rollback().await.map_err(storage)?;
+                return Err(EnrollmentError::Conflict);
+            }
+            // El cierre del rehost se audita en la misma transacción que la nueva
+            // generación; si falla, no queda completion parcial.
+            let staff_actor = rehost_staff.ok_or(EnrollmentError::Storage)?;
+            sqlx::query(
+                "INSERT INTO staff_audit_event \
+                 (id, staff_account_id, action, resource_type, resource_id, organization_id, \
+                  product_id, result, occurred_at, metadata) \
+                 VALUES ($1, $2, 'installation_rehost_completed', 'installation', $3, $4, $5, \
+                         'success', $6, $7)",
+            )
+            .bind(Uuid::new_v4())
+            .bind(staff_actor)
+            .bind(installation_id)
+            .bind(organization_id)
+            .bind(effective_product)
+            .bind(now)
+            .bind(serde_json::json!({
+                "enrollment_request_id": request_id.to_string(),
+                "identity_id": identity_id.to_string(),
+            }))
+            .execute(&mut *tx)
+            .await
+            .map_err(storage)?;
+            sqlx::query(
+                "INSERT INTO commercial_security_event \
+                 (id, kind, organization_id, account_id, installation_id, metadata, created_at) \
+                 VALUES ($1, 'rehost_performed', $2, $3, $4, $5, $6)",
+            )
+            .bind(Uuid::new_v4())
+            .bind(organization_id)
+            .bind(approved_by)
+            .bind(installation_id)
+            .bind(serde_json::json!({
+                "enrollment_request_id": request_id.to_string(),
+            }))
+            .bind(now)
+            .execute(&mut *tx)
+            .await
+            .map_err(storage)?;
+        }
+
         sqlx::query(
             "UPDATE enrollment_request SET status = 'completed', consumed_at = $2 \
              WHERE id = $1 AND status = 'approved' AND consumed_at IS NULL",
@@ -598,11 +857,14 @@ impl EnrollmentRepository for PgEnrollmentRepository {
         if existing_installation.is_some() {
             sqlx::query(
                 "UPDATE installation SET identity_status = 'active', enrolled_at = $2, \
-                 enrolled_by_account_id = $3, last_seen_at = $2 WHERE id = $1",
+                 enrolled_by_account_id = $3, last_seen_at = $2, \
+                 status = CASE WHEN status = 'unregistered' THEN 'active' ELSE status END, \
+                 product_id = COALESCE(product_id, $4) WHERE id = $1",
             )
             .bind(installation_id)
             .bind(now)
             .bind(actor.as_uuid())
+            .bind(effective_product)
             .execute(&mut *tx)
             .await
             .map_err(storage)?;

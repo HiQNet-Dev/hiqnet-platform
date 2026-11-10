@@ -5,11 +5,15 @@
 
 pub mod auth;
 pub mod commercial;
+pub mod control;
 pub mod enrollment;
 pub mod error;
+pub mod installation_control;
 pub mod ports;
+pub mod product;
 pub mod security;
 pub mod service;
+pub mod staff;
 
 pub use auth::{AuthRepository, AuthService};
 pub use enrollment::{
@@ -23,4 +27,6 @@ pub use ports::{
     InstallationView, IssueLicenseRequest, LicenseSigner, PlanView, PlatformRepository,
     RegisterInstallationRequest, SharedRepository, SharedSigner,
 };
+pub use product::{Page, ProductRepository, ProductService, StaffActor};
 pub use service::{IssuedLicenseView, PlatformService};
+pub use staff::{StaffAuthService, StaffRepository};

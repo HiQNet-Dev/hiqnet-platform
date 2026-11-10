@@ -47,7 +47,7 @@ No se habilita CORS con `*` ni credentials. La cookie `hiqnet_session` es HttpOn
 | `/app/organizations/:id/members` | Implementada | `GET/POST/PATCH/DELETE /api/v1/organizations/{id}/members` |
 | `/account/security`              | Implementada | password change, sessions revoke, logout                   |
 
-`Instalaciones` y `/enroll` quedan fuera de F01 hasta que G4.2-B esté en `main`.
+`Instalaciones` y `/enroll` quedan fuera de F01; se integran en F02.
 
 ## Scripts
 
@@ -67,10 +67,33 @@ Con API, PostgreSQL y Portal arrancados, crea una cuenta sintética con el boots
 ```bash
 PORTAL_E2E_EMAIL=cuenta@example.test \
 PORTAL_E2E_PASSWORD='<contraseña-local>' \
+PORTAL_E2E_ORGANIZATION='Enrollment E2E Base' \
 pnpm --filter @hiqnet/platform-portal e2e
 ```
 
-El test cubre login, organizaciones, creación, detalle, miembros, seguridad de cuenta y logout.
+El spec de F02 usa una organización ya asociada al producto activo `pos` mediante `organization_product`. Si tu base no la tiene, créala una vez con SQL local (no usar datos reales):
+
+```sql
+INSERT INTO product (id,key,name,description,status,product_type,created_at,updated_at)
+VALUES (gen_random_uuid(),'pos','HiQNet POS','Producto sintético E2E','active','desktop',now(),now())
+ON CONFLICT (key) DO UPDATE SET status='active', updated_at=now();
+
+INSERT INTO organization (id,display_name,status,created_at)
+VALUES ('11111111-1111-4111-8111-111111111111','Enrollment E2E Base','active',now())
+ON CONFLICT (id) DO NOTHING;
+
+INSERT INTO organization_membership (organization_id,account_id,role,role_version,joined_at)
+SELECT '11111111-1111-4111-8111-111111111111', id, 'owner', 1, now()
+FROM commercial_account WHERE email='cuenta@example.test'
+ON CONFLICT (organization_id,account_id) DO NOTHING;
+
+INSERT INTO organization_product (organization_id,product_id,status,activated_at)
+SELECT '11111111-1111-4111-8111-111111111111', id, 'active', now()
+FROM product WHERE key='pos'
+ON CONFLICT (organization_id,product_id) DO UPDATE SET status='active';
+```
+
+El test cubre login, organizaciones, creación, detalle, miembros, seguridad de cuenta y logout. El spec de F02 cubre el flujo synthetic POS → begin → Portal approve → proof Ed25519 → installations.
 
 ## Seguridad
 

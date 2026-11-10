@@ -12,18 +12,17 @@ const password = process.env.PORTAL_E2E_PASSWORD;
 
 test.skip(!email || !password, 'Define PORTAL_E2E_EMAIL y PORTAL_E2E_PASSWORD');
 
-async function loginAndCreateOrganization(page: Page) {
+const organizationName = process.env.PORTAL_E2E_ORGANIZATION ?? 'Enrollment E2E Base';
+
+async function loginAndOpenOrganization(page: Page) {
   await page.goto('/login');
   await page.getByLabel('Correo electrónico').fill(email ?? '');
   await page.getByLabel('Contraseña').fill(password ?? '');
   await page.getByRole('button', { name: 'Entrar' }).click();
-  await expect(page.getByRole('heading', { name: 'Organizaciones' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Organizaciones', exact: true })).toBeVisible();
 
-  const organizationName = `Enrollment E2E ${Date.now()}`;
-  await page.getByRole('button', { name: 'Nueva organización' }).click();
-  await page.getByLabel('Nombre de la organización').fill(organizationName);
-  await page.getByRole('button', { name: 'Crear organización' }).click();
-  await expect(page.getByRole('heading', { name: organizationName })).toBeVisible();
+  await page.getByRole('link', { name: organizationName, exact: true }).click();
+  await expect(page.getByRole('heading', { name: organizationName, exact: true })).toBeVisible();
   const organizationId = page.url().split('/').pop();
   if (!organizationId) {
     throw new Error('No se pudo obtener el organization_id');
@@ -32,7 +31,7 @@ async function loginAndCreateOrganization(page: Page) {
 }
 
 test('POS sintético → approve en Portal → proof → instalación visible', async ({ page }) => {
-  const { organizationName, organizationId } = await loginAndCreateOrganization(page);
+  const { organizationName, organizationId } = await loginAndOpenOrganization(page);
   const pos = createSyntheticPos();
   const challenge = await beginSyntheticEnrollment(pos);
 
@@ -46,7 +45,6 @@ test('POS sintético → approve en Portal → proof → instalación visible', 
 
   await page.goto(`/app/organizations/${organizationId}/installations`);
   await expect(page.getByRole('heading', { name: 'Instalaciones', exact: true })).toBeVisible();
-  await expect(page.getByText('Aún no hay instalaciones vinculadas')).toBeVisible();
 
   const completion = await completeSyntheticProof(pos, challenge);
   expect(completion.status).toBe('completed');
@@ -56,7 +54,7 @@ test('POS sintético → approve en Portal → proof → instalación visible', 
 });
 
 test('código inexistente muestra un error neutral', async ({ page }) => {
-  const { organizationName } = await loginAndCreateOrganization(page);
+  const { organizationName } = await loginAndOpenOrganization(page);
   await page.goto('/enroll?code=ZZZZ-ZZZZ');
   await page.getByRole('button', { name: 'Continuar' }).click();
   await page.getByLabel('Organización propietaria').selectOption({ label: organizationName });

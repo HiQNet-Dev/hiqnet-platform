@@ -14,7 +14,11 @@ use axum::{
 };
 mod auth;
 mod contract;
+mod control;
+mod control_directory;
+mod control_installations;
 mod enrollment;
+mod staff;
 use auth::{AuthContext, AuthState};
 use contract::{
     ErrorResponse, HealthResponse, InstallationResponse, IssueLicenseBody, IssuedLicenseResponse,
@@ -154,6 +158,36 @@ fn api_routes() -> (Router<AppState>, OpenApiDocument) {
         .routes(routes!(enrollment::approve_enrollment))
         .routes(routes!(enrollment::prove_enrollment))
         .routes(routes!(enrollment::list_installations))
+        .routes(routes!(staff::staff_login))
+        .routes(routes!(staff::staff_logout))
+        .routes(routes!(staff::staff_me))
+        .routes(routes!(
+            control::list_control_products,
+            control::create_control_product
+        ))
+        .routes(routes!(
+            control::get_control_product,
+            control::update_control_product
+        ))
+        .routes(routes!(
+            control::list_control_projects,
+            control::create_control_project
+        ))
+        .routes(routes!(
+            control::get_control_project,
+            control::update_control_project
+        ))
+        .routes(routes!(control_directory::list_control_organizations))
+        .routes(routes!(control_directory::get_control_organization))
+        .routes(routes!(control_directory::list_control_accounts))
+        .routes(routes!(control_directory::get_control_account))
+        .routes(routes!(control_installations::list_control_installations))
+        .routes(routes!(control_installations::get_control_installation))
+        .routes(routes!(control_installations::suspend_control_installation))
+        .routes(routes!(
+            control_installations::reactivate_control_installation
+        ))
+        .routes(routes!(control_installations::rehost_control_installation))
         .split_for_parts();
     document.info = Info::new("HiQNet Platform API", env!("CARGO_PKG_VERSION"));
     document.info.description = Some("Plano de control técnico con identidad comercial y sesiones; sin facturación, suscripciones ni sincronización productivas. El token administrativo es temporal y exclusivo de desarrollo.".into());
@@ -179,6 +213,16 @@ fn api_routes() -> (Router<AppState>, OpenApiDocument) {
             SecurityScheme::ApiKey(ApiKey::Cookie(ApiKeyValue::with_description(
                 "hiqnet_session",
                 "Cookie de sesión comercial HttpOnly emitida por /api/v1/auth/login.",
+            ))),
+        );
+    document
+        .components
+        .get_or_insert_with(Default::default)
+        .add_security_scheme(
+            "staffSession",
+            SecurityScheme::ApiKey(ApiKey::Cookie(ApiKeyValue::with_description(
+                "hiqnet_staff_session",
+                "Cookie de sesión de personal interno emitida por /api/v1/control/auth/login.",
             ))),
         );
     (router, document)
@@ -1277,7 +1321,7 @@ pub async fn run() -> anyhow::Result<()> {
         )),
         admin_token,
         licensing_enabled,
-        db_pool: pool,
+        db_pool: pool.clone(),
     };
     let auth_state = AuthState {
         service: auth_service,
@@ -1290,6 +1334,34 @@ pub async fn run() -> anyhow::Result<()> {
             std::time::Duration::from_secs(60),
         )),
         argon2_slots: Arc::new(tokio::sync::Semaphore::new(auth_concurrency)),
+        staff: staff::StaffState {
+            service: Arc::new(platform_application::staff::StaffAuthService::new(
+                platform_storage_postgres::PgStaffRepository::new(pool.clone()),
+            )),
+            product: Arc::new(platform_application::product::ProductService::new(
+                platform_storage_postgres::PgProductRepository::new(pool.clone()),
+            )),
+            control: Arc::new(platform_application::control::ControlService::new(
+                platform_storage_postgres::PgControlRepository::new(pool.clone()),
+            )),
+            installations: Arc::new(
+                platform_application::installation_control::InstallationControlService::new(
+                    platform_storage_postgres::PgInstallationControlRepository::new(pool.clone()),
+                ),
+            ),
+            limiter: Arc::new(auth::LoginLimiter::new(
+                10,
+                std::time::Duration::from_secs(60),
+            )),
+            session_ttl: time::Duration::hours(
+                std::env::var("HIQNET_PLATFORM_STAFF_SESSION_TTL_HOURS")
+                    .ok()
+                    .and_then(|value| value.parse::<i64>().ok())
+                    .unwrap_or(8)
+                    .clamp(1, 24),
+            ),
+            argon2_slots: Arc::new(tokio::sync::Semaphore::new(auth_concurrency)),
+        },
     };
 
     // La documentación sólo se expone cuando el entorno la habilita explícitamente.
@@ -1375,7 +1447,7 @@ mod tests {
     fn test_auth_state(pool: PgPool) -> AuthState {
         AuthState {
             service: Arc::new(platform_application::AuthService::new(
-                platform_storage_postgres::PgAuthRepository::new(pool),
+                platform_storage_postgres::PgAuthRepository::new(pool.clone()),
             )),
             cookie_secure: false,
             allowed_origin: Some("http://127.0.0.1:8080".into()),
@@ -1386,6 +1458,28 @@ mod tests {
                 std::time::Duration::from_secs(60),
             )),
             argon2_slots: Arc::new(tokio::sync::Semaphore::new(4)),
+            staff: staff::StaffState {
+                service: Arc::new(platform_application::staff::StaffAuthService::new(
+                    platform_storage_postgres::PgStaffRepository::new(pool.clone()),
+                )),
+                product: Arc::new(platform_application::product::ProductService::new(
+                    platform_storage_postgres::PgProductRepository::new(pool.clone()),
+                )),
+                control: Arc::new(platform_application::control::ControlService::new(
+                    platform_storage_postgres::PgControlRepository::new(pool.clone()),
+                )),
+                installations: Arc::new(
+                    platform_application::installation_control::InstallationControlService::new(
+                        platform_storage_postgres::PgInstallationControlRepository::new(pool),
+                    ),
+                ),
+                limiter: Arc::new(auth::LoginLimiter::new(
+                    10,
+                    std::time::Duration::from_secs(60),
+                )),
+                session_ttl: time::Duration::hours(1),
+                argon2_slots: Arc::new(tokio::sync::Semaphore::new(4)),
+            },
         }
     }
 
@@ -1454,6 +1548,19 @@ mod tests {
             .unwrap();
     }
 
+    async fn product_project_audit_count(pool: &PgPool, email: &str) -> i64 {
+        sqlx::query_scalar(
+            "SELECT count(*) FROM staff_audit_event e
+             JOIN staff_account a ON a.id = e.staff_account_id
+             WHERE a.email = $1
+               AND e.action IN ('product_created', 'product_updated', 'project_created', 'project_updated')",
+        )
+        .bind(email)
+        .fetch_one(pool)
+        .await
+        .unwrap()
+    }
+
     async fn send(
         router: &Router,
         method: Method,
@@ -1517,6 +1624,35 @@ mod tests {
             ("/api/v1/enrollment-requests/{user_code}/approve", "post"),
             ("/api/v1/enrollment-requests/{device_code}/proof", "post"),
             ("/api/v1/organizations/{id}/installations", "get"),
+            ("/api/v1/control/auth/login", "post"),
+            ("/api/v1/control/auth/logout", "post"),
+            ("/api/v1/control/auth/me", "get"),
+            ("/api/v1/control/products", "get"),
+            ("/api/v1/control/products", "post"),
+            ("/api/v1/control/products/{key}", "get"),
+            ("/api/v1/control/products/{key}", "patch"),
+            ("/api/v1/control/projects", "get"),
+            ("/api/v1/control/projects", "post"),
+            ("/api/v1/control/projects/{key}", "get"),
+            ("/api/v1/control/projects/{key}", "patch"),
+            ("/api/v1/control/organizations", "get"),
+            ("/api/v1/control/organizations/{organization_id}", "get"),
+            ("/api/v1/control/accounts", "get"),
+            ("/api/v1/control/accounts/{account_id}", "get"),
+            ("/api/v1/control/installations", "get"),
+            ("/api/v1/control/installations/{installation_id}", "get"),
+            (
+                "/api/v1/control/installations/{installation_id}/suspend",
+                "post",
+            ),
+            (
+                "/api/v1/control/installations/{installation_id}/reactivate",
+                "post",
+            ),
+            (
+                "/api/v1/control/installations/{installation_id}/rehost",
+                "post",
+            ),
         ];
         let actual: Vec<(&str, &str)> = current["paths"]
             .as_object()
@@ -1543,6 +1679,10 @@ mod tests {
             );
             if path.starts_with("/api/v1/installations") {
                 assert_eq!(operation["security"], json!([{"devAdminToken": []}]));
+            } else if path == "/api/v1/control/auth/login" {
+                assert!(operation.get("security").is_none());
+            } else if path.starts_with("/api/v1/control/") {
+                assert_eq!(operation["security"], json!([{"staffSession": []}]));
             } else if path == "/api/v1/auth/login"
                 || path == "/api/v1/enrollment-requests"
                 || path.ends_with("/proof")
@@ -1817,12 +1957,15 @@ mod tests {
         );
 
         // La fixture sólo existe en TEST_DATABASE_URL; no altera la base principal.
-        sqlx::query("DELETE FROM installation WHERE id = $1")
-            .bind(id)
-            .execute(&pool)
-            .await
-            .unwrap();
-        remove_test_organization(&pool, org).await;
+        // Desde 0009 el historial de instalaciones es inmutable: no se limpia con DELETE.
+        assert!(
+            sqlx::query("DELETE FROM installation WHERE id = $1")
+                .bind(id)
+                .execute(&pool)
+                .await
+                .is_err(),
+            "la instalación no admite eliminación física"
+        );
     }
 
     #[tokio::test]
@@ -1976,12 +2119,15 @@ mod tests {
             .execute(&pool)
             .await
             .unwrap();
-        sqlx::query("DELETE FROM installation WHERE id = $1")
-            .bind(id)
-            .execute(&pool)
-            .await
-            .unwrap();
-        remove_test_organization(&pool, org).await;
+        // Desde 0009 el historial de instalaciones es inmutable: no se limpia con DELETE.
+        assert!(
+            sqlx::query("DELETE FROM installation WHERE id = $1")
+                .bind(id)
+                .execute(&pool)
+                .await
+                .is_err(),
+            "la instalación no admite eliminación física"
+        );
     }
 
     #[tokio::test]
@@ -3335,7 +3481,17 @@ mod tests {
             1,
             std::time::Duration::from_secs(60),
         ));
-        let router = build_router(app_state, false, test_auth_state(pool));
+        let router = build_router(app_state, false, test_auth_state(pool.clone()));
+        let product_key = format!("rate-pos-{}", Uuid::new_v4().simple());
+        sqlx::query(
+            "INSERT INTO product (id, key, name, description, status, product_type, created_at, updated_at) \
+             VALUES ($1, $2, 'Rate product', '', 'active', 'desktop', now(), now())",
+        )
+        .bind(Uuid::new_v4())
+        .bind(&product_key)
+        .execute(&pool)
+        .await
+        .unwrap();
         let peer_a = std::net::SocketAddr::from(([127, 0, 0, 2], 41001));
         let peer_b = std::net::SocketAddr::from(([127, 0, 0, 3], 41002));
         let origin = Some("http://127.0.0.1:8080");
@@ -3348,6 +3504,7 @@ mod tests {
         let body = |label: &str| {
             json!({
                 "installation_id": Uuid::new_v4(),
+                "product_key": product_key,
                 "public_key": public_key.clone(),
                 "device_label": label,
                 "app_version": "0.1.0",
@@ -3515,6 +3672,26 @@ mod tests {
         .await;
         assert_eq!(status, StatusCode::CREATED);
         let organization_id = organization["id"].as_str().unwrap().to_owned();
+        let product_key = format!("http-pos-{}", Uuid::new_v4().simple());
+        let product_id = Uuid::new_v4();
+        sqlx::query(
+            "INSERT INTO product (id, key, name, description, status, product_type, created_at, updated_at) \
+             VALUES ($1, $2, 'HTTP product', '', 'active', 'desktop', now(), now())",
+        )
+        .bind(product_id)
+        .bind(&product_key)
+        .execute(&pool)
+        .await
+        .unwrap();
+        sqlx::query(
+            "INSERT INTO organization_product (organization_id, product_id, status, activated_at) \
+             VALUES ($1, $2, 'active', now())",
+        )
+        .bind(Uuid::parse_str(&organization_id).unwrap())
+        .bind(product_id)
+        .execute(&pool)
+        .await
+        .unwrap();
 
         let installation_id = Uuid::new_v4();
         let signing_key = ed25519_dalek::SigningKey::generate(&mut rand_core::OsRng);
@@ -3531,6 +3708,7 @@ mod tests {
             None,
             Some(json!({
                 "installation_id": installation_id,
+                "product_key": product_key,
                 "public_key": public_key,
                 "device_label": "Caja HTTP",
                 "app_version": "0.1.0",
@@ -3653,5 +3831,1334 @@ mod tests {
         )
         .await;
         assert_eq!(status, StatusCode::NOT_FOUND);
+    }
+
+    async fn seed_staff(
+        pool: &PgPool,
+        email: &str,
+        password: &str,
+        role: platform_core::staff::StaffRole,
+    ) {
+        let now = time::OffsetDateTime::now_utc();
+        let hash = platform_application::security::hash_password(password.to_owned())
+            .await
+            .unwrap();
+        platform_storage_postgres::PgStaffRepository::new(pool.clone())
+            .create_staff(email, "Staff API", role, &hash, now)
+            .await
+            .unwrap();
+    }
+
+    fn staff_session_from(headers: &HeaderMap) -> String {
+        let raw = headers.get(header::SET_COOKIE).unwrap().to_str().unwrap();
+        assert!(raw.contains("HttpOnly"));
+        assert!(raw.contains("SameSite=Strict"));
+        assert!(raw.contains("Path=/api/v1/control"));
+        assert!(raw.starts_with("hiqnet_staff_session="));
+        raw.split(';').next().unwrap().to_owned()
+    }
+
+    #[tokio::test]
+    async fn staff_auth_is_separate_and_revocable() {
+        let pool = open(&isolated_test_url()).await.unwrap();
+        let email = format!("staff-{}@hiqnet.test", Uuid::new_v4());
+        let password = "contraseña-staff-larga";
+        seed_staff(
+            &pool,
+            &email,
+            password,
+            platform_core::staff::StaffRole::SuperAdmin,
+        )
+        .await;
+        let router = build_router(state(pool.clone()), false, test_auth_state(pool.clone()));
+
+        // Origen ajeno rechazado antes de tocar credenciales.
+        let (status, headers, _) = send_auth(
+            &router,
+            "/api/v1/control/auth/login",
+            None,
+            Some("https://evil.example"),
+            Some(json!({"email": email, "password": password})),
+        )
+        .await;
+        assert_eq!(status, StatusCode::FORBIDDEN);
+        assert!(headers.get(header::SET_COOKIE).is_none());
+
+        // Login staff correcto: cookie propia, SameSite=Strict, Path del Control Center.
+        let (status, headers, _) = send_auth(
+            &router,
+            "/api/v1/control/auth/login",
+            None,
+            Some("http://127.0.0.1:8080"),
+            Some(json!({"email": email, "password": password})),
+        )
+        .await;
+        assert_eq!(status, StatusCode::NO_CONTENT);
+        let staff_cookie = staff_session_from(&headers);
+
+        // /me deriva identidad y capabilities de la sesión verificada.
+        let (status, _, body) = send_method(
+            &router,
+            Method::GET,
+            "/api/v1/control/auth/me",
+            Some(&staff_cookie),
+            None,
+            None,
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(body["role"], "super_admin");
+        assert!(
+            body["capabilities"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|capability| capability.as_str() == Some("staff.manage"))
+        );
+
+        // El token DEV no concede acceso staff.
+        let mut request = Request::builder()
+            .method(Method::GET)
+            .uri("/api/v1/control/auth/me")
+            .header(header::AUTHORIZATION, "Bearer token-sintetico-p01")
+            .body(Body::empty())
+            .unwrap();
+        request
+            .extensions_mut()
+            .insert(axum::extract::ConnectInfo(std::net::SocketAddr::from((
+                [127, 0, 0, 1],
+                40000,
+            ))));
+        let response = router.clone().oneshot(request).await.unwrap();
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+
+        // Una cookie comercial no accede al Control Center.
+        let commercial_email = format!("api-{}@example.test", Uuid::new_v4());
+        seed_credential(&pool, &commercial_email, "contraseña-api-larga").await;
+        let (status, commercial_headers, _) = send_auth(
+            &router,
+            "/api/v1/auth/login",
+            None,
+            Some("http://127.0.0.1:8080"),
+            Some(json!({"email": commercial_email, "password": "contraseña-api-larga"})),
+        )
+        .await;
+        assert_eq!(status, StatusCode::NO_CONTENT);
+        let commercial_cookie = session_from(&commercial_headers);
+        let (status, _, _) = send_method(
+            &router,
+            Method::GET,
+            "/api/v1/control/auth/me",
+            Some(&commercial_cookie),
+            None,
+            None,
+        )
+        .await;
+        assert_eq!(status, StatusCode::UNAUTHORIZED);
+
+        // Logout revoca la sesión staff.
+        let (status, _, _) = send_auth(
+            &router,
+            "/api/v1/control/auth/logout",
+            Some(&staff_cookie),
+            Some("http://127.0.0.1:8080"),
+            None,
+        )
+        .await;
+        assert_eq!(status, StatusCode::NO_CONTENT);
+        let (status, _, _) = send_method(
+            &router,
+            Method::GET,
+            "/api/v1/control/auth/me",
+            Some(&staff_cookie),
+            None,
+            None,
+        )
+        .await;
+        assert_eq!(status, StatusCode::UNAUTHORIZED);
+
+        // Deshabilitar la cuenta invalida de inmediato cualquier sesión nueva.
+        let (status, headers, _) = send_auth(
+            &router,
+            "/api/v1/control/auth/login",
+            None,
+            Some("http://127.0.0.1:8080"),
+            Some(json!({"email": email, "password": password})),
+        )
+        .await;
+        assert_eq!(status, StatusCode::NO_CONTENT);
+        let active_cookie = staff_session_from(&headers);
+        sqlx::query("UPDATE staff_account SET status = 'disabled' WHERE email = $1")
+            .bind(&email)
+            .execute(&pool)
+            .await
+            .unwrap();
+        let (status, _, _) = send_method(
+            &router,
+            Method::GET,
+            "/api/v1/control/auth/me",
+            Some(&active_cookie),
+            None,
+            None,
+        )
+        .await;
+        assert_eq!(status, StatusCode::UNAUTHORIZED);
+    }
+
+    #[test]
+    fn control_openapi_exposes_product_enums() {
+        let document = serde_json::to_value(openapi_document()).unwrap();
+        let status = &document["components"]["schemas"]["ProductStatusDto"]["enum"];
+        let statuses: Vec<&str> = status
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|value| value.as_str().unwrap())
+            .collect();
+        assert!(statuses.contains(&"active"));
+        assert!(statuses.contains(&"retired"));
+        let product_type = &document["components"]["schemas"]["ProductTypeDto"]["enum"];
+        assert!(
+            product_type
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|value| value == "desktop")
+        );
+        let project_type = &document["components"]["schemas"]["ProjectTypeDto"]["enum"];
+        assert!(
+            project_type
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|value| value == "infrastructure")
+        );
+    }
+
+    #[tokio::test]
+    async fn control_products_and_projects_enforce_rbac_and_audit() {
+        let pool = open(&isolated_test_url()).await.unwrap();
+        let email = format!("staff-admin-{}@hiqnet.test", Uuid::new_v4());
+        let password = "contraseña-staff-larga";
+        seed_staff(
+            &pool,
+            &email,
+            password,
+            platform_core::staff::StaffRole::SuperAdmin,
+        )
+        .await;
+        let router = build_router(state(pool.clone()), false, test_auth_state(pool.clone()));
+        let origin = "http://127.0.0.1:8080";
+
+        // Sin sesión staff no se accede al Control Center.
+        let (status, _, _) = send_method(
+            &router,
+            Method::GET,
+            "/api/v1/control/products",
+            None,
+            None,
+            None,
+        )
+        .await;
+        assert_eq!(status, StatusCode::UNAUTHORIZED);
+
+        let (status, headers, _) = send_auth(
+            &router,
+            "/api/v1/control/auth/login",
+            None,
+            Some(origin),
+            Some(json!({"email": email, "password": password})),
+        )
+        .await;
+        assert_eq!(status, StatusCode::NO_CONTENT);
+        let admin_cookie = staff_session_from(&headers);
+
+        let product_key = format!("pos-{}", Uuid::new_v4().simple());
+        let (status, _, body) = send_method(
+            &router,
+            Method::POST,
+            "/api/v1/control/products",
+            Some(&admin_cookie),
+            Some(origin),
+            Some(json!({
+                "key": product_key,
+                "name": "HiQNet POS",
+                "description": "Punto de venta",
+                "status": "active",
+                "type": "desktop",
+            })),
+        )
+        .await;
+        assert_eq!(status, StatusCode::CREATED);
+        assert_eq!(body["key"], product_key);
+        assert_eq!(body["status"], "active");
+        assert_rfc3339(&body["created_at"], "product.created_at");
+        assert_rfc3339(&body["updated_at"], "product.updated_at");
+        let product_initial_updated_at = body["updated_at"].clone();
+
+        // Clave duplicada: conflicto sin filtrar detalles.
+        let (status, _, _) = send_method(
+            &router,
+            Method::POST,
+            "/api/v1/control/products",
+            Some(&admin_cookie),
+            Some(origin),
+            Some(json!({
+                "key": product_key,
+                "name": "Duplicado",
+                "status": "active",
+                "type": "desktop",
+            })),
+        )
+        .await;
+        assert_eq!(status, StatusCode::CONFLICT);
+
+        let (status, _, body) = send_method(
+            &router,
+            Method::GET,
+            &format!("/api/v1/control/products/{product_key}"),
+            Some(&admin_cookie),
+            None,
+            None,
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(body["name"], "HiQNet POS");
+
+        let (status, _, body) = send_method(
+            &router,
+            Method::PATCH,
+            &format!("/api/v1/control/products/{product_key}"),
+            Some(&admin_cookie),
+            Some(origin),
+            Some(json!({"status": "maintenance"})),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(body["status"], "maintenance");
+        assert_rfc3339(&body["updated_at"], "product.updated_at tras PATCH");
+        let product_changed_updated_at = body["updated_at"].clone();
+        assert_ne!(product_changed_updated_at, product_initial_updated_at);
+        assert_eq!(product_project_audit_count(&pool, &email).await, 2);
+
+        // PATCH sin cambios efectivos → 400 (no se audita una mutación inexistente).
+        let (status, _, body) = send_method(
+            &router,
+            Method::PATCH,
+            &format!("/api/v1/control/products/{product_key}"),
+            Some(&admin_cookie),
+            Some(origin),
+            Some(json!({})),
+        )
+        .await;
+        assert_eq!(status, StatusCode::BAD_REQUEST);
+        assert_eq!(body["code"], "validation_error");
+
+        let (status, _, body) = send_method(
+            &router,
+            Method::PATCH,
+            &format!("/api/v1/control/products/{product_key}"),
+            Some(&admin_cookie),
+            Some(origin),
+            Some(json!({"status": null})),
+        )
+        .await;
+        assert_eq!(status, StatusCode::BAD_REQUEST);
+        assert_eq!(body["code"], "validation_error");
+
+        // Repetir el valor persistido también es un no-op: no se actualiza ni audita.
+        let (status, _, body) = send_method(
+            &router,
+            Method::PATCH,
+            &format!("/api/v1/control/products/{product_key}"),
+            Some(&admin_cookie),
+            Some(origin),
+            Some(json!({"status": "maintenance"})),
+        )
+        .await;
+        assert_eq!(status, StatusCode::BAD_REQUEST);
+        assert_eq!(body["code"], "validation_error");
+
+        let (status, _, body) = send_method(
+            &router,
+            Method::GET,
+            &format!("/api/v1/control/products/{product_key}"),
+            Some(&admin_cookie),
+            None,
+            None,
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(body["updated_at"], product_changed_updated_at);
+        assert_eq!(product_project_audit_count(&pool, &email).await, 2);
+
+        let project_key = format!("api-{}", Uuid::new_v4().simple());
+        let (status, _, body) = send_method(
+            &router,
+            Method::POST,
+            "/api/v1/control/projects",
+            Some(&admin_cookie),
+            Some(origin),
+            Some(json!({
+                "key": project_key,
+                "name": "HiQNet Platform API",
+                "project_type": "service",
+                "status": "active",
+                "product_key": product_key,
+            })),
+        )
+        .await;
+        assert_eq!(status, StatusCode::CREATED);
+        assert_eq!(body["product_key"], product_key);
+        assert_rfc3339(&body["created_at"], "project.created_at");
+        assert_rfc3339(&body["updated_at"], "project.updated_at");
+        let project_initial_updated_at = body["updated_at"].clone();
+
+        let (status, _, body) = send_method(
+            &router,
+            Method::GET,
+            &format!("/api/v1/control/projects?product_key={product_key}"),
+            Some(&admin_cookie),
+            None,
+            None,
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        assert!(
+            body["items"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|item| item["key"] == project_key)
+        );
+
+        let (status, _, body) = send_method(
+            &router,
+            Method::PATCH,
+            &format!("/api/v1/control/projects/{project_key}"),
+            Some(&admin_cookie),
+            Some(origin),
+            Some(json!({"status": "maintenance"})),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(body["status"], "maintenance");
+        let project_changed_updated_at = body["updated_at"].clone();
+        assert_ne!(project_changed_updated_at, project_initial_updated_at);
+        assert_eq!(product_project_audit_count(&pool, &email).await, 4);
+
+        for request in [
+            json!({}),
+            json!({"status": null}),
+            json!({"status": "maintenance"}),
+        ] {
+            let (status, _, body) = send_method(
+                &router,
+                Method::PATCH,
+                &format!("/api/v1/control/projects/{project_key}"),
+                Some(&admin_cookie),
+                Some(origin),
+                Some(request),
+            )
+            .await;
+            assert_eq!(status, StatusCode::BAD_REQUEST);
+            assert_eq!(body["code"], "validation_error");
+        }
+
+        let (status, _, body) = send_method(
+            &router,
+            Method::GET,
+            &format!("/api/v1/control/projects/{project_key}"),
+            Some(&admin_cookie),
+            None,
+            None,
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(body["updated_at"], project_changed_updated_at);
+        assert_eq!(product_project_audit_count(&pool, &email).await, 4);
+
+        // read_only puede leer pero no mutar.
+        let reader_email = format!("staff-reader-{}@hiqnet.test", Uuid::new_v4());
+        seed_staff(
+            &pool,
+            &reader_email,
+            password,
+            platform_core::staff::StaffRole::ReadOnly,
+        )
+        .await;
+        let (status, headers, _) = send_auth(
+            &router,
+            "/api/v1/control/auth/login",
+            None,
+            Some(origin),
+            Some(json!({"email": reader_email, "password": password})),
+        )
+        .await;
+        assert_eq!(status, StatusCode::NO_CONTENT);
+        let reader_cookie = staff_session_from(&headers);
+
+        let (status, _, _) = send_method(
+            &router,
+            Method::GET,
+            "/api/v1/control/products",
+            Some(&reader_cookie),
+            None,
+            None,
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+
+        let (status, _, body) = send_method(
+            &router,
+            Method::POST,
+            "/api/v1/control/products",
+            Some(&reader_cookie),
+            Some(origin),
+            Some(json!({
+                "key": format!("forbidden-{}", Uuid::new_v4().simple()),
+                "name": "No permitido",
+                "status": "active",
+                "type": "internal",
+            })),
+        )
+        .await;
+        assert_eq!(status, StatusCode::FORBIDDEN);
+        assert_eq!(body["code"], "forbidden");
+    }
+
+    fn assert_rfc3339(value: &Value, field: &str) {
+        let text = value
+            .as_str()
+            .unwrap_or_else(|| panic!("{field} debe ser string RFC3339: {value}"));
+        time::OffsetDateTime::parse(text, &time::format_description::well_known::Rfc3339)
+            .unwrap_or_else(|error| panic!("{field} no parsea como RFC3339: {text}: {error}"));
+    }
+
+    async fn seed_control_fixture(pool: &PgPool) -> (String, Uuid) {
+        let prefix = format!("c4-{}", Uuid::new_v4().simple());
+        let timestamp = time::OffsetDateTime::now_utc();
+        for (index, status) in ["active", "legacy_unclaimed", "archived"]
+            .iter()
+            .enumerate()
+        {
+            sqlx::query(
+                "INSERT INTO organization (id, display_name, status, created_at) VALUES ($1, $2, $3, $4)",
+            )
+            .bind(Uuid::new_v4())
+            .bind(format!("{prefix}-org-{index}"))
+            .bind(*status)
+            .bind(timestamp)
+            .execute(pool)
+            .await
+            .unwrap();
+        }
+        let organization_id = Uuid::new_v4();
+        sqlx::query(
+            "INSERT INTO organization (id, display_name, status, created_at) VALUES ($1, $2, 'active', $3)",
+        )
+        .bind(organization_id)
+        .bind(format!("{prefix}-detalle"))
+        .bind(timestamp)
+        .execute(pool)
+        .await
+        .unwrap();
+        let first_account = Uuid::new_v4();
+        let revoked_account = Uuid::new_v4();
+        for (id, email, name, status) in [
+            (
+                first_account,
+                format!("{prefix}-first@example.test"),
+                "Primera Cuenta".to_owned(),
+                "active",
+            ),
+            (
+                revoked_account,
+                format!("{prefix}-revoked@example.test"),
+                "Cuenta Revocada".to_owned(),
+                "disabled",
+            ),
+        ] {
+            sqlx::query(
+                "INSERT INTO commercial_account (id, email, display_name, status, created_at)
+                 VALUES ($1, $2, $3, $4, $5)",
+            )
+            .bind(id)
+            .bind(email)
+            .bind(name)
+            .bind(status)
+            .bind(timestamp)
+            .execute(pool)
+            .await
+            .unwrap();
+        }
+        sqlx::query(
+            "INSERT INTO organization_membership (organization_id, account_id, role, role_version, joined_at)
+             VALUES ($1, $2, 'owner', 1, $3)",
+        )
+        .bind(organization_id)
+        .bind(first_account)
+        .bind(timestamp)
+        .execute(pool)
+        .await
+        .unwrap();
+        sqlx::query(
+            "INSERT INTO organization_membership (organization_id, account_id, role, role_version, joined_at, revoked_at)
+             VALUES ($1, $2, 'member', 1, $3, $4)",
+        )
+        .bind(organization_id)
+        .bind(revoked_account)
+        .bind(timestamp + time::Duration::seconds(1))
+        .bind(timestamp + time::Duration::seconds(2))
+        .execute(pool)
+        .await
+        .unwrap();
+        for (status, association) in [("active", "active"), ("retired", "inactive")] {
+            let product_id = Uuid::new_v4();
+            let key = format!("{prefix}-product-{status}");
+            sqlx::query(
+                "INSERT INTO product (id, key, name, description, status, product_type, created_at, updated_at)
+                 VALUES ($1, $2, $3, '', $4, 'saas', now(), now())",
+            )
+            .bind(product_id)
+            .bind(&key)
+            .bind(format!("Product {key}"))
+            .bind(status)
+            .execute(pool)
+            .await
+            .unwrap();
+            sqlx::query(
+                "INSERT INTO organization_product (organization_id, product_id, status, activated_at)
+                 VALUES ($1, $2, $3, now())",
+            )
+            .bind(organization_id)
+            .bind(product_id)
+            .bind(association)
+            .execute(pool)
+            .await
+            .unwrap();
+        }
+        (prefix, organization_id)
+    }
+
+    #[tokio::test]
+    async fn control_directory_paginates_filters_and_preserves_history() {
+        let pool = open(&isolated_test_url()).await.unwrap();
+        let email = format!("staff-directory-{}@hiqnet.test", Uuid::new_v4());
+        let password = "contraseña-staff-larga";
+        seed_staff(
+            &pool,
+            &email,
+            password,
+            platform_core::staff::StaffRole::ReadOnly,
+        )
+        .await;
+        let (prefix, organization_id) = seed_control_fixture(&pool).await;
+        let router = build_router(state(pool.clone()), false, test_auth_state(pool.clone()));
+        let origin = "http://127.0.0.1:8080";
+        let (status, headers, _) = send_auth(
+            &router,
+            "/api/v1/control/auth/login",
+            None,
+            Some(origin),
+            Some(json!({"email": email, "password": password})),
+        )
+        .await;
+        assert_eq!(status, StatusCode::NO_CONTENT);
+        let cookie = staff_session_from(&headers);
+        let audit_before: i64 = sqlx::query_scalar(
+            "SELECT count(*) FROM staff_audit_event e
+             JOIN staff_account a ON a.id = e.staff_account_id WHERE a.email = $1",
+        )
+        .bind(&email)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+
+        let (status, _, body) = send_method(
+            &router,
+            Method::GET,
+            &format!("/api/v1/control/organizations?search={prefix}&limit=2"),
+            Some(&cookie),
+            None,
+            None,
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(body["items"].as_array().unwrap().len(), 2);
+        assert_rfc3339(&body["items"][0]["created_at"], "organization.created_at");
+        let next_cursor = body["next_cursor"].as_str().unwrap().to_owned();
+
+        let (status, _, body) = send_method(
+            &router,
+            Method::GET,
+            &format!("/api/v1/control/organizations?search={prefix}&limit=2&cursor={next_cursor}"),
+            Some(&cookie),
+            None,
+            None,
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(body["items"].as_array().unwrap().len(), 2);
+
+        let (status, _, body) = send_method(
+            &router,
+            Method::GET,
+            &format!("/api/v1/control/organizations?status=archived&search={prefix}"),
+            Some(&cookie),
+            None,
+            None,
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        assert!(
+            body["items"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .all(|item| item["status"] == "archived")
+        );
+
+        for query in [
+            "status=suspended".to_owned(),
+            "cursor=no-es-un-cursor".to_owned(),
+            format!("search={}", "x".repeat(201)),
+        ] {
+            let (status, _, body) = send_method(
+                &router,
+                Method::GET,
+                &format!("/api/v1/control/organizations?{query}"),
+                Some(&cookie),
+                None,
+                None,
+            )
+            .await;
+            assert_eq!(status, StatusCode::BAD_REQUEST, "query {query}");
+            assert_eq!(body["code"], "validation_error");
+        }
+
+        let (status, _, body) = send_method(
+            &router,
+            Method::GET,
+            &format!("/api/v1/control/organizations/{organization_id}"),
+            Some(&cookie),
+            None,
+            None,
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(body["memberships"].as_array().unwrap().len(), 2);
+        for membership in body["memberships"].as_array().unwrap() {
+            assert_rfc3339(&membership["joined_at"], "membership.joined_at");
+            if !membership["revoked_at"].is_null() {
+                assert_rfc3339(&membership["revoked_at"], "membership.revoked_at");
+            }
+        }
+        assert!(
+            body["memberships"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|membership| !membership["revoked_at"].is_null()),
+            "la membership revocada se conserva"
+        );
+        for product in body["products"].as_array().unwrap() {
+            assert_rfc3339(
+                &product["activated_at"],
+                "organization_product.activated_at",
+            );
+        }
+        assert_eq!(body["products"].as_array().unwrap().len(), 2);
+        assert!(
+            body["products"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|product| product["association_status"] == "inactive")
+        );
+
+        let (status, _, _) = send_method(
+            &router,
+            Method::GET,
+            &format!("/api/v1/control/organizations/{}", Uuid::new_v4()),
+            Some(&cookie),
+            None,
+            None,
+        )
+        .await;
+        assert_eq!(status, StatusCode::NOT_FOUND);
+        let (status, _, _) = send_method(
+            &router,
+            Method::GET,
+            "/api/v1/control/organizations/no-es-uuid",
+            Some(&cookie),
+            None,
+            None,
+        )
+        .await;
+        assert_eq!(status, StatusCode::BAD_REQUEST);
+
+        let (status, _, body) = send_method(
+            &router,
+            Method::GET,
+            &format!("/api/v1/control/accounts?search={prefix}"),
+            Some(&cookie),
+            None,
+            None,
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(body["items"].as_array().unwrap().len(), 2);
+        assert_rfc3339(&body["items"][0]["created_at"], "account.created_at");
+        let account_id = body["items"][0]["id"].as_str().unwrap().to_owned();
+
+        let (status, _, body) = send_method(
+            &router,
+            Method::GET,
+            &format!("/api/v1/control/accounts/{account_id}"),
+            Some(&cookie),
+            None,
+            None,
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(body["memberships"].as_array().unwrap().len(), 1);
+        assert_rfc3339(
+            &body["memberships"][0]["joined_at"],
+            "account_membership.joined_at",
+        );
+
+        let (status, _, body) = send_method(
+            &router,
+            Method::GET,
+            &format!("/api/v1/control/accounts?status=disabled&search={prefix}"),
+            Some(&cookie),
+            None,
+            None,
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(body["items"].as_array().unwrap().len(), 1);
+
+        let audit_after: i64 = sqlx::query_scalar(
+            "SELECT count(*) FROM staff_audit_event e
+             JOIN staff_account a ON a.id = e.staff_account_id WHERE a.email = $1",
+        )
+        .bind(&email)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        assert_eq!(audit_before, audit_after, "las lecturas no auditan");
+    }
+
+    #[tokio::test]
+    async fn control_directory_rejects_invalid_query_bounds() {
+        let pool = open(&isolated_test_url()).await.unwrap();
+        let email = format!("staff-bounds-{}@hiqnet.test", Uuid::new_v4());
+        let password = "contraseña-staff-larga";
+        seed_staff(
+            &pool,
+            &email,
+            password,
+            platform_core::staff::StaffRole::ReadOnly,
+        )
+        .await;
+        let router = build_router(state(pool.clone()), false, test_auth_state(pool.clone()));
+        let (status, headers, _) = send_auth(
+            &router,
+            "/api/v1/control/auth/login",
+            None,
+            Some("http://127.0.0.1:8080"),
+            Some(json!({"email": email, "password": password})),
+        )
+        .await;
+        assert_eq!(status, StatusCode::NO_CONTENT);
+        let cookie = staff_session_from(&headers);
+
+        for path in ["/api/v1/control/organizations", "/api/v1/control/accounts"] {
+            for query in ["limit=0", "limit=101", "limit=no-es-numero"] {
+                let (status, _, body) = send_method(
+                    &router,
+                    Method::GET,
+                    &format!("{path}?{query}"),
+                    Some(&cookie),
+                    None,
+                    None,
+                )
+                .await;
+                assert_eq!(status, StatusCode::BAD_REQUEST, "{path}?{query}");
+                assert_eq!(body["code"], "validation_error", "{path}?{query}");
+            }
+        }
+    }
+
+    #[test]
+    fn control_directory_openapi_exposes_closed_enums() {
+        let document = serde_json::to_value(openapi_document()).unwrap();
+        for (schema, expected) in [
+            ("OrganizationStatusDto", "legacy_unclaimed"),
+            ("AccountStatusDto", "disabled"),
+            ("MembershipRoleDto", "owner"),
+            ("AssociationStatusDto", "inactive"),
+        ] {
+            let values = document["components"]["schemas"][schema]["enum"]
+                .as_array()
+                .unwrap_or_else(|| panic!("schema {schema}"));
+            assert!(
+                values.iter().any(|value| value == expected),
+                "{schema} debe publicar {expected}"
+            );
+        }
+    }
+
+    fn random_bytes32() -> Vec<u8> {
+        let mut bytes = Uuid::new_v4().as_bytes().to_vec();
+        bytes.extend_from_slice(Uuid::new_v4().as_bytes());
+        bytes
+    }
+
+    async fn control_login(router: &Router, email: &str, password: &str) -> String {
+        let (status, headers, _) = send_auth(
+            router,
+            "/api/v1/control/auth/login",
+            None,
+            Some("http://127.0.0.1:8080"),
+            Some(json!({"email": email, "password": password})),
+        )
+        .await;
+        assert_eq!(status, StatusCode::NO_CONTENT);
+        staff_session_from(&headers)
+    }
+
+    #[tokio::test]
+    async fn control_installations_require_staff_capability_and_cover_contract() {
+        let pool = open(&isolated_test_url()).await.unwrap();
+        let router = build_router(state(pool.clone()), true, test_auth_state(pool.clone()));
+
+        let organization = Uuid::new_v4();
+        sqlx::query(
+            "INSERT INTO organization (id, display_name, status, created_at) \
+             VALUES ($1, $2, 'active', now())",
+        )
+        .bind(organization)
+        .bind(format!("API C5 {organization}"))
+        .execute(&pool)
+        .await
+        .unwrap();
+        let product = Uuid::new_v4();
+        let product_key = format!("api-c5-{}", Uuid::new_v4().simple());
+        sqlx::query(
+            "INSERT INTO product \
+             (id, key, name, description, status, product_type, created_at, updated_at) \
+             VALUES ($1, $2, $3, '', 'active', 'saas', now(), now())",
+        )
+        .bind(product)
+        .bind(&product_key)
+        .bind(format!("Product {product_key}"))
+        .execute(&pool)
+        .await
+        .unwrap();
+        sqlx::query(
+            "INSERT INTO organization_product (organization_id, product_id, status, activated_at) \
+             VALUES ($1, $2, 'active', now())",
+        )
+        .bind(organization)
+        .bind(product)
+        .execute(&pool)
+        .await
+        .unwrap();
+        let owner = Uuid::new_v4();
+        sqlx::query(
+            "INSERT INTO commercial_account (id, email, display_name, created_at) \
+             VALUES ($1, $2, 'Owner API C5', now())",
+        )
+        .bind(owner)
+        .bind(format!("api-c5-owner-{owner}@example.test"))
+        .execute(&pool)
+        .await
+        .unwrap();
+        sqlx::query(
+            "INSERT INTO organization_membership \
+             (organization_id, account_id, role, role_version, joined_at) \
+             VALUES ($1, $2, 'owner', 1, now())",
+        )
+        .bind(organization)
+        .bind(owner)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        let installation = Uuid::new_v4();
+        let device_label = format!("API C5 caja {}", &installation.to_string()[..8]);
+        sqlx::query(
+            "INSERT INTO installation \
+             (id, organization_id, product_id, device_label, status, identity_status, \
+              registered_at, enrolled_at) \
+             VALUES ($1, $2, $3, $4, 'active', 'active', now(), now())",
+        )
+        .bind(installation)
+        .bind(organization)
+        .bind(product)
+        .bind(&device_label)
+        .execute(&pool)
+        .await
+        .unwrap();
+        let identity = Uuid::new_v4();
+        sqlx::query(
+            "INSERT INTO installation_identity \
+             (id, installation_id, public_key, fingerprint, generation, created_at) \
+             VALUES ($1, $2, $3, $4, 1, now())",
+        )
+        .bind(identity)
+        .bind(installation)
+        .bind(random_bytes32())
+        .bind(random_bytes32())
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        let insert_request = |status: &'static str| {
+            let consumed_at = (status == "completed").then(time::OffsetDateTime::now_utc);
+            sqlx::query(
+                "INSERT INTO enrollment_request \
+                 (id, installation_id, product_id, public_key, fingerprint, device_label, \
+                  app_version, platform, device_code_hash, user_code_hash, nonce_hash, status, \
+                  organization_id, approved_by_account_id, idempotency_scope, idempotency_key, \
+                  request_hash, created_at, expires_at, approved_at, consumed_at) \
+                 VALUES ($1, $2, $3, $4, $5, $6, '0.1.0', 'windows', $7, $8, $9, $10, \
+                         $11, $12, 'api-c5', NULL, $13, now(), now() + interval '30 minutes', \
+                         now(), $14)",
+            )
+            .bind(Uuid::new_v4())
+            .bind(installation)
+            .bind(product)
+            .bind(random_bytes32())
+            .bind(random_bytes32())
+            .bind(format!("API C5 request {}", Uuid::new_v4()))
+            .bind(random_bytes32())
+            .bind(random_bytes32())
+            .bind(random_bytes32())
+            .bind(status)
+            .bind(organization)
+            .bind(owner)
+            .bind(random_bytes32())
+            .bind(consumed_at)
+        };
+        insert_request("completed").execute(&pool).await.unwrap();
+        insert_request("approved").execute(&pool).await.unwrap();
+        let original: Uuid = sqlx::query_scalar(
+            "SELECT id FROM enrollment_request WHERE installation_id = $1 AND status = 'completed'",
+        )
+        .bind(installation)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        sqlx::query(
+            "INSERT INTO installation_binding \
+             (id, organization_id, installation_id, enrollment_request_id, \
+              installation_identity_id, approved_by_account_id, bound_at) \
+             VALUES ($1, $2, $3, $4, $5, $6, now())",
+        )
+        .bind(Uuid::new_v4())
+        .bind(organization)
+        .bind(installation)
+        .bind(original)
+        .bind(identity)
+        .bind(owner)
+        .execute(&pool)
+        .await
+        .unwrap();
+        let rehost_request: Uuid = sqlx::query_scalar(
+            "SELECT id FROM enrollment_request WHERE installation_id = $1 AND status = 'approved'",
+        )
+        .bind(installation)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+
+        let password = "contraseña-staff-larga";
+        let reader_email = format!("c5-reader-{}@hiqnet.test", Uuid::new_v4());
+        let manager_email = format!("c5-manager-{}@hiqnet.test", Uuid::new_v4());
+        let admin_email = format!("c5-admin-{}@hiqnet.test", Uuid::new_v4());
+        seed_staff(
+            &pool,
+            &reader_email,
+            password,
+            platform_core::staff::StaffRole::Support,
+        )
+        .await;
+        seed_staff(
+            &pool,
+            &manager_email,
+            password,
+            platform_core::staff::StaffRole::Operator,
+        )
+        .await;
+        seed_staff(
+            &pool,
+            &admin_email,
+            password,
+            platform_core::staff::StaffRole::PlatformAdmin,
+        )
+        .await;
+
+        let origin = Some("http://127.0.0.1:8080");
+        let list_path =
+            format!("/api/v1/control/installations?organization_id={organization}&limit=10");
+        let (status, _, _) = send_method(&router, Method::GET, &list_path, None, None, None).await;
+        assert_eq!(status, StatusCode::UNAUTHORIZED, "sin sesión staff");
+
+        let mut dev_request = Request::builder()
+            .method(Method::GET)
+            .uri(&list_path)
+            .header(header::AUTHORIZATION, "Bearer token-sintetico-p01")
+            .body(Body::empty())
+            .unwrap();
+        dev_request
+            .extensions_mut()
+            .insert(axum::extract::ConnectInfo(std::net::SocketAddr::from((
+                [127, 0, 0, 1],
+                40000,
+            ))));
+        let response = router.clone().oneshot(dev_request).await.unwrap();
+        assert_eq!(
+            response.status(),
+            StatusCode::UNAUTHORIZED,
+            "devAdminToken no accede a Control"
+        );
+
+        let reader = control_login(&router, &reader_email, password).await;
+        let manager = control_login(&router, &manager_email, password).await;
+        let admin = control_login(&router, &admin_email, password).await;
+
+        let (status, _, body) =
+            send_method(&router, Method::GET, &list_path, Some(&reader), None, None).await;
+        assert_eq!(status, StatusCode::OK);
+        let items = body["items"].as_array().unwrap();
+        assert!(items.iter().any(|item| item["id"] == json!(installation)));
+        let registered_at = items[0]["registered_at"].as_str().unwrap();
+        assert!(
+            time::OffsetDateTime::parse(
+                registered_at,
+                &time::format_description::well_known::Rfc3339
+            )
+            .is_ok(),
+            "registered_at debe ser RFC3339: {registered_at}"
+        );
+
+        let (status, _, detail) = send_method(
+            &router,
+            Method::GET,
+            &format!("/api/v1/control/installations/{installation}"),
+            Some(&reader),
+            None,
+            None,
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(detail["summary"]["id"], json!(installation));
+        assert_eq!(detail["summary"]["product"]["key"], json!(product_key));
+        assert_eq!(
+            detail["current_binding"]["approved_by_account_id"],
+            json!(owner)
+        );
+        let identity_created_at = detail["current_identity_created_at"]
+            .as_str()
+            .expect("current_identity_created_at debe ser RFC3339");
+        time::OffsetDateTime::parse(
+            identity_created_at,
+            &time::format_description::well_known::Rfc3339,
+        )
+        .expect("current_identity_created_at no parsea como RFC3339");
+
+        for (path, expected_status, expected_code) in [
+            (
+                format!("/api/v1/control/installations/{}", Uuid::new_v4()),
+                StatusCode::NOT_FOUND,
+                "not_found",
+            ),
+            (
+                "/api/v1/control/installations/no-es-uuid".into(),
+                StatusCode::BAD_REQUEST,
+                "invalid_path",
+            ),
+        ] {
+            let (status, _, error) =
+                send_method(&router, Method::GET, &path, Some(&reader), None, None).await;
+            assert_eq!(status, expected_status, "{path}");
+            assert_eq!(error["code"], expected_code);
+        }
+
+        for query in ["limit=0", "limit=101", "limit=abc", "cursor=no-es-cursor"] {
+            let (status, _, error) = send_method(
+                &router,
+                Method::GET,
+                &format!("/api/v1/control/installations?{query}"),
+                Some(&reader),
+                None,
+                None,
+            )
+            .await;
+            assert_eq!(status, StatusCode::BAD_REQUEST, "{query}");
+            assert_eq!(error["code"], "validation_error", "{query}");
+        }
+        for query in ["status=bogus", "identity_status=bogus"] {
+            let (status, _, error) = send_method(
+                &router,
+                Method::GET,
+                &format!("/api/v1/control/installations?{query}"),
+                Some(&reader),
+                None,
+                None,
+            )
+            .await;
+            assert_eq!(status, StatusCode::BAD_REQUEST, "{query}");
+            assert_eq!(error["code"], "validation_error", "{query}");
+        }
+        let (status, _, error) = send_method(
+            &router,
+            Method::GET,
+            &format!("/api/v1/control/installations?search={}", "x".repeat(201)),
+            Some(&reader),
+            None,
+            None,
+        )
+        .await;
+        assert_eq!(status, StatusCode::BAD_REQUEST);
+        assert_eq!(error["code"], "validation_error");
+
+        let suspend_path = format!("/api/v1/control/installations/{installation}/suspend");
+        let (status, _, _) = send_method(
+            &router,
+            Method::POST,
+            &suspend_path,
+            Some(&reader),
+            origin,
+            None,
+        )
+        .await;
+        assert_eq!(status, StatusCode::FORBIDDEN, "read sin manage");
+
+        let (status, _, suspended) = send_method(
+            &router,
+            Method::POST,
+            &suspend_path,
+            Some(&manager),
+            origin,
+            None,
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(
+            suspended["summary"]["administrative_status"],
+            json!("suspended")
+        );
+        let (status, _, reactivated) = send_method(
+            &router,
+            Method::POST,
+            &format!("/api/v1/control/installations/{installation}/reactivate"),
+            Some(&manager),
+            origin,
+            None,
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(
+            reactivated["summary"]["administrative_status"],
+            json!("active")
+        );
+
+        let rehost_path = format!("/api/v1/control/installations/{installation}/rehost");
+        let rehost_body = json!({"enrollment_request_id": rehost_request, "reason": "reemplazo"});
+        let (status, _, error) = send_method(
+            &router,
+            Method::POST,
+            &rehost_path,
+            Some(&manager),
+            origin,
+            Some(rehost_body.clone()),
+        )
+        .await;
+        assert_eq!(status, StatusCode::FORBIDDEN, "manage sin rehost");
+        assert_eq!(error["code"], "forbidden");
+
+        let (status, _, error) = send_method(
+            &router,
+            Method::POST,
+            &rehost_path,
+            Some(&admin),
+            Some("https://evil.example"),
+            Some(rehost_body.clone()),
+        )
+        .await;
+        assert_eq!(status, StatusCode::FORBIDDEN);
+        assert_eq!(error["code"], "origin_not_allowed");
+
+        let (status, _, _) = send_method(
+            &router,
+            Method::POST,
+            &rehost_path,
+            Some(&admin),
+            origin,
+            Some(json!({})),
+        )
+        .await;
+        assert_eq!(status, StatusCode::BAD_REQUEST);
+
+        let (status, _, error) = send_method(
+            &router,
+            Method::POST,
+            &rehost_path,
+            Some(&admin),
+            origin,
+            Some(json!({"enrollment_request_id": rehost_request, "reason": "   "})),
+        )
+        .await;
+        assert_eq!(status, StatusCode::BAD_REQUEST);
+        assert_eq!(error["code"], "validation_error");
+
+        let (status, _, error) = send_method(
+            &router,
+            Method::POST,
+            &rehost_path,
+            Some(&admin),
+            origin,
+            Some(json!({"enrollment_request_id": Uuid::new_v4(), "reason": "ajena"})),
+        )
+        .await;
+        assert_eq!(status, StatusCode::CONFLICT);
+        assert_eq!(error["code"], "rehost_conflict");
+
+        let (status, _, authorization) = send_method(
+            &router,
+            Method::POST,
+            &rehost_path,
+            Some(&admin),
+            origin,
+            Some(rehost_body),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(authorization["status"], json!("pending"));
+        assert_eq!(
+            authorization["enrollment_request_id"],
+            json!(rehost_request)
+        );
+
+        let (status, _, detail) = send_method(
+            &router,
+            Method::GET,
+            &format!("/api/v1/control/installations/{installation}"),
+            Some(&reader),
+            None,
+            None,
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(detail["summary"]["identity_status"], json!("unenrolled"));
+        assert_eq!(detail["summary"]["binding_active"], json!(false));
+        assert!(detail["current_binding"].is_null());
+        assert!(detail["current_identity_created_at"].is_null());
+        assert_eq!(detail["rehost"]["status"], json!("pending"));
     }
 }

@@ -11,12 +11,13 @@ test('login, organización, miembros y seguridad de cuenta', async ({ page }) =>
   await page.getByLabel('Contraseña').fill(password ?? '');
   await page.getByRole('button', { name: 'Entrar' }).click();
 
-  await expect(page.getByRole('heading', { name: 'Organizaciones' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Organizaciones', exact: true })).toBeVisible();
 
   const organizationName = `Portal E2E ${Date.now()}`;
   await page.getByRole('button', { name: 'Nueva organización' }).click();
-  await page.getByLabel('Nombre de la organización').fill(organizationName);
-  await page.getByRole('button', { name: 'Crear organización' }).click();
+  const createDialog = page.getByRole('dialog');
+  await createDialog.getByLabel('Nombre de la organización').fill(organizationName);
+  await createDialog.getByRole('button', { name: 'Crear organización' }).click();
 
   await expect(page.getByRole('heading', { name: organizationName })).toBeVisible();
   await page.getByRole('link', { name: 'Miembros', exact: true }).click();

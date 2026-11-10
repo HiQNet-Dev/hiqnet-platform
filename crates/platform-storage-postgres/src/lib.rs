@@ -4,13 +4,21 @@ use sqlx::PgPool;
 
 pub mod auth;
 pub mod commercial;
+pub mod control;
 pub mod enrollment;
+pub mod installation_control;
+pub mod product;
 pub mod repository;
+pub mod staff;
 
 pub use auth::PgAuthRepository;
 pub use commercial::PgCommercialRepository;
+pub use control::PgControlRepository;
 pub use enrollment::PgEnrollmentRepository;
+pub use installation_control::PgInstallationControlRepository;
+pub use product::PgProductRepository;
 pub use repository::PgRepository;
+pub use staff::PgStaffRepository;
 
 #[derive(Debug, thiserror::Error)]
 pub enum StorageError {

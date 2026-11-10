@@ -76,6 +76,8 @@ impl PeerIp {
 pub struct BeginEnrollmentBody {
     #[schema(value_type = String, format = Uuid, example = "123e4567-e89b-42d3-a456-426614174000")]
     pub installation_id: Uuid,
+    #[schema(example = "pos")]
+    pub product_key: String,
     #[schema(example = "ed25519:v1:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA")]
     pub public_key: String,
     #[schema(example = "Caja mostrador")]
@@ -254,7 +256,7 @@ fn idempotency_key(headers: &HeaderMap) -> Result<Option<String>, HttpError> {
 /// Inicia un challenge de enrolamiento público; los secretos se entregan una sola vez.
 #[utoipa::path(post, path = "/api/v1/enrollment-requests", operation_id = "beginEnrollment", tag = "Enrollment",
     params(("Idempotency-Key" = Option<String>, Header, description = "Clave de idempotencia; máximo 128 caracteres ASCII visibles")),
-    request_body(content = BeginEnrollmentBody, description = "Identidad pública de la instalación y metadatos no secretos"),
+    request_body(content = BeginEnrollmentBody, description = "Identidad pública, product_key resuelto por Platform y metadatos no secretos"),
     responses(
         (status = 201, description = "Challenge creado; secretos entregados una sola vez", body = EnrollmentChallengeResponse),
         (status = 400, description = "Payload, clave pública, plataforma o Idempotency-Key inválidos", body = ErrorResponse),
@@ -283,6 +285,7 @@ pub async fn begin_enrollment(
         .begin_enrollment(
             BeginEnrollmentRequest {
                 installation_id: InstallationId::from_uuid(request.installation_id),
+                product_key: request.product_key,
                 public_key: request.public_key,
                 device_label: request.device_label,
                 app_version: request.app_version,

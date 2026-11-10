@@ -14,6 +14,7 @@ use std::{
 };
 
 use crate::contract::ErrorResponse;
+use crate::staff::StaffState;
 
 pub const SESSION_COOKIE: &str = "hiqnet_session";
 
@@ -28,6 +29,8 @@ pub struct AuthState {
     pub limiter: Arc<LoginLimiter>,
     /// Cota de verificaciones Argon2id simultáneas para proteger CPU.
     pub argon2_slots: Arc<tokio::sync::Semaphore>,
+    /// Configuración y servicio de autenticación del personal interno.
+    pub staff: StaffState,
 }
 
 pub struct AuthContext {

@@ -89,6 +89,282 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/control/accounts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Lista global de cuentas comerciales */
+        get: operations["listControlAccounts"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/control/accounts/{account_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Obtiene una cuenta comercial global */
+        get: operations["getControlAccount"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/control/auth/login": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Inicia una sesión staff con credenciales verificadas. */
+        post: operations["staffLogin"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/control/auth/logout": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Cierra la sesión staff y borra la cookie. Idempotente. */
+        post: operations["staffLogout"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/control/auth/me": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Identidad staff derivada exclusivamente de la sesión verificada. */
+        get: operations["staffMe"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/control/installations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Lista instalaciones POS */
+        get: operations["listControlInstallations"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/control/installations/{installation_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Obtiene una instalación POS */
+        get: operations["getControlInstallation"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/control/installations/{installation_id}/reactivate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Reactiva administrativamente una instalación */
+        post: operations["reactivateControlInstallation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/control/installations/{installation_id}/rehost": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Autoriza el rehost de una instalación */
+        post: operations["rehostControlInstallation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/control/installations/{installation_id}/suspend": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Suspende administrativamente una instalación */
+        post: operations["suspendControlInstallation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/control/organizations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Lista global de organizaciones */
+        get: operations["listControlOrganizations"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/control/organizations/{organization_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Obtiene una organización global */
+        get: operations["getControlOrganization"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/control/products": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Lista productos con paginación por clave */
+        get: operations["listControlProducts"];
+        put?: never;
+        /** Crea un producto con clave estable */
+        post: operations["createControlProduct"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/control/products/{key}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Obtiene un producto por su clave */
+        get: operations["getControlProduct"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Actualiza un producto */
+        patch: operations["updateControlProduct"];
+        trace?: never;
+    };
+    "/api/v1/control/projects": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Lista proyectos con filtro por producto */
+        get: operations["listControlProjects"];
+        put?: never;
+        /** Crea un proyecto */
+        post: operations["createControlProject"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/control/projects/{key}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Obtiene un proyecto por su clave */
+        get: operations["getControlProject"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Actualiza un proyecto */
+        patch: operations["updateControlProject"];
+        trace?: never;
+    };
     "/api/v1/enrollment-requests": {
         parameters: {
             query?: never;
@@ -352,6 +628,8 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** @enum {string} */
+        AccountStatusDto: "active" | "disabled";
         AddMemberRequest: {
             /**
              * Format: uuid
@@ -361,6 +639,8 @@ export interface components {
             /** @example member */
             role: string;
         };
+        /** @enum {string} */
+        AdministrativeStatusDto: "active" | "suspended" | "unregistered";
         ApproveEnrollmentBody: {
             /**
              * Format: uuid
@@ -378,6 +658,8 @@ export interface components {
             /** @example approved */
             status: string;
         };
+        /** @enum {string} */
+        AssociationStatusDto: "active" | "inactive";
         BeginEnrollmentBody: {
             /** @example 0.1.0 */
             app_version: string;
@@ -390,6 +672,8 @@ export interface components {
             installation_id: string;
             /** @example windows */
             platform: string;
+            /** @example pos */
+            product_key: string;
             /** @example ed25519:v1:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA */
             public_key: string;
         };
@@ -403,9 +687,133 @@ export interface components {
             /** @example nueva-contraseña-2026 */
             new_password: string;
         };
+        ControlAccountDetailResponse: {
+            /** Format: date-time */
+            created_at: string;
+            display_name: string;
+            email: string;
+            /** Format: uuid */
+            id: string;
+            memberships: components["schemas"]["ControlAccountMembershipResponse"][];
+            status: components["schemas"]["AccountStatusDto"];
+        };
+        ControlAccountListResponse: {
+            items: components["schemas"]["ControlAccountSummaryResponse"][];
+            next_cursor?: string | null;
+        };
+        ControlAccountMembershipResponse: {
+            /** Format: date-time */
+            joined_at: string;
+            organization_display_name: string;
+            /** Format: uuid */
+            organization_id: string;
+            organization_status: components["schemas"]["OrganizationStatusDto"];
+            /** Format: date-time */
+            revoked_at?: string | null;
+            role: components["schemas"]["MembershipRoleDto"];
+        };
+        ControlAccountSummaryResponse: {
+            /** Format: date-time */
+            created_at: string;
+            display_name: string;
+            email: string;
+            /** Format: uuid */
+            id: string;
+            status: components["schemas"]["AccountStatusDto"];
+        };
+        ControlInstallationDetailResponse: {
+            current_binding?: components["schemas"]["InstallationBindingResponse"] | null;
+            /** Format: date-time */
+            current_identity_created_at?: string | null;
+            rehost?: components["schemas"]["InstallationRehostResponse"] | null;
+            summary: components["schemas"]["ControlInstallationSummaryResponse"];
+        };
+        ControlInstallationListResponse: {
+            items: components["schemas"]["ControlInstallationSummaryResponse"][];
+            next_cursor?: string | null;
+        };
+        ControlInstallationSummaryResponse: {
+            administrative_status: components["schemas"]["AdministrativeStatusDto"];
+            binding_active: boolean;
+            device_label: string;
+            /** Format: date-time */
+            enrolled_at?: string | null;
+            fingerprint?: string | null;
+            /** Format: uuid */
+            id: string;
+            /** Format: int32 */
+            identity_generation?: number | null;
+            identity_status: components["schemas"]["IdentityStatusDto"];
+            /** Format: date-time */
+            last_known_activity_at?: string | null;
+            organization: components["schemas"]["InstallationOrganizationResponse"];
+            product?: components["schemas"]["InstallationProductResponse"] | null;
+            /** Format: date-time */
+            registered_at: string;
+        };
+        ControlMembershipResponse: {
+            /** Format: uuid */
+            account_id: string;
+            account_status: components["schemas"]["AccountStatusDto"];
+            display_name: string;
+            email: string;
+            /** Format: date-time */
+            joined_at: string;
+            /** Format: date-time */
+            revoked_at?: string | null;
+            role: components["schemas"]["MembershipRoleDto"];
+        };
+        ControlOrganizationDetailResponse: {
+            /** Format: date-time */
+            created_at: string;
+            display_name: string;
+            /** Format: uuid */
+            id: string;
+            memberships: components["schemas"]["ControlMembershipResponse"][];
+            products: components["schemas"]["ControlOrganizationProductResponse"][];
+            status: components["schemas"]["OrganizationStatusDto"];
+        };
+        ControlOrganizationListResponse: {
+            items: components["schemas"]["ControlOrganizationSummaryResponse"][];
+            next_cursor?: string | null;
+        };
+        ControlOrganizationProductResponse: {
+            /** Format: date-time */
+            activated_at: string;
+            association_status: components["schemas"]["AssociationStatusDto"];
+            entitlements: Record<string, never>;
+            /** Format: uuid */
+            product_id: string;
+            product_key: string;
+            product_name: string;
+            product_status: components["schemas"]["ProductLifecycleDto"];
+        };
+        ControlOrganizationSummaryResponse: {
+            /** Format: date-time */
+            created_at: string;
+            display_name: string;
+            /** Format: uuid */
+            id: string;
+            status: components["schemas"]["OrganizationStatusDto"];
+        };
         CreateOrganizationRequest: {
             /** @example Mi negocio */
             display_name: string;
+        };
+        CreateProductRequest: {
+            description?: string;
+            key: string;
+            name: string;
+            status: components["schemas"]["ProductStatusDto"];
+            type: components["schemas"]["ProductTypeDto"];
+        };
+        CreateProjectRequest: {
+            description?: string;
+            key: string;
+            name: string;
+            product_key?: string | null;
+            project_type: components["schemas"]["ProjectTypeDto"];
+            status: components["schemas"]["ProductStatusDto"];
         };
         EnrollmentChallengeResponse: {
             /** @example sintetico-device-code */
@@ -450,6 +858,14 @@ export interface components {
             /** @example 0.1.0 */
             version: string;
         };
+        /** @enum {string} */
+        IdentityStatusDto: "unenrolled" | "active" | "retired";
+        InstallationBindingResponse: {
+            /** Format: uuid */
+            approved_by_account_id: string;
+            /** Format: date-time */
+            bound_at: string;
+        };
         InstallationListItemResponse: {
             /** Format: date-time */
             bound_at?: string | null;
@@ -460,6 +876,30 @@ export interface components {
             /** Format: date-time */
             last_seen_at?: string | null;
             status: string;
+        };
+        InstallationOrganizationResponse: {
+            display_name: string;
+            /** Format: uuid */
+            id: string;
+            status: string;
+        };
+        InstallationProductResponse: {
+            /** Format: uuid */
+            id: string;
+            key: string;
+            name: string;
+        };
+        InstallationRehostResponse: {
+            /** Format: date-time */
+            created_at: string;
+            /** Format: uuid */
+            enrollment_request_id: string;
+            /** Format: date-time */
+            expires_at: string;
+            /** Format: uuid */
+            id: string;
+            reason: string;
+            status: components["schemas"]["RehostStatusDto"];
         };
         InstallationResponse: {
             /** @example Caja de pruebas */
@@ -567,6 +1007,8 @@ export interface components {
             /** @example admin */
             role: string;
         };
+        /** @enum {string} */
+        MembershipRoleDto: "owner" | "admin" | "member";
         OrganizationListResponse: {
             items: components["schemas"]["OrganizationResponse"][];
             /**
@@ -588,6 +1030,8 @@ export interface components {
             /** @example active */
             status: string;
         };
+        /** @enum {string} */
+        OrganizationStatusDto: "active" | "legacy_unclaimed" | "archived";
         PlanResponse: {
             /** @example Trial (30 días) */
             display_name: string;
@@ -601,6 +1045,51 @@ export interface components {
             /** @example trial */
             plan: string;
         };
+        /** @enum {string} */
+        ProductLifecycleDto: "development" | "active" | "maintenance" | "deprecated" | "retired";
+        ProductListResponse: {
+            items: components["schemas"]["ProductResponse"][];
+            next_cursor?: string | null;
+        };
+        ProductResponse: {
+            /** Format: date-time */
+            created_at: string;
+            description: string;
+            /** Format: uuid */
+            id: string;
+            key: string;
+            name: string;
+            product_type: components["schemas"]["ProductTypeDto"];
+            status: components["schemas"]["ProductStatusDto"];
+            /** Format: date-time */
+            updated_at: string;
+        };
+        /** @enum {string} */
+        ProductStatusDto: "development" | "active" | "maintenance" | "deprecated" | "retired";
+        /** @enum {string} */
+        ProductTypeDto: "desktop" | "saas" | "web" | "mobile" | "service" | "integration" | "internal";
+        ProjectListResponse: {
+            items: components["schemas"]["ProjectResponse"][];
+            next_cursor?: string | null;
+        };
+        ProjectResponse: {
+            /** Format: date-time */
+            created_at: string;
+            description: string;
+            /** Format: uuid */
+            id: string;
+            key: string;
+            name: string;
+            /** Format: uuid */
+            product_id?: string | null;
+            product_key?: string | null;
+            project_type: components["schemas"]["ProjectTypeDto"];
+            status: components["schemas"]["ProductStatusDto"];
+            /** Format: date-time */
+            updated_at: string;
+        };
+        /** @enum {string} */
+        ProjectTypeDto: "service" | "application" | "integration" | "infrastructure" | "initiative";
         ProofBody: {
             /**
              * Format: uuid
@@ -633,6 +1122,46 @@ export interface components {
              * @example 123e4567-e89b-42d3-a456-426614174001
              */
             organization_id: string;
+        };
+        RehostRequest: {
+            /** Format: uuid */
+            enrollment_request_id: string;
+            reason: string;
+        };
+        /** @enum {string} */
+        RehostStatusDto: "pending" | "consumed" | "expired" | "cancelled";
+        StaffLoginRequest: {
+            /** @example staff@hiqnet.test */
+            email: string;
+            /** @example contraseña-staff-sintética */
+            password: string;
+        };
+        StaffMeResponse: {
+            /** Format: uuid */
+            account_id: string;
+            capabilities: string[];
+            display_name: string;
+            email: string;
+            role: string;
+        };
+        /**
+         * @description `key` y `type` son inmutables. Los campos omitidos o `null` no cambian. Los
+         *     campos presentes deben diferir del valor persistido; de lo contrario se rechaza.
+         */
+        UpdateProductRequest: {
+            description?: string;
+            name?: string;
+            status?: components["schemas"]["ProductStatusDto"];
+        };
+        /**
+         * @description `key`, `project_type` y la asociación Product son inmutables. Los campos
+         *     omitidos o `null` no cambian. Los campos presentes deben diferir del valor
+         *     persistido; de lo contrario se rechaza.
+         */
+        UpdateProjectRequest: {
+            description?: string;
+            name?: string;
+            status?: components["schemas"]["ProductStatusDto"];
         };
     };
     responses: never;
@@ -889,6 +1418,1299 @@ export interface operations {
             };
         };
     };
+    listControlAccounts: {
+        parameters: {
+            query?: {
+                /** @example 50 */
+                limit?: number;
+                cursor?: string;
+                status?: string;
+                search?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Cuentas paginadas por antigüedad e identificador */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ControlAccountListResponse"];
+                };
+            };
+            /** @description Filtro, búsqueda o cursor inválido */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Sesión staff requerida */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Capability insuficiente */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Almacenamiento no disponible */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    getControlAccount: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description UUID de la cuenta comercial */
+                account_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Cuenta con sus memberships históricas */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ControlAccountDetailResponse"];
+                };
+            };
+            /** @description UUID inválido */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Sesión staff requerida */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Capability insuficiente */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Cuenta no encontrada */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Almacenamiento no disponible */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    staffLogin: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description Credenciales de personal interno; la contraseña nunca se registra */
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StaffLoginRequest"];
+            };
+        };
+        responses: {
+            /** @description Sesión staff creada; cookie HttpOnly hiqnet_staff_session */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Credenciales inválidas, cuenta deshabilitada o bloqueada */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Origen no permitido */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Demasiados intentos */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Almacenamiento no disponible o verificación saturada */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    staffLogout: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Sesión staff revocada y cookie eliminada */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Origen no permitido */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    staffMe: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Identidad staff autenticada con sus capabilities */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffMeResponse"];
+                };
+            };
+            /** @description Sesión staff inválida, expirada o revocada */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Almacenamiento no disponible */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    listControlInstallations: {
+        parameters: {
+            query?: {
+                /** @example 50 */
+                limit?: number;
+                cursor?: string;
+                status?: string;
+                identity_status?: string;
+                organization_id?: string;
+                product_id?: string;
+                search?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Instalaciones paginadas por alta e identificador */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ControlInstallationListResponse"];
+                };
+            };
+            /** @description Filtro, búsqueda o cursor inválido */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Sesión staff requerida */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Capability insuficiente */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Almacenamiento no disponible */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    getControlInstallation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description UUID de la instalación */
+                installation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Instalación con identidad y binding actuales */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ControlInstallationDetailResponse"];
+                };
+            };
+            /** @description UUID inválido */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Sesión staff requerida */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Capability insuficiente */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Instalación no encontrada */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Almacenamiento no disponible */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    reactivateControlInstallation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description UUID de la instalación */
+                installation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Instalación reactivada o ya activa */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ControlInstallationDetailResponse"];
+                };
+            };
+            /** @description UUID inválido */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Sesión staff requerida */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Capability insuficiente u origen no permitido */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Instalación no encontrada */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Transición no permitida */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Almacenamiento no disponible */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    rehostControlInstallation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description UUID de la instalación */
+                installation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RehostRequest"];
+            };
+        };
+        responses: {
+            /** @description Autorización de rehost vigente o ya consumida */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InstallationRehostResponse"];
+                };
+            };
+            /** @description UUID o motivo inválido */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Sesión staff requerida */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Capability insuficiente u origen no permitido */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Instalación no encontrada */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Conflicto de rehost, transición o producto */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Almacenamiento no disponible */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    suspendControlInstallation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description UUID de la instalación */
+                installation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Instalación suspendida o ya suspendida */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ControlInstallationDetailResponse"];
+                };
+            };
+            /** @description UUID inválido */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Sesión staff requerida */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Capability insuficiente u origen no permitido */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Instalación no encontrada */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Transición no permitida */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Almacenamiento no disponible */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    listControlOrganizations: {
+        parameters: {
+            query?: {
+                /** @example 50 */
+                limit?: number;
+                cursor?: string;
+                status?: string;
+                search?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Organizaciones paginadas por antigüedad e identificador */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ControlOrganizationListResponse"];
+                };
+            };
+            /** @description Filtro, búsqueda o cursor inválido */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Sesión staff requerida */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Capability insuficiente */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Almacenamiento no disponible */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    getControlOrganization: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description UUID de la organización */
+                organization_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Organización con memberships y products */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ControlOrganizationDetailResponse"];
+                };
+            };
+            /** @description UUID inválido */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Sesión staff requerida */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Capability insuficiente */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Organización no encontrada */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Almacenamiento no disponible */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    listControlProducts: {
+        parameters: {
+            query?: {
+                /** @example 50 */
+                limit?: number;
+                cursor?: string;
+                status?: string;
+                type?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Productos paginados por clave */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProductListResponse"];
+                };
+            };
+            /** @description Filtro o cursor inválido */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Sesión staff requerida */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Capability insuficiente */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Almacenamiento no disponible */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    createControlProduct: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateProductRequest"];
+            };
+        };
+        responses: {
+            /** @description Producto creado */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProductResponse"];
+                };
+            };
+            /** @description Clave, tipo o estado inválidos */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Sesión staff requerida */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Capability insuficiente u origen no permitido */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description La clave ya existe */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Almacenamiento no disponible */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    getControlProduct: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Clave estable del producto */
+                key: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Producto */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProductResponse"];
+                };
+            };
+            /** @description Clave inválida */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Sesión staff requerida */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Capability insuficiente */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Producto no encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Almacenamiento no disponible */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    updateControlProduct: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Clave estable del producto */
+                key: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateProductRequest"];
+            };
+        };
+        responses: {
+            /** @description Producto actualizado */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProductResponse"];
+                };
+            };
+            /** @description Cambios inválidos o sin cambios efectivos */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Sesión staff requerida */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Capability insuficiente u origen no permitido */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Producto no encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Almacenamiento no disponible */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    listControlProjects: {
+        parameters: {
+            query?: {
+                /** @example 50 */
+                limit?: number;
+                cursor?: string;
+                product_key?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Proyectos paginados por clave */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectListResponse"];
+                };
+            };
+            /** @description Filtro o cursor inválido */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Sesión staff requerida */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Capability insuficiente */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Almacenamiento no disponible */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    createControlProject: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateProjectRequest"];
+            };
+        };
+        responses: {
+            /** @description Proyecto creado */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectResponse"];
+                };
+            };
+            /** @description Clave, tipo, estado o producto inválidos */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Sesión staff requerida */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Capability insuficiente u origen no permitido */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description La clave ya existe */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Almacenamiento no disponible */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    getControlProject: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Clave estable del proyecto */
+                key: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Proyecto */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectResponse"];
+                };
+            };
+            /** @description Clave inválida */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Sesión staff requerida */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Capability insuficiente */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Proyecto no encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Almacenamiento no disponible */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    updateControlProject: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Clave estable del proyecto */
+                key: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateProjectRequest"];
+            };
+        };
+        responses: {
+            /** @description Proyecto actualizado */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectResponse"];
+                };
+            };
+            /** @description Cambios inválidos o sin cambios efectivos */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Sesión staff requerida */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Capability insuficiente u origen no permitido */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Proyecto no encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Almacenamiento no disponible */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
     beginEnrollment: {
         parameters: {
             query?: never;
@@ -899,7 +2721,7 @@ export interface operations {
             path?: never;
             cookie?: never;
         };
-        /** @description Identidad pública de la instalación y metadatos no secretos */
+        /** @description Identidad pública, product_key resuelto por Platform y metadatos no secretos */
         requestBody: {
             content: {
                 "application/json": components["schemas"]["BeginEnrollmentBody"];

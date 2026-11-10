@@ -16,6 +16,7 @@ export type EnrollmentChallenge = {
 };
 
 const API_BASE = process.env.PLATFORM_API_URL ?? 'http://127.0.0.1:8080';
+const PRODUCT_KEY = process.env.PLATFORM_ENROLLMENT_PRODUCT_KEY ?? 'pos';
 
 export function createSyntheticPos(): SyntheticPos {
   const { publicKey, privateKey } = generateKeyPairSync('ed25519');
@@ -35,6 +36,7 @@ export async function beginSyntheticEnrollment(pos: SyntheticPos): Promise<Enrol
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       installation_id: pos.installationId,
+      product_key: PRODUCT_KEY,
       public_key: pos.publicKey,
       device_label: pos.deviceLabel,
       app_version: '0.1.0-e2e',

@@ -66,6 +66,7 @@ El workflow `release-platform.yml` sólo publica tras un **push de tag válido**
 7. Apagado: `docker compose --profile db-ui down` (o `docker compose stop adminer` para conservar el resto).
 
 El flujo sintético completo (`login → organización → begin enrollment → approve → proof firmado → list installations`) se documenta en [API y Swagger](api.md#enrolamiento-seguro-de-instalaciones-g42b). Para el E2E de este incremento se usó una base aislada `hiqnet_g42b`; no se modifican datos de otras bases.
+
 ## Portal comercial React
 
 El Portal vive en `apps/portal` y se desarrolla con Vite en <http://127.0.0.1:5173>. Requiere Node 24 LTS y pnpm 11.

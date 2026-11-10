@@ -12,5 +12,7 @@ pub mod ids;
 pub mod installation;
 pub mod license;
 pub mod plan;
+pub mod product;
+pub mod staff;
 
 pub use error::{DomainError, DomainResult};

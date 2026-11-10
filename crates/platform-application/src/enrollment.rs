@@ -6,7 +6,8 @@ use platform_core::{
         self, DeviceFingerprint, DevicePublicKey, EnrollmentPlatform, EnrollmentStatus,
         MAX_IDEMPOTENCY_KEY_LEN,
     },
-    ids::{CommercialAccountId, EnrollmentRequestId, InstallationId, OrganizationId},
+    ids::{CommercialAccountId, EnrollmentRequestId, InstallationId, OrganizationId, ProductId},
+    product::LifecycleStatus,
 };
 use time::OffsetDateTime;
 
@@ -38,6 +39,17 @@ pub enum EnrollmentError {
 
 pub type EnrollmentResult<T> = Result<T, EnrollmentError>;
 
+/// Producto ya atribuido a una instalación, si existe.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum InstallationAttribution {
+    /// La instalación todavía no existe: enrollment de alta.
+    Missing,
+    /// Existe sin Product atribuido (legacy pendiente de backfill).
+    Legacy,
+    /// Existe con Product write-once ya atribuido.
+    Product(ProductId),
+}
+
 #[derive(Debug, Clone)]
 pub struct EnrollmentChallengeView {
     pub device_code: String,
@@ -50,6 +62,7 @@ pub struct EnrollmentChallengeView {
 #[derive(Debug, Clone)]
 pub struct BeginEnrollmentRequest {
     pub installation_id: InstallationId,
+    pub product_key: String,
     pub public_key: String,
     pub device_label: String,
     pub app_version: String,
@@ -71,6 +84,13 @@ pub struct ProofAttempt {
     pub public_key: String,
     pub nonce: String,
     pub signature: String,
+}
+
+/// Producto resuelto por Platform a partir de `product_key`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct EnrollmentProduct {
+    pub id: ProductId,
+    pub status: LifecycleStatus,
 }
 
 #[derive(Debug, Clone)]
@@ -103,6 +123,7 @@ pub struct EnrollmentPage {
 pub struct NewEnrollmentRequest {
     pub id: EnrollmentRequestId,
     pub installation_id: InstallationId,
+    pub product_id: ProductId,
     pub public_key: [u8; 32],
     pub fingerprint: [u8; 32],
     pub device_label: String,
@@ -167,6 +188,19 @@ pub struct SecurityEvent {
 
 #[async_trait]
 pub trait EnrollmentRepository: Send + Sync {
+    /// Resuelve `product.key` al producto interno usado por el enrolment.
+    async fn product_for_enrollment(
+        &self,
+        product_key: &str,
+    ) -> EnrollmentResult<Option<EnrollmentProduct>>;
+
+    /// Indica existencia y Product ya atribuido; la allowlist y la consistencia
+    /// Installation↔Product dependen de ello.
+    async fn installation_attribution(
+        &self,
+        id: InstallationId,
+    ) -> EnrollmentResult<InstallationAttribution>;
+
     /// Inserta la solicitud y su registro de idempotencia en una transacción.
     async fn begin_request(
         &self,
@@ -224,6 +258,39 @@ impl<R: EnrollmentRepository> EnrollmentService<R> {
     ) -> EnrollmentResult<EnrollmentChallengeView> {
         let public_key = DevicePublicKey::parse(&request.public_key)?;
         let platform = EnrollmentPlatform::parse(&request.platform)?;
+        let product_key = request.product_key.trim();
+        if product_key.is_empty() || product_key.len() > 64 {
+            return Err(EnrollmentError::Invalid);
+        }
+        let product = self
+            .repository
+            .product_for_enrollment(product_key)
+            .await?
+            .ok_or(EnrollmentError::Invalid)?;
+        let attribution = self
+            .repository
+            .installation_attribution(request.installation_id)
+            .await?;
+        // Allowlist temprana: una instalación nueva exige Product active; un rehost
+        // existente admite active|maintenance. Además, una instalación ya atribuida
+        // sólo puede enrolarse/rehostearse con su mismo Product.
+        let product_allowed = match attribution {
+            InstallationAttribution::Missing => matches!(product.status, LifecycleStatus::Active),
+            InstallationAttribution::Legacy => matches!(
+                product.status,
+                LifecycleStatus::Active | LifecycleStatus::Maintenance
+            ),
+            InstallationAttribution::Product(attributed) => {
+                attributed == product.id
+                    && matches!(
+                        product.status,
+                        LifecycleStatus::Active | LifecycleStatus::Maintenance
+                    )
+            }
+        };
+        if !product_allowed {
+            return Err(EnrollmentError::Invalid);
+        }
         let device_label = validate_label(&request.device_label)?;
         let app_version = validate_app_version(&request.app_version)?;
         let idempotency_key_hash = match request.idempotency_key.as_deref() {
@@ -243,6 +310,7 @@ impl<R: EnrollmentRepository> EnrollmentService<R> {
         let user_code_hash = enrollment::hash_secret(&user_code);
         let request_hash = request_hash(
             request.installation_id,
+            product_key,
             &request.public_key,
             &device_label,
             &app_version,
@@ -251,6 +319,7 @@ impl<R: EnrollmentRepository> EnrollmentService<R> {
         let draft = NewEnrollmentRequest {
             id: EnrollmentRequestId::new(),
             installation_id: request.installation_id,
+            product_id: product.id,
             public_key: public_key.bytes(),
             fingerprint: public_key.fingerprint().0,
             device_label,
@@ -368,13 +437,14 @@ fn base64_key(hash: &[u8; 32]) -> String {
 
 fn request_hash(
     installation_id: InstallationId,
+    product_key: &str,
     public_key: &str,
     device_label: &str,
     app_version: &str,
     platform: EnrollmentPlatform,
 ) -> [u8; 32] {
     let canonical = format!(
-        "hiqnet-enrollment-request:v1\ninstallation={installation_id}\nkey={public_key}\nlabel={device_label}\nversion={app_version}\nplatform={}",
+        "hiqnet-enrollment-request:v1\ninstallation={installation_id}\nproduct={product_key}\nkey={public_key}\nlabel={device_label}\nversion={app_version}\nplatform={}",
         platform.as_str()
     );
     enrollment::hash_secret(&canonical)
