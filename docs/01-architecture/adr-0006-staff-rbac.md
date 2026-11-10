@@ -95,9 +95,9 @@ Resumen de capabilities:
 - Un RBAC basado sólo en rol no cubre excepciones; se documenta la evolución a capabilities explícitas.
 - Sin MFA en C1, el robo de sesión staff es el riesgo principal; se mitiga con sesión corta y revocación inmediata.
 
-## 7. Propuesta de enmienda Fase 1 (Beta)
+## 7. Enmienda ratificada Fase 1 (Beta)
 
-Esta sección complementa §5 y, una vez ratificada, prevalecerá sobre cualquier redacción anterior que situara 4-eyes en C6 o que implicara una superficie mutable de seguridad en C6. Queda pendiente de revisión.
+Esta sección complementa §5 y prevalece sobre cualquier redacción anterior que situara 4-eyes en C6 o que implicara una superficie mutable de seguridad en C6. Ratificada en Fase 1.
 
 - **`security.manage`:** reservada para una futura superficie mutable de seguridad. C6 inicial es read-only y no la consume; no concede acceso adicional a los read models de C6 ni concede `installations.rehost`, y no implica incident management ni configuración de seguridad.
 - **`security_auditor`:** conserva `security.read`, `security.manage` y `audit.read`; en C6 sólo usa las dos de lectura. No tiene `installations.rehost`.

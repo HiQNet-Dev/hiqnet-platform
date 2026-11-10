@@ -1,10 +1,10 @@
 # ADR-0011 — Dominio comercial: Plan, Subscription y Entitlement
 
-**Estado:** PROPUESTO — pendiente de ratificación (Fase 1, 2026-11-09)
+**Estado:** ACCEPTED — ratificado en Fase 1 (2026-11-09)
 **Fase:** Beta 0.1.0 — Commercial Core
 **Relacionado:** [Platform](../01-architecture/platform.md) · [ADR-0007](adr-0007-product-project-model.md) · [ADR-0009](adr-0009-pos-installation-control.md) · [Backlog Beta](../02-development/platform-beta-backlog.md) · [Seguridad Beta](../02-development/platform-beta-security.md)
 
-> Este ADR propone el contrato comercial mínimo de Beta y queda pendiente de ratificación. No crea tablas ni endpoints en esta fase. El DDL definitivo se implementará en una migración posterior (`0011+`) tras revisión y en el PR correspondiente.
+> Este ADR ratifica el contrato comercial mínimo de Beta. No crea tablas ni endpoints en esta fase. El DDL definitivo se implementará en una migración posterior (`0011+`) tras revisión y en el PR correspondiente.
 
 ## 1. Contexto
 

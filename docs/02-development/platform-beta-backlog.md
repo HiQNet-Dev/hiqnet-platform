@@ -1,10 +1,10 @@
 # HiQNet Platform — Backlog cerrado de Beta 0.1.0
 
-**Estado:** PROPUESTO — pendiente de ratificación (Fase 1, 2026-11-09)
+**Estado:** RATIFICADO (Fase 1, 2026-11-09)
 **Alcance:** Beta administrativa web de Platform
 **Relacionado:** [Arquitectura rectora](../01-architecture/platform.md) · [ADR-0011](../01-architecture/adr-0011-commercial-domain.md) · [Seguridad Beta](platform-beta-security.md) · [Roadmap](../01-architecture/control-center-roadmap.md)
 
-> Este documento propone cerrar el alcance de Platform Beta y queda pendiente de ratificación. Nada P2/P3 se promueve sin demostrar que bloquea un criterio de aceptación. No autoriza por sí mismo merges, migraciones, tags, releases ni despliegues.
+> Este documento cierra el alcance de Platform Beta. Nada P2/P3 se promueve sin demostrar que bloquea un criterio de aceptación. No autoriza por sí mismo merges, migraciones, tags, releases ni despliegues.
 
 ## 1. Definición de Beta
 

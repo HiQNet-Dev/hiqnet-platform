@@ -83,7 +83,7 @@ Cada fase debe compilar, testear, exponer OpenAPI, usar migraciones propias y pa
 
 ## Fase Beta — Platform 0.1.0
 
-La Beta es transversal a C1–C6 y su alcance queda definido en el [Backlog Beta](../02-development/platform-beta-backlog.md), pendiente de ratificación. No sustituye las fases C: las consume en este orden:
+La Beta es transversal a C1–C6 y su alcance queda ratificado en el [Backlog Beta](../02-development/platform-beta-backlog.md). No sustituye las fases C: las consume en este orden:
 
 1. Integrar Portal F01/F02 (PR #12/#13) resolviendo conflictos de workspace/CI.
 2. Completar C6.1–C6.4 (auditoría/seguridad).

@@ -1,10 +1,10 @@
 # HiQNet Platform — Arquitectura rectora
 
-**Estado:** PROPUESTO — pendiente de revisión (Fase 1, 2026-11-09)
+**Estado:** ACCEPTED — ratificado en Fase 1 (2026-11-09)
 **Versión objetivo:** Beta 0.1.0
 **Relacionado:** [Control Center](control-center.md) · [Roadmap](control-center-roadmap.md) · [ADR-0004](adr-0004-control-center-boundaries.md) · [ADR-0006](adr-0006-staff-rbac.md) · [ADR-0007](adr-0007-product-project-model.md) · [ADR-0011](adr-0011-commercial-domain.md) · [Backlog Beta](../02-development/platform-beta-backlog.md) · [Seguridad Beta](../02-development/platform-beta-security.md)
 
-> Este documento propone la arquitectura multiproducto de HiQNet Platform para la Beta 0.1.0 y queda pendiente de revisión humana. No reescribe C0–C5: conserva sus ADR y contratos. Donde una decisión histórica sea más restrictiva o específica de POS, este documento y ADR-0011 prevalecen para el alcance Beta una vez ratificados.
+> Este documento ratifica la arquitectura multiproducto de HiQNet Platform para la Beta 0.1.0. No reescribe C0–C5: conserva sus ADR y contratos. Donde una decisión histórica sea más restrictiva o específica de POS, este documento y ADR-0011 prevalecen para el alcance Beta.
 
 ## 1. Misión y alcance
 

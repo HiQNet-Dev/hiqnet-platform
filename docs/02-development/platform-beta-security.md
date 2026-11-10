@@ -1,6 +1,6 @@
 # HiQNet Platform — Seguridad de Beta 0.1.0
 
-**Estado:** PROPUESTO — pendiente de revisión (Fase 1, 2026-11-09)
+**Estado:** RATIFICADO (Fase 1, 2026-11-09)
 **Alcance:** revisión de seguridad para la Beta administrativa web
 **Relacionado:** [Arquitectura rectora](../01-architecture/platform.md) · [ADR-0006](../01-architecture/adr-0006-staff-rbac.md) · [Matriz RBAC](control-center-rbac-matrix.md) · [Backlog Beta](platform-beta-backlog.md)
 

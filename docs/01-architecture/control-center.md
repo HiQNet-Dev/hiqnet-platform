@@ -74,7 +74,7 @@ Productos futuros se integran como módulos del Control Center y capacidades de 
 
 ## 7. Estado de Beta (Fase 1)
 
-La arquitectura multiproducto y el alcance Beta quedan propuestos para ratificación en [Platform](platform.md). El dominio comercial pendiente se define en [ADR-0011](adr-0011-commercial-domain.md). El backlog cerrado y la matriz de seguridad están en [Backlog Beta](../02-development/platform-beta-backlog.md) y [Seguridad Beta](../02-development/platform-beta-security.md).
+La arquitectura multiproducto y el alcance Beta quedan ratificados en [Platform](platform.md). El dominio comercial pendiente se define en [ADR-0011](adr-0011-commercial-domain.md). El backlog cerrado y la matriz de seguridad están en [Backlog Beta](../02-development/platform-beta-backlog.md) y [Seguridad Beta](../02-development/platform-beta-security.md).
 
 - C1–C5: implementados y validados en `main`.
 - C6: contrato en PR #22 (pendiente de merge); implementación C6.1–C6.4 pendiente.
