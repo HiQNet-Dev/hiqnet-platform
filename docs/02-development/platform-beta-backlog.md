@@ -49,6 +49,8 @@ No hay módulos RETIRAR.
 
 ### P0 — Bloqueantes de Beta
 
+Estado operativo: B1 y B2 integrados en `main`; B3 backend C6.1 implementado en rama y pendiente de integración. El detalle de commits, pruebas y siguiente acción se mantiene en [Ejecución Beta](platform-beta-execution.md).
+
 | ID | Incremento | Entregable | Criterio de aceptación |
 |---|---|---|---|
 | B0 | Fase 1 documental | `platform.md`, ADR-0011, backlog, seguridad, enmiendas | Documentos revisados y aprobados |

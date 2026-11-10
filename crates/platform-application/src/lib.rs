@@ -3,6 +3,7 @@
 //! Sin cobro real ni sesiones comerciales: la identidad P02.1 sólo se invoca
 //! desde adaptadores internos confiables hasta incorporar autenticación P02.2.
 
+pub mod audit_security;
 pub mod auth;
 pub mod commercial;
 pub mod control;
@@ -15,6 +16,13 @@ pub mod security;
 pub mod service;
 pub mod staff;
 
+pub use audit_security::{
+    AuditEventDetail, AuditEventSummary, AuditFilters, AuditResult, AuditSecurityActor,
+    AuditSecurityError, AuditSecurityRepository, AuditSecurityResult, AuditSecurityService,
+    CursorKey, Page as AuditSecurityPage, SecurityEventDetail, SecurityEventSummary,
+    SecurityFilters, SecurityKind, StaffAuthAction, StaffAuthEventDetail, StaffAuthEventSummary,
+    StaffAuthFilters,
+};
 pub use auth::{AuthRepository, AuthService};
 pub use enrollment::{
     ApproveEnrollmentRequest, BeginEnrollmentRequest, BeginStorageOutcome, EnrollmentChallengeView,

@@ -2,6 +2,7 @@
 
 use sqlx::PgPool;
 
+pub mod audit_security;
 pub mod auth;
 pub mod commercial;
 pub mod control;
@@ -11,6 +12,7 @@ pub mod product;
 pub mod repository;
 pub mod staff;
 
+pub use audit_security::PgAuditSecurityRepository;
 pub use auth::PgAuthRepository;
 pub use commercial::PgCommercialRepository;
 pub use control::PgControlRepository;

@@ -476,6 +476,253 @@
         ]
       }
     },
+    "/api/v1/control/audit": {
+      "get": {
+        "tags": [
+          "Control Center"
+        ],
+        "summary": "Lista eventos de auditoría staff",
+        "operationId": "listControlAudit",
+        "parameters": [
+          {
+            "name": "staff_account_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "action",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "resource_type",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "resource_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "organization_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "product_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "result",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "from",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "maximum": 100,
+              "minimum": 1
+            },
+            "example": 50
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Eventos de auditoría",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ControlAuditEventListResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Consulta inválida",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sesión staff requerida",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Capability insuficiente",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "PostgreSQL no disponible",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "staffSession": []
+          }
+        ]
+      }
+    },
+    "/api/v1/control/audit/{event_id}": {
+      "get": {
+        "tags": [
+          "Control Center"
+        ],
+        "summary": "Obtiene un evento de auditoría staff",
+        "operationId": "getControlAudit",
+        "parameters": [
+          {
+            "name": "event_id",
+            "in": "path",
+            "description": "UUID del evento",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Evento de auditoría",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ControlAuditEventDetailResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Identificador inválido",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sesión staff requerida",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Capability insuficiente",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Recurso no encontrado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "PostgreSQL no disponible",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "staffSession": []
+          }
+        ]
+      }
+    },
     "/api/v1/control/auth/login": {
       "post": {
         "tags": [
@@ -2041,6 +2288,436 @@
           },
           "503": {
             "description": "Almacenamiento no disponible",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "staffSession": []
+          }
+        ]
+      }
+    },
+    "/api/v1/control/security-events": {
+      "get": {
+        "tags": [
+          "Control Center"
+        ],
+        "summary": "Lista eventos de seguridad de plataforma",
+        "operationId": "listControlSecurityEvents",
+        "parameters": [
+          {
+            "name": "kind",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "organization_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "installation_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "account_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "from",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "maximum": 100,
+              "minimum": 1
+            },
+            "example": 50
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Eventos de seguridad",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ControlSecurityEventListResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Consulta inválida",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sesión staff requerida",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Capability insuficiente",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "PostgreSQL no disponible",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "staffSession": []
+          }
+        ]
+      }
+    },
+    "/api/v1/control/security-events/{event_id}": {
+      "get": {
+        "tags": [
+          "Control Center"
+        ],
+        "summary": "Obtiene un evento de seguridad de plataforma",
+        "operationId": "getControlSecurityEvent",
+        "parameters": [
+          {
+            "name": "event_id",
+            "in": "path",
+            "description": "UUID del evento",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Evento de seguridad",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ControlSecurityEventDetailResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Identificador inválido",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sesión staff requerida",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Capability insuficiente",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Recurso no encontrado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "PostgreSQL no disponible",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "staffSession": []
+          }
+        ]
+      }
+    },
+    "/api/v1/control/staff-auth-events": {
+      "get": {
+        "tags": [
+          "Control Center"
+        ],
+        "summary": "Lista eventos de autenticación staff",
+        "operationId": "listControlStaffAuthEvents",
+        "parameters": [
+          {
+            "name": "account_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "action",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "from",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "maximum": 100,
+              "minimum": 1
+            },
+            "example": 50
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Eventos de autenticación staff",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ControlStaffAuthEventListResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Consulta inválida",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sesión staff requerida",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Capability insuficiente",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "PostgreSQL no disponible",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "staffSession": []
+          }
+        ]
+      }
+    },
+    "/api/v1/control/staff-auth-events/{event_id}": {
+      "get": {
+        "tags": [
+          "Control Center"
+        ],
+        "summary": "Obtiene un evento de autenticación staff",
+        "operationId": "getControlStaffAuthEvent",
+        "parameters": [
+          {
+            "name": "event_id",
+            "in": "path",
+            "description": "UUID del evento",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Evento de autenticación staff",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ControlStaffAuthEventDetailResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Identificador inválido",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sesión staff requerida",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Capability insuficiente",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Recurso no encontrado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "PostgreSQL no disponible",
             "content": {
               "application/json": {
                 "schema": {
@@ -3799,6 +4476,14 @@
           "inactive"
         ]
       },
+      "AuditResultDto": {
+        "type": "string",
+        "enum": [
+          "success",
+          "denied",
+          "failure"
+        ]
+      },
       "BeginEnrollmentBody": {
         "type": "object",
         "required": [
@@ -3989,6 +4674,208 @@
           }
         }
       },
+      "ControlAuditEventDetailResponse": {
+        "type": "object",
+        "required": [
+          "id",
+          "occurred_at",
+          "action",
+          "resource_type",
+          "result",
+          "metadata"
+        ],
+        "properties": {
+          "action": {
+            "type": "string"
+          },
+          "actor": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/ControlStaffActorDetailResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "metadata": {},
+          "occurred_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "organization": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/ControlOrganizationRefResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "product": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/ControlProductRefResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "resource_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          },
+          "resource_label": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "resource_type": {
+            "type": "string"
+          },
+          "result": {
+            "$ref": "#/components/schemas/AuditResultDto"
+          }
+        }
+      },
+      "ControlAuditEventListResponse": {
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ControlAuditEventSummaryResponse"
+            }
+          },
+          "next_cursor": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "ControlAuditEventSummaryResponse": {
+        "type": "object",
+        "required": [
+          "id",
+          "occurred_at",
+          "action",
+          "resource_type",
+          "result"
+        ],
+        "properties": {
+          "action": {
+            "type": "string"
+          },
+          "actor": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/ControlStaffActorResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "occurred_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "organization": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/ControlOrganizationRefResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "product": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/ControlProductRefResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "resource_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          },
+          "resource_label": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "resource_type": {
+            "type": "string"
+          },
+          "result": {
+            "$ref": "#/components/schemas/AuditResultDto"
+          }
+        }
+      },
+      "ControlCommercialAccountDetailResponse": {
+        "type": "object",
+        "required": [
+          "id",
+          "display_name",
+          "email"
+        ],
+        "properties": {
+          "display_name": {
+            "type": "string"
+          },
+          "email": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      },
+      "ControlCommercialAccountRefResponse": {
+        "type": "object",
+        "required": [
+          "id",
+          "display_name"
+        ],
+        "properties": {
+          "display_name": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      },
       "ControlInstallationDetailResponse": {
         "type": "object",
         "required": [
@@ -4044,6 +4931,22 @@
               "string",
               "null"
             ]
+          }
+        }
+      },
+      "ControlInstallationRefResponse": {
+        "type": "object",
+        "required": [
+          "id",
+          "device_label"
+        ],
+        "properties": {
+          "device_label": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
           }
         }
       },
@@ -4258,6 +5161,22 @@
           }
         }
       },
+      "ControlOrganizationRefResponse": {
+        "type": "object",
+        "required": [
+          "id",
+          "display_name"
+        ],
+        "properties": {
+          "display_name": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      },
       "ControlOrganizationSummaryResponse": {
         "type": "object",
         "required": [
@@ -4280,6 +5199,274 @@
           },
           "status": {
             "$ref": "#/components/schemas/OrganizationStatusDto"
+          }
+        }
+      },
+      "ControlProductRefResponse": {
+        "type": "object",
+        "required": [
+          "id",
+          "key",
+          "name"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "key": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        }
+      },
+      "ControlSecurityEventDetailResponse": {
+        "type": "object",
+        "required": [
+          "id",
+          "occurred_at",
+          "kind",
+          "metadata"
+        ],
+        "properties": {
+          "account": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/ControlCommercialAccountDetailResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "installation": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/ControlInstallationRefResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "kind": {
+            "$ref": "#/components/schemas/SecurityKindDto"
+          },
+          "metadata": {},
+          "occurred_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "organization": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/ControlOrganizationRefResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      "ControlSecurityEventListResponse": {
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ControlSecurityEventSummaryResponse"
+            }
+          },
+          "next_cursor": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "ControlSecurityEventSummaryResponse": {
+        "type": "object",
+        "required": [
+          "id",
+          "occurred_at",
+          "kind"
+        ],
+        "properties": {
+          "account": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/ControlCommercialAccountRefResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "installation": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/ControlInstallationRefResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "kind": {
+            "$ref": "#/components/schemas/SecurityKindDto"
+          },
+          "occurred_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "organization": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/ControlOrganizationRefResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      "ControlStaffActorDetailResponse": {
+        "type": "object",
+        "required": [
+          "account_id",
+          "display_name",
+          "email",
+          "status"
+        ],
+        "properties": {
+          "account_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "display_name": {
+            "type": "string"
+          },
+          "email": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          }
+        }
+      },
+      "ControlStaffActorResponse": {
+        "type": "object",
+        "required": [
+          "account_id",
+          "display_name"
+        ],
+        "properties": {
+          "account_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "display_name": {
+            "type": "string"
+          }
+        }
+      },
+      "ControlStaffAuthEventDetailResponse": {
+        "type": "object",
+        "required": [
+          "id",
+          "occurred_at",
+          "action",
+          "metadata"
+        ],
+        "properties": {
+          "account": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/ControlStaffActorDetailResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "action": {
+            "$ref": "#/components/schemas/StaffAuthActionDto"
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "metadata": {},
+          "occurred_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "ControlStaffAuthEventListResponse": {
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ControlStaffAuthEventSummaryResponse"
+            }
+          },
+          "next_cursor": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "ControlStaffAuthEventSummaryResponse": {
+        "type": "object",
+        "required": [
+          "id",
+          "occurred_at",
+          "action"
+        ],
+        "properties": {
+          "account": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/ControlStaffActorResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "action": {
+            "$ref": "#/components/schemas/StaffAuthActionDto"
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "occurred_at": {
+            "type": "string",
+            "format": "date-time"
           }
         }
       },
@@ -5248,6 +6435,31 @@
           "consumed",
           "expired",
           "cancelled"
+        ]
+      },
+      "SecurityKindDto": {
+        "type": "string",
+        "enum": [
+          "enrollment_conflict",
+          "duplicate_key",
+          "tenant_change_attempt",
+          "replay_rejected",
+          "rehost_performed",
+          "identity_revoked",
+          "authorization_revoked_during_proof",
+          "idempotency_conflict",
+          "clone_suspected"
+        ]
+      },
+      "StaffAuthActionDto": {
+        "type": "string",
+        "enum": [
+          "login_success",
+          "login_failure",
+          "logout",
+          "session_revoked",
+          "account_locked",
+          "password_changed"
         ]
       },
       "StaffLoginRequest": {

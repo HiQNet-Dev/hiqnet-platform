@@ -9,13 +9,15 @@ use axum::{
     http::{HeaderMap, StatusCode, header, request::Parts},
     response::IntoResponse,
 };
+use platform_application::audit_security::AuditSecurityService;
 use platform_application::control::ControlService;
 use platform_application::installation_control::InstallationControlService;
 use platform_application::product::ProductService;
 use platform_application::staff::StaffAuthService;
 use platform_core::staff::{AuthenticatedStaffSession, StaffError};
 use platform_storage_postgres::{
-    PgControlRepository, PgInstallationControlRepository, PgProductRepository, PgStaffRepository,
+    PgAuditSecurityRepository, PgControlRepository, PgInstallationControlRepository,
+    PgProductRepository, PgStaffRepository,
 };
 use std::sync::Arc;
 
@@ -29,6 +31,7 @@ pub struct StaffState {
     pub service: Arc<StaffAuthService<PgStaffRepository>>,
     pub product: Arc<ProductService<PgProductRepository>>,
     pub control: Arc<ControlService<PgControlRepository>>,
+    pub audit_security: Arc<AuditSecurityService<PgAuditSecurityRepository>>,
     pub installations: Arc<InstallationControlService<PgInstallationControlRepository>>,
     pub limiter: Arc<LoginLimiter>,
     pub session_ttl: time::Duration,

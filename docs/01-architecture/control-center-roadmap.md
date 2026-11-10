@@ -63,7 +63,7 @@ Cada fase debe compilar, testear, exponer OpenAPI, usar migraciones propias y pa
 
 ## C6 — Audit / security center
 
-- **Estado: NO IMPLEMENTADO.** C6.0A (inventario) COMPLETADO / VALIDADO; C6.0B (contrato) APROBADO en [ADR-0010](adr-0010-audit-security-center.md). C6.1 no iniciado.
+- **Estado: BACKEND IMPLEMENTADO (B3).** C6.0A (inventario) COMPLETADO / VALIDADO; C6.0B (contrato) APROBADO en [ADR-0010](adr-0010-audit-security-center.md). C6.1 implementa migración `0010`, read models, endpoints read-only, RBAC, sanitización, OpenAPI y pruebas. C6.2 frontend (B5) pendiente.
 - Audit = `staff_audit_event`.
 - Security = `commercial_security_event` + `staff_auth_event`, como datasets separados (sin unión física ni pseudo-evento).
 - C6 inicial READ ONLY: sin acknowledge, triage mutable, incidentes ni configuración de seguridad.
