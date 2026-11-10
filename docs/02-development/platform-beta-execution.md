@@ -118,6 +118,51 @@ Incrementos ejecutados tras cerrar B10.1, sin cambios de comportamiento:
 
 Métricas finales: **0 archivos de más de 1 000 líneas** (antes 6), archivo más largo **901** (antes 6 109), **150 pruebas** y OpenAPI idéntico.
 
+## Cierre formal y congelamiento funcional
+
+**Fecha:** 2026-11-10 · **Commit de referencia:** `3399278` · **Estado:** Beta cerrada, publicación pendiente.
+
+### Verificación de cierre
+
+| Control | Resultado |
+|---|---|
+| `cargo fmt --all -- --check` | OK |
+| `cargo clippy --workspace --all-targets -- -D warnings` | OK |
+| `cargo test --workspace` (PostgreSQL 17 real) | 150 passed / 0 failed / 1 ignored |
+| Control Center lint/typecheck/test/build/api:check | OK (20 unitarias) |
+| Portal lint/format/typecheck/test/build/api:check | OK (9 unitarias) |
+| E2E Control Center full-stack | 15/15 en 5 viewports |
+| E2E Control Center con API simulada | 180 passed / 15 skipped |
+| E2E Portal full-stack | 4/4 |
+| Verificador de tamaño | Sin violaciones; 0 archivos sobre 1 000 líneas |
+| Enlaces de documentación | 191 verificados, 0 rotos |
+| Verificador de repositorio | Sin dumps, .env ni claves |
+| Dependencias circulares entre crates | 0 |
+| CI en `main` | Verde en `3399278` |
+
+### PR #33
+
+Cerrado sin fusionar: sus dos documentos ya están en `main`. `modular-architecture.md` es byte a byte idéntico y `structural-audit.md` está incorporado y ampliado con las métricas finales. Las tres únicas líneas no presentes en `main` estaban superadas por decisiones posteriores. Registro completo en el comentario de cierre del PR.
+
+### Congelamiento funcional
+
+Platform entra en **mantenimiento**. Sólo se aceptan:
+
+- Correcciones de seguridad.
+- Defectos funcionales reproducibles.
+- Actualizaciones necesarias de dependencias.
+- Ajustes de compatibilidad.
+- Integración indispensable con HiQNet POS.
+
+No se inicia: facturación avanzada, pagos automáticos, gestión de tareas, control de repositorios, C7 deployments, sincronización cloud, nuevos módulos administrativos ni otra refactorización general.
+
+### Release
+
+- Versión `0.1.0-beta.1`; etiqueta prevista `platform-v0.1.0-beta.1` con `prerelease=true`.
+- Simulación de `validate_release.py` verificada; **sin tags locales ni remotos**.
+- Perfil recomendado: **Beta interna restringida**, sin despliegue público automático.
+- La creación del tag y del GitHub Release queda pendiente de autorización explícita.
+
 ## Pendiente
 
 1. **Publicar `platform-v0.1.0-beta.1`** cuando se autorice explícitamente. La simulación está validada; no se ha creado tag ni release.
