@@ -146,7 +146,7 @@ Una cuenta staff comprometida puede leer los datos permitidos por su rol, ejecut
 
 - [ ] `HIQNET_PLATFORM_ENV=production`.
 - [ ] `HIQNET_PLATFORM_COOKIE_SECURE=true`.
-- [ ] `HIQNET_PLATFORM_ALLOWED_ORIGIN` exacto; sin comodines.
+- [ ] `HIQNET_PLATFORM_ALLOWED_ORIGIN` con orígenes exactos (lista separada por comas, sin comodines).
 - [ ] `HIQNET_PLATFORM_ADMIN_TOKEN` vacío.
 - [ ] `HIQNET_PLATFORM_ALLOW_DEV_ISSUANCE=false`.
 - [ ] `HIQNET_PLATFORM_ENABLE_DOCS=false` salvo decisión explícita.

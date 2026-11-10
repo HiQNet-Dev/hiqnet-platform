@@ -183,7 +183,7 @@ jobs:
           DATABASE_URL: postgres://hiqnet:hiqnet_dev@localhost:5432/hiqnet_e2e
           HIQNET_PLATFORM_ENV: development
           HIQNET_PLATFORM_COOKIE_SECURE: "false"
-          HIQNET_PLATFORM_ALLOWED_ORIGIN: http://127.0.0.1:5173
+          HIQNET_PLATFORM_ALLOWED_ORIGIN: http://127.0.0.1:5173,http://127.0.0.1:5174
           HIQNET_PLATFORM_ENABLE_DOCS: "true"
           PORT: "8080"
         run: |
@@ -237,3 +237,10 @@ jobs:
           PLATFORM_STAFF_EMAIL: staff-e2e@hiqnet.test
           PLATFORM_STAFF_PASSWORD: StaffE2E-2026!
         run: pnpm --filter @hiqnet/platform-portal e2e --reporter=line
+      - name: Instalar Chromium para el Control Center
+        run: pnpm --filter @hiqnet/control-center exec playwright install --with-deps chromium
+      - name: E2E full-stack del Control Center (5 viewports)
+        env:
+          PLATFORM_STAFF_EMAIL: staff-e2e@hiqnet.test
+          PLATFORM_STAFF_PASSWORD: StaffE2E-2026!
+        run: pnpm --filter @hiqnet/control-center exec playwright test e2e/full-stack.spec.ts --reporter=line

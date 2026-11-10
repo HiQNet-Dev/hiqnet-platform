@@ -22,7 +22,8 @@ pub const SESSION_COOKIE: &str = "hiqnet_session";
 pub struct AuthState {
     pub service: Arc<AuthService<PgAuthRepository>>,
     pub cookie_secure: bool,
-    pub allowed_origin: Option<String>,
+    /// Orígenes exactos autorizados para mutaciones. Vacío ⇒ se falla cerrado.
+    pub allowed_origins: Vec<String>,
     /// Sólo true con `HIQNET_PLATFORM_ENV=development`: permite curl/Swagger sin Origin.
     pub development: bool,
     pub session_ttl: time::Duration,
@@ -125,16 +126,23 @@ pub fn clear_cookie(state: &AuthState) -> String {
 }
 
 /// Política CSRF para mutaciones de autenticación:
-/// - en producción el encabezado `Origin` es obligatorio y debe coincidir exacto;
+/// - en producción el encabezado `Origin` es obligatorio y debe coincidir exacto
+///   con alguno de los orígenes autorizados;
 /// - `null`, valores múltiples o malformados se rechazan siempre;
 /// - sólo `development` admite ausencia de Origin, para curl/Swagger locales.
 pub fn origin_allowed(headers: &HeaderMap, state: &AuthState) -> bool {
-    let Some(allowed) = state.allowed_origin.as_deref() else {
+    origin_matches(headers, &state.allowed_origins, state.development)
+}
+
+/// Un único `Origin` que debe igualar exactamente a una entrada de la lista.
+/// La comparación es textual: no se admiten comodines ni sufijos.
+pub fn origin_matches(headers: &HeaderMap, allowed: &[String], development: bool) -> bool {
+    if allowed.is_empty() {
         return false;
-    };
+    }
     let mut values = headers.get_all(header::ORIGIN).iter();
     let Some(value) = values.next() else {
-        return state.development;
+        return development;
     };
     if values.next().is_some() {
         return false;
@@ -142,7 +150,7 @@ pub fn origin_allowed(headers: &HeaderMap, state: &AuthState) -> bool {
     let Ok(origin) = value.to_str() else {
         return false;
     };
-    origin != "null" && origin == allowed
+    origin != "null" && allowed.iter().any(|entry| entry == origin)
 }
 
 /// Ventana deslizante en memoria. Suficiente para una instancia; un despliegue
@@ -276,5 +284,66 @@ mod tests {
         }
         assert!(!limiter.is_limited("clave-nueva"));
         assert_eq!(limiter.len(), 0, "las claves caducadas se depuran");
+    }
+
+    fn origin_headers(origin: &str) -> HeaderMap {
+        let mut headers = HeaderMap::new();
+        headers.insert(header::ORIGIN, origin.parse().unwrap());
+        headers
+    }
+
+    #[test]
+    fn origen_acepta_cualquiera_de_la_lista_y_rechaza_el_resto() {
+        let allowed = vec![
+            "https://admin.hiqnet.test".to_string(),
+            "https://portal.hiqnet.test".to_string(),
+        ];
+        assert!(origin_matches(
+            &origin_headers("https://admin.hiqnet.test"),
+            &allowed,
+            false
+        ));
+        assert!(origin_matches(
+            &origin_headers("https://portal.hiqnet.test"),
+            &allowed,
+            false
+        ));
+        assert!(!origin_matches(
+            &origin_headers("https://evil.hiqnet.test"),
+            &allowed,
+            false
+        ));
+        assert!(!origin_matches(
+            &origin_headers("https://admin.hiqnet.test.evil"),
+            &allowed,
+            false
+        ));
+    }
+
+    #[test]
+    fn origen_falla_cerrado_sin_lista_nulos_o_multiples() {
+        let empty: Vec<String> = Vec::new();
+        assert!(!origin_matches(
+            &origin_headers("https://admin.hiqnet.test"),
+            &empty,
+            true
+        ));
+
+        let allowed = vec!["https://admin.hiqnet.test".to_string()];
+        assert!(!origin_matches(&origin_headers("null"), &allowed, true));
+
+        let mut headers = origin_headers("https://admin.hiqnet.test");
+        headers.append(
+            header::ORIGIN,
+            "https://portal.hiqnet.test".parse().unwrap(),
+        );
+        assert!(!origin_matches(&headers, &allowed, false));
+    }
+
+    #[test]
+    fn origen_omitido_solo_se_admite_en_development() {
+        let allowed = vec!["https://admin.hiqnet.test".to_string()];
+        assert!(origin_matches(&HeaderMap::new(), &allowed, true));
+        assert!(!origin_matches(&HeaderMap::new(), &allowed, false));
     }
 }

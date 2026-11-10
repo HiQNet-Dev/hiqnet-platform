@@ -35,6 +35,8 @@ HIQNET_PLATFORM_COOKIE_SECURE=false
 HIQNET_PLATFORM_ENABLE_DOCS=true
 ```
 
+`HIQNET_PLATFORM_ALLOWED_ORIGIN` admite una lista separada por comas de orígenes exactos. Para trabajar con Control Center (5174) y Portal (5173) sobre la misma API: `http://127.0.0.1:5173,http://127.0.0.1:5174`. La comparación es textual y no admite comodines.
+
 No se habilita CORS con `*` ni credentials. La cookie `hiqnet_session` es HttpOnly y el Portal no la lee, no la copia a `localStorage` y no guarda tokens.
 
 ## Rutas iniciales
