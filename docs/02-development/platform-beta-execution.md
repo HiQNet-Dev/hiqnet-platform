@@ -103,6 +103,21 @@ Correcciones aportadas por B9:
 - `ControlDialog` extraído a `components/dialog.tsx` y reutilizado por Instalaciones.
 - Pruebas: 5 unitarias de validación, 5 E2E simuladas por viewport (capabilities, validación, duplicado, confirmación) y 3 E2E full-stack por viewport (alta y edición reales, auditoría y `read_only` → 403).
 
+## Refactorización estructural (R0–R5)
+
+Incrementos ejecutados tras cerrar B10.1, sin cambios de comportamiento:
+
+| Incremento | Resultado |
+|---|---|
+| R0 | Auditoría medida y arquitectura modular objetivo ([informe](structural-audit.md), [arquitectura](../01-architecture/modular-architecture.md)) |
+| R1 | `apps/api/src/lib.rs`: 6 109 → 103 líneas; módulos `config`, `composition`, `router`, `app_state`, `health`, `licensing`, `commercial_auth`, `organizations`; pruebas en `apps/api/src/tests/` por escenario |
+| R2 | `commercial_domain` modularizado en aplicación (model, ports, plans, subscriptions, entitlements, validation, pagination) y persistencia (mappers, sql, helpers, repository, portal) |
+| R3 | `enrollment` modularizado; `complete_proof` movido a `proof.rs` conservando transacción y protocolo |
+| R4 | Pruebas de persistencia divididas por escenario (`installation_control`, `commercial`, `auth`, `enrollment`) |
+| R5 | Verificador `scripts/check_size_policy.py` con línea base y paso de CI |
+
+Métricas finales: **0 archivos de más de 1 000 líneas** (antes 6), archivo más largo **901** (antes 6 109), **150 pruebas** y OpenAPI idéntico.
+
 ## Pendiente
 
 1. **Publicar `platform-v0.1.0-beta.1`** cuando se autorice explícitamente. La simulación está validada; no se ha creado tag ni release.

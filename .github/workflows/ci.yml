@@ -138,6 +138,8 @@ jobs:
       - uses: actions/checkout@v4
       - name: Verificar archivos prohibidos y claves privadas
         run: python3 scripts/check_repository.py
+      - name: Verificar política de tamaño y deuda estructural
+        run: python3 scripts/check_size_policy.py
 
   portal-e2e:
     name: Portal E2E full-stack
