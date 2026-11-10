@@ -30,4 +30,5 @@
 .dialog textarea{min-height:74px;border:1px solid var(--cc-border);border-radius:4px;padding:8px;resize:vertical;font:inherit}
 .dialog__warning{margin:0;padding-left:18px;color:var(--cc-muted);font-size:13px;display:grid;gap:3px}
 .dialog__actions{display:flex;justify-content:flex-end;gap:8px;margin-top:6px}
+.filters textarea{min-height:58px;border:1px solid var(--cc-border);border-radius:4px;background:#fff;color:var(--cc-text);padding:6px 8px;resize:vertical;font:inherit}
 @media (max-width:768px){.installations-table thead{display:none}.installations-table,.installations-table tbody,.installations-table tr,.installations-table td{display:block;width:100%}.installations-table tr{border-bottom:1px solid var(--cc-border);padding:6px 0}.installations-table tr:last-child{border-bottom:0}.installations-table td{border:0;padding:6px 12px}.installations-table td::before{content:attr(data-label);display:block;font-size:10px;letter-spacing:.04em;text-transform:uppercase;color:var(--cc-muted);margin-bottom:2px}}

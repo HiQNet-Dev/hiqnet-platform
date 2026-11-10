@@ -250,3 +250,15 @@ Sin MFA, el blast radius máximo es `super_admin` y el siguiente `platform_admin
 | Advisories S8/S18 | Aceptados (§7.5) | Aceptados (§7.5) |
 
 Ninguno de estos riesgos es explotable de forma remota y directa en el perfil interno declarado. S5 y la configuración productiva siguen siendo **bloqueantes de despliegue** y se resuelven en el runbook (`docs/03-operations/deployment.md`).
+
+### 7.7 Formulario administrativo de Product Registry (B10.1)
+
+| Aspecto | Verificación |
+|---|---|
+| Autorización | El alta y la edición sólo se renderizan con `products.manage`; el backend vuelve a comprobarlo y responde `403 forbidden` a `read_only`, verificado por prueba Rust y por E2E directo contra la API. |
+| CSRF | Ambas mutaciones pasan por `require_origin`, igual que el resto del Control Center. |
+| Validación | Cliente y servidor comparten reglas: clave `[a-z0-9-]` de 1–64 con extremos alfanuméricos, nombre 1–200, descripción ≤ 2000. |
+| Duplicados | `409` se traduce a un mensaje neutral, sin detalles de base de datos. |
+| Integridad | `key` y `product_type` son inmutables; la edición envía sólo los campos modificados y el backend rechaza no-ops. |
+| Auditoría | `product_created` y `product_updated` se escriben en la misma transacción; el E2E los consulta por `resource_id`. |
+| Datos | El formulario no expone tokens, identificadores internos ni datos de otras organizaciones. |
