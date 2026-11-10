@@ -10,6 +10,7 @@ use axum::{
     response::IntoResponse,
 };
 use platform_application::audit_security::AuditSecurityService;
+use platform_application::commercial_domain::CommercialService;
 use platform_application::control::ControlService;
 use platform_application::installation_control::InstallationControlService;
 use platform_application::organization_product::OrganizationProductService;
@@ -17,8 +18,9 @@ use platform_application::product::ProductService;
 use platform_application::staff::StaffAuthService;
 use platform_core::staff::{AuthenticatedStaffSession, StaffError};
 use platform_storage_postgres::{
-    PgAuditSecurityRepository, PgControlRepository, PgInstallationControlRepository,
-    PgOrganizationProductRepository, PgProductRepository, PgStaffRepository,
+    PgAuditSecurityRepository, PgCommercialDomainRepository, PgControlRepository,
+    PgInstallationControlRepository, PgOrganizationProductRepository, PgProductRepository,
+    PgStaffRepository,
 };
 use std::sync::Arc;
 
@@ -34,6 +36,7 @@ pub struct StaffState {
     pub control: Arc<ControlService<PgControlRepository>>,
     pub audit_security: Arc<AuditSecurityService<PgAuditSecurityRepository>>,
     pub organization_products: Arc<OrganizationProductService<PgOrganizationProductRepository>>,
+    pub commercial: Arc<CommercialService<PgCommercialDomainRepository>>,
     pub installations: Arc<InstallationControlService<PgInstallationControlRepository>>,
     pub limiter: Arc<LoginLimiter>,
     pub session_ttl: time::Duration,

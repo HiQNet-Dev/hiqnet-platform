@@ -6,6 +6,7 @@
 pub mod audit_security;
 pub mod auth;
 pub mod commercial;
+pub mod commercial_domain;
 pub mod control;
 pub mod enrollment;
 pub mod error;
@@ -25,6 +26,14 @@ pub use audit_security::{
     StaffAuthFilters,
 };
 pub use auth::{AuthRepository, AuthService};
+pub use commercial_domain::{
+    CommercialActor, CommercialError, CommercialRepository, CommercialResult, CommercialService,
+    CreateSubscription, CreateSubscriptionCommand, CursorKey as CommercialCursor, Entitlements,
+    NewPlan, Page as CommercialPage, Plan, PlanFilters, PlanPatch, PlanRef, PlanStatus,
+    PortalProduct, PortalProductRef, PortalSubscription, RenewSubscription,
+    RenewSubscriptionCommand, Subscription, SubscriptionAction, SubscriptionDetail,
+    SubscriptionEvent, SubscriptionFilters, SubscriptionStatus, SubscriptionTransition,
+};
 pub use enrollment::{
     ApproveEnrollmentRequest, BeginEnrollmentRequest, BeginStorageOutcome, EnrollmentChallengeView,
     EnrollmentCompletion, EnrollmentError, EnrollmentPage, EnrollmentRepository, EnrollmentResult,
