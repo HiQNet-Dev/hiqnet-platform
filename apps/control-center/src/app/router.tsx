@@ -6,6 +6,18 @@ import { InstallationDetailPage } from "../features/installations/installation-d
 import { InstallationsPage } from "../features/installations/installations-page";
 import { OrganizationDetailPage, OrganizationsPage } from "../features/organizations/organizations-page";
 import { ProductDetailPage, ProductsPage } from "../features/products/products-pages";
+import { PlanDetailPage, PlansPage } from "../features/commercial/plans-page";
+import {
+  SubscriptionDetailPage,
+  SubscriptionsPage,
+} from "../features/commercial/subscriptions-page";
+import { AuditDetailPage, AuditPage } from "../features/audit/audit-page";
+import {
+  SecurityEventDetailPage,
+  SecurityEventsPage,
+  StaffAuthEventDetailPage,
+  StaffAuthEventsPage,
+} from "../features/audit/security-page";
 import { AppShell } from "../layouts/app-shell";
 import { LoginPage } from "./login-page";
 
@@ -31,6 +43,16 @@ export function AppRouter() {
         <Route index element={<Navigate to="products" replace />} />
         <Route path="products" element={<ProductsPage />} />
         <Route path="products/:productKey" element={<ProductDetailPage />} />
+        <Route path="plans" element={<PlansPage />} />
+        <Route path="plans/:planId" element={<PlanDetailPage />} />
+        <Route path="subscriptions" element={<SubscriptionsPage />} />
+        <Route path="subscriptions/:subscriptionId" element={<SubscriptionDetailPage />} />
+        <Route path="audit" element={<AuditPage />} />
+        <Route path="audit/:eventId" element={<AuditDetailPage />} />
+        <Route path="security" element={<SecurityEventsPage />} />
+        <Route path="security/staff-auth" element={<StaffAuthEventsPage />} />
+        <Route path="security/staff-auth/:eventId" element={<StaffAuthEventDetailPage />} />
+        <Route path="security/:eventId" element={<SecurityEventDetailPage />} />
         <Route path="organizations" element={<OrganizationsPage />} />
         <Route path="organizations/:organizationId" element={<OrganizationDetailPage />} />
         <Route path="accounts" element={<AccountsPage />} />

@@ -15,6 +15,20 @@ export type ControlOrganizationPage = components["schemas"]["ControlOrganization
 export type ControlOrganizationDetail = components["schemas"]["ControlOrganizationDetailResponse"];
 export type ControlOrganizationProduct = components["schemas"]["ControlOrganizationProductResponse"];
 export type ControlOrganizationProductMutation = components["schemas"]["ControlOrganizationProductMutationResponse"];
+export type CommercialPlanStatus = components["schemas"]["PlanStatusDto"];
+export type CommercialPlan = components["schemas"]["PlanResponse"];
+export type CommercialPlanPage = components["schemas"]["PlanListResponse"];
+export type CommercialSubscriptionStatus = components["schemas"]["SubscriptionStatusDto"];
+export type CommercialSubscription = components["schemas"]["SubscriptionResponse"];
+export type CommercialSubscriptionPage = components["schemas"]["SubscriptionListResponse"];
+export type CommercialSubscriptionDetail = components["schemas"]["SubscriptionDetailResponse"];
+export type CommercialEntitlements = components["schemas"]["EntitlementsResponse"];
+export type ControlAuditEvent = components["schemas"]["ControlAuditEventSummaryResponse"];
+export type ControlAuditEventDetail = components["schemas"]["ControlAuditEventDetailResponse"];
+export type ControlSecurityEvent = components["schemas"]["ControlSecurityEventSummaryResponse"];
+export type ControlSecurityEventDetail = components["schemas"]["ControlSecurityEventDetailResponse"];
+export type ControlStaffAuthEvent = components["schemas"]["ControlStaffAuthEventSummaryResponse"];
+export type ControlStaffAuthEventDetail = components["schemas"]["ControlStaffAuthEventDetailResponse"];
 export type ControlAccount = components["schemas"]["ControlAccountSummaryResponse"];
 export type ControlAccountPage = components["schemas"]["ControlAccountListResponse"];
 export type ControlAccountDetail = components["schemas"]["ControlAccountDetailResponse"];
@@ -99,6 +113,120 @@ export const controlClient = {
       `/organizations/${encodeURIComponent(organizationId)}/products/${encodeURIComponent(productId)}`,
       { method: "PATCH", body: JSON.stringify({ status }) },
     ),
+  plans: (filters: { productId?: string; status?: CommercialPlanStatus; cursor?: string; limit?: number }) => {
+    const search = new URLSearchParams();
+    search.set("limit", String(filters.limit ?? 50));
+    if (filters.productId) search.set("product_id", filters.productId);
+    if (filters.status) search.set("status", filters.status);
+    if (filters.cursor) search.set("cursor", filters.cursor);
+    return request<CommercialPlanPage>(`/plans?${search.toString()}`);
+  },
+  plan: (id: string) => request<CommercialPlan>(`/plans/${encodeURIComponent(id)}`),
+  createPlan: (body: Record<string, unknown>) =>
+    request<CommercialPlan>("/plans", { method: "POST", body: JSON.stringify(body) }),
+  updatePlan: (id: string, body: Record<string, unknown>) =>
+    request<CommercialPlan>(`/plans/${encodeURIComponent(id)}`, {
+      method: "PATCH",
+      body: JSON.stringify(body),
+    }),
+  subscriptions: (filters: {
+    organizationId?: string;
+    productId?: string;
+    status?: CommercialSubscriptionStatus;
+    cursor?: string;
+    limit?: number;
+  }) => {
+    const search = new URLSearchParams();
+    search.set("limit", String(filters.limit ?? 50));
+    if (filters.organizationId) search.set("organization_id", filters.organizationId);
+    if (filters.productId) search.set("product_id", filters.productId);
+    if (filters.status) search.set("status", filters.status);
+    if (filters.cursor) search.set("cursor", filters.cursor);
+    return request<CommercialSubscriptionPage>(`/subscriptions?${search.toString()}`);
+  },
+  subscription: (id: string) =>
+    request<CommercialSubscriptionDetail>(`/subscriptions/${encodeURIComponent(id)}`),
+  createSubscription: (body: Record<string, unknown>, idempotencyKey: string) =>
+    request<CommercialSubscription>("/subscriptions", {
+      method: "POST",
+      body: JSON.stringify(body),
+      headers: { "Idempotency-Key": idempotencyKey },
+    }),
+  suspendSubscription: (id: string, reason?: string) =>
+    request<CommercialSubscription>(`/subscriptions/${encodeURIComponent(id)}/suspend`, {
+      method: "POST",
+      body: JSON.stringify({ reason }),
+    }),
+  reactivateSubscription: (id: string) =>
+    request<CommercialSubscription>(`/subscriptions/${encodeURIComponent(id)}/reactivate`, {
+      method: "POST",
+      body: JSON.stringify({}),
+    }),
+  cancelSubscription: (id: string, reason?: string) =>
+    request<CommercialSubscription>(`/subscriptions/${encodeURIComponent(id)}/cancel`, {
+      method: "POST",
+      body: JSON.stringify({ reason }),
+    }),
+  renewSubscription: (id: string, body: Record<string, unknown>, idempotencyKey: string) =>
+    request<CommercialSubscription>(`/subscriptions/${encodeURIComponent(id)}/renew`, {
+      method: "POST",
+      body: JSON.stringify(body),
+      headers: { "Idempotency-Key": idempotencyKey },
+    }),
+  entitlements: (organizationId: string, productId: string) =>
+    request<CommercialEntitlements>(
+      `/organizations/${encodeURIComponent(organizationId)}/entitlements?product_id=${encodeURIComponent(productId)}`,
+    ),
+  audit: (filters: { action?: string; result?: string; from?: string; to?: string; cursor?: string }) => {
+    const search = new URLSearchParams();
+    search.set("limit", "50");
+    if (filters.action) search.set("action", filters.action);
+    if (filters.result) search.set("result", filters.result);
+    if (filters.from) search.set("from", filters.from);
+    if (filters.to) search.set("to", filters.to);
+    if (filters.cursor) search.set("cursor", filters.cursor);
+    return request<{ items: ControlAuditEvent[]; next_cursor: string | null }>(
+      `/audit?${search.toString()}`,
+    );
+  },
+  auditEvent: (id: string) =>
+    request<ControlAuditEventDetail>(`/audit/${encodeURIComponent(id)}`),
+  securityEvents: (filters: {
+    kind?: string;
+    from?: string;
+    to?: string;
+    cursor?: string;
+  }) => {
+    const search = new URLSearchParams();
+    search.set("limit", "50");
+    if (filters.kind) search.set("kind", filters.kind);
+    if (filters.from) search.set("from", filters.from);
+    if (filters.to) search.set("to", filters.to);
+    if (filters.cursor) search.set("cursor", filters.cursor);
+    return request<{ items: ControlSecurityEvent[]; next_cursor: string | null }>(
+      `/security-events?${search.toString()}`,
+    );
+  },
+  securityEvent: (id: string) =>
+    request<ControlSecurityEventDetail>(`/security-events/${encodeURIComponent(id)}`),
+  staffAuthEvents: (filters: {
+    action?: string;
+    from?: string;
+    to?: string;
+    cursor?: string;
+  }) => {
+    const search = new URLSearchParams();
+    search.set("limit", "50");
+    if (filters.action) search.set("action", filters.action);
+    if (filters.from) search.set("from", filters.from);
+    if (filters.to) search.set("to", filters.to);
+    if (filters.cursor) search.set("cursor", filters.cursor);
+    return request<{ items: ControlStaffAuthEvent[]; next_cursor: string | null }>(
+      `/staff-auth-events?${search.toString()}`,
+    );
+  },
+  staffAuthEvent: (id: string) =>
+    request<ControlStaffAuthEventDetail>(`/staff-auth-events/${encodeURIComponent(id)}`),
   accounts: (filters: { cursor?: string; status?: AccountStatus; search?: string }) => {
     const search = new URLSearchParams();
     search.set("limit", "50");

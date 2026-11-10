@@ -131,6 +131,26 @@ export function OrganizationsPage() {
   );
 }
 
+function ProductEntitlements({
+  organizationId,
+  productId,
+}: {
+  organizationId: string;
+  productId: string;
+}) {
+  const query = useQuery({
+    queryKey: ["control", "entitlements", organizationId, productId],
+    queryFn: () => controlClient.entitlements(organizationId, productId),
+  });
+  if (query.isPending) return <span>…</span>;
+  if (query.isError) return <span>—</span>;
+  return (
+    <span className={`badge badge--${query.data.effective ? "active" : "disabled"}`}>
+      {query.data.effective ? "effective" : query.data.reason}
+    </span>
+  );
+}
+
 export function OrganizationDetailPage() {
   const { organizationId = "" } = useParams();
   const queryClient = useQueryClient();
@@ -296,6 +316,7 @@ export function OrganizationDetailPage() {
                   <th>Key</th>
                   <th>Lifecycle</th>
                   <th>Association</th>
+                  <th>Entitlements</th>
                   <th>Activated</th>
                   {canManage && <th>Actions</th>}
                 </tr>
@@ -316,6 +337,12 @@ export function OrganizationDetailPage() {
                       <span className={`badge badge--${product.association_status}`}>
                         {product.association_status}
                       </span>
+                    </td>
+                    <td>
+                      <ProductEntitlements
+                        organizationId={organization.id}
+                        productId={product.product_id}
+                      />
                     </td>
                     <td>{formatDate(product.activated_at)}</td>
                     {canManage && (

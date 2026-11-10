@@ -4,7 +4,7 @@
 **Fase:** Beta 0.1.0 — Commercial Core
 **Relacionado:** [Platform](../01-architecture/platform.md) · [ADR-0007](adr-0007-product-project-model.md) · [ADR-0009](adr-0009-pos-installation-control.md) · [Backlog Beta](../02-development/platform-beta-backlog.md) · [Seguridad Beta](../02-development/platform-beta-security.md)
 
-> Este ADR ratifica el contrato comercial mínimo de Beta. No crea tablas ni endpoints en esta fase. El DDL definitivo se implementará en una migración posterior (`0011+`) tras revisión y en el PR correspondiente.
+> Este ADR ratifica el contrato comercial mínimo de Beta. El DDL se implementó en B6 mediante la migración `0011_commercial_core.sql`; la API y el resolver de entitlements están integrados en `main`.
 
 ## 1. Contexto
 
