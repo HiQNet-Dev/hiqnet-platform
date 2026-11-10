@@ -327,6 +327,41 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/control/organizations/{organization_id}/products": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Lista productos asociados a una organización */
+        get: operations["listControlOrganizationProducts"];
+        put?: never;
+        /** Activa una asociación organización-producto */
+        post: operations["activateControlOrganizationProduct"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/control/organizations/{organization_id}/products/{product_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Activa o desactiva una asociación organización-producto */
+        patch: operations["updateControlOrganizationProduct"];
+        trace?: never;
+    };
     "/api/v1/control/products": {
         parameters: {
             query?: never;
@@ -732,6 +767,10 @@ export interface components {
     schemas: {
         /** @enum {string} */
         AccountStatusDto: "active" | "disabled";
+        ActivateOrganizationProductRequest: {
+            /** Format: uuid */
+            product_id: string;
+        };
         AddMemberRequest: {
             /**
              * Format: uuid
@@ -931,6 +970,13 @@ export interface components {
         ControlOrganizationListResponse: {
             items: components["schemas"]["ControlOrganizationSummaryResponse"][];
             next_cursor?: string | null;
+        };
+        ControlOrganizationProductListResponse: {
+            items: components["schemas"]["ControlOrganizationProductResponse"][];
+        };
+        ControlOrganizationProductMutationResponse: {
+            changed: boolean;
+            product: components["schemas"]["ControlOrganizationProductResponse"];
         };
         ControlOrganizationProductResponse: {
             /** Format: date-time */
@@ -1371,6 +1417,9 @@ export interface components {
             display_name: string;
             email: string;
             role: string;
+        };
+        UpdateOrganizationProductRequest: {
+            status: components["schemas"]["AssociationStatusDto"];
         };
         /**
          * @description `key` y `type` son inmutables. Los campos omitidos o `null` no cambian. Los
@@ -2525,6 +2574,220 @@ export interface operations {
                 };
             };
             /** @description Almacenamiento no disponible */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    listControlOrganizationProducts: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description UUID de la organización */
+                organization_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Asociaciones de producto */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ControlOrganizationProductListResponse"];
+                };
+            };
+            /** @description Identificador inválido */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Sesión staff requerida */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Capability insuficiente */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Organización no encontrada */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description PostgreSQL no disponible */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    activateControlOrganizationProduct: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description UUID de la organización */
+                organization_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ActivateOrganizationProductRequest"];
+            };
+        };
+        responses: {
+            /** @description Asociación activa */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ControlOrganizationProductMutationResponse"];
+                };
+            };
+            /** @description Solicitud inválida */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Sesión staff requerida */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Capability insuficiente */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Organización o producto no encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description PostgreSQL no disponible */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    updateControlOrganizationProduct: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description UUID de la organización */
+                organization_id: string;
+                /** @description UUID del producto */
+                product_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateOrganizationProductRequest"];
+            };
+        };
+        responses: {
+            /** @description Asociación actualizada */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ControlOrganizationProductMutationResponse"];
+                };
+            };
+            /** @description Solicitud inválida */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Sesión staff requerida */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Capability insuficiente */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Asociación no encontrada */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description PostgreSQL no disponible */
             503: {
                 headers: {
                     [name: string]: unknown;

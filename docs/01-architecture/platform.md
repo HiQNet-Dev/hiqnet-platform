@@ -101,7 +101,7 @@ Son ejes separados y no intercambiables. Las cookies, sesiones, nombres de ruta 
 | **Product** | Oferta o aplicación reusable de HiQNet | Catálogo staff | `product` (C2) | Implementado |
 | **Project** | Unidad técnica/operativa asociada 0..1 a Product | Registro staff | `project` (C2) | Implementado |
 | **Organization** | Tenant cliente | Dominio comercial | `organization` (C2) | Implementado |
-| **OrganizationProduct** | Habilitación de un producto para una organización | Operación administrativa | `organization_product` (C4) | Lectura implementada; mutación pendiente |
+| **OrganizationProduct** | Habilitación de un producto para una organización | Operación administrativa | `organization_product` (C4/B4) | Implementado: lectura y mutaciones `active|inactive` sin DELETE |
 | **Plan** | Oferta comercial de un producto: nombre, features y límites | Catálogo staff | No existe tabla; `PlanName` hardcodeado (POS) | **Desarrollar** |
 | **Subscription** | Contrato comercial organización–producto–plan con vigencia y estado | Operación administrativa | No existe | **Desarrollar** |
 | **Entitlement** | Derecho efectivo derivado de una suscripción vigente | Resolución de dominio | `organization_product.entitlements` JSONB (no autoridad) | **Desarrollar resolver** |

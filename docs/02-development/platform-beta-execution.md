@@ -7,6 +7,7 @@ Fuente de verdad: repositorio Git, CI y PRs. Este documento es sólo un índice 
 ## Estado de `main`
 
 ```text
+44e9285  feat(control): backend C6 de auditoría y seguridad
 2147156  feat(portal): integrar enrolamiento e instalaciones (F02)
 2046df5  feat(portal): integrar Customer Portal F01
 565940f  docs(beta): ratify Platform Beta architecture and backlog
@@ -18,8 +19,8 @@ Fuente de verdad: repositorio Git, CI y PRs. Este documento es sólo un índice 
 |---|---|---|
 | B1 — Portal F01 | **MERGEADO** | PR #12 → `2046df5`; CI 4/4; E2E real del Portal |
 | B2 — Portal F02 | **MERGEADO** | PR #13 → `2147156`; CI 4/4; E2E synthetic POS + proof Ed25519 |
-| B3 — C6.1 backend | **EN RAMA / VALIDADO LOCAL** | `0010`, read models, endpoints read-only, OpenAPI, tests Rust |
-| B4 — OrganizationProduct | NO INICIADO | Depende de B3 |
+| B3 — C6.1 backend | **MERGEADO** | PR #24 → `44e9285`; CI 4/4; migración `0010`, endpoints y pruebas |
+| B4 — OrganizationProduct | **EN RAMA / VALIDADO LOCAL** | Backend GET/POST/PATCH, UI en organización, auditoría e idempotencia |
 | B5 — C6.2 frontend | NO INICIADO | Depende de B3 |
 | B6 — Dominio comercial | NO INICIADO | Depende de B3/B4 |
 | B7 / B7b — UI y Portal comercial | NO INICIADO | Depende de B6 |
@@ -41,18 +42,38 @@ Fuente de verdad: repositorio Git, CI y PRs. Este documento es sólo un índice 
 ```text
 cargo fmt --all -- --check              OK
 cargo clippy --workspace --all-targets -- -D warnings  OK
-cargo test --workspace                  OK (114 passed / 1 ignored)
+cargo test --workspace                  OK (134 passed / 1 ignored)
 Control Center lint/typecheck/test/build OK (14 tests)
 Portal lint/typecheck/test/build         OK (9 tests)
 OpenAPI snapshot generado y clientes api:check OK
 ```
 
+## B4 — alcance implementado
+
+- `GET /api/v1/control/organizations/{id}/products` (`organizations.read`).
+- `POST /api/v1/control/organizations/{id}/products` y `PATCH .../{product_id}` (`organizations.manage`, Origin obligatorio).
+- Activación idempotente, desactivación sin DELETE, `activated_at` inmutable.
+- Auditoría transaccional `organization_product_activated|deactivated`.
+- UI en detalle de organización: asociar producto, activar/desactivar, estados y errores.
+- Pruebas de aplicación, PostgreSQL y HTTP (RBAC, 404 neutral, idempotencia, auditoría).
+
+## Validaciones B4
+
+```text
+cargo fmt --all -- --check                              OK
+cargo clippy --workspace --all-targets -- -D warnings  OK
+cargo test --workspace                                  OK (140 passed / 1 ignored)
+Control Center lint/typecheck/test/build                OK (15 tests)
+Portal lint/typecheck/test/build                        OK (9 tests)
+OpenAPI snapshot y clientes api:check                   OK
+```
+
 ## Pendiente inmediato
 
-1. Publicar la rama de B3 y abrir PR.
-2. Verificar CI (Rust, Control Center, Portal, Archivos prohibidos).
-3. Fusionar B3 con squash.
-4. Continuar B4 OrganizationProduct.
+1. Publicar la rama de B4 y abrir PR.
+2. Verificar CI.
+3. Fusionar B4 con squash.
+4. Continuar B6 Commercial Core (B5 puede ir después o en paralelo).
 
 ## Reglas de recuperación
 

@@ -18,6 +18,7 @@ mod control;
 mod control_audit;
 mod control_directory;
 mod control_installations;
+mod control_organization_products;
 mod enrollment;
 mod staff;
 use auth::{AuthContext, AuthState};
@@ -195,6 +196,15 @@ fn api_routes() -> (Router<AppState>, OpenApiDocument) {
         .routes(routes!(control_audit::get_control_security_event))
         .routes(routes!(control_audit::list_control_staff_auth_events))
         .routes(routes!(control_audit::get_control_staff_auth_event))
+        .routes(routes!(
+            control_organization_products::list_control_organization_products
+        ))
+        .routes(routes!(
+            control_organization_products::activate_control_organization_product
+        ))
+        .routes(routes!(
+            control_organization_products::update_control_organization_product
+        ))
         .split_for_parts();
     document.info = Info::new("HiQNet Platform API", env!("CARGO_PKG_VERSION"));
     document.info.description = Some("Plano de control técnico con identidad comercial y sesiones; sin facturación, suscripciones ni sincronización productivas. El token administrativo es temporal y exclusivo de desarrollo.".into());
@@ -1356,6 +1366,11 @@ pub async fn run() -> anyhow::Result<()> {
                     platform_storage_postgres::PgAuditSecurityRepository::new(pool.clone()),
                 ),
             ),
+            organization_products: Arc::new(
+                platform_application::organization_product::OrganizationProductService::new(
+                    platform_storage_postgres::PgOrganizationProductRepository::new(pool.clone()),
+                ),
+            ),
             installations: Arc::new(
                 platform_application::installation_control::InstallationControlService::new(
                     platform_storage_postgres::PgInstallationControlRepository::new(pool.clone()),
@@ -1483,6 +1498,13 @@ mod tests {
                 audit_security: Arc::new(
                     platform_application::audit_security::AuditSecurityService::new(
                         platform_storage_postgres::PgAuditSecurityRepository::new(pool.clone()),
+                    ),
+                ),
+                organization_products: Arc::new(
+                    platform_application::organization_product::OrganizationProductService::new(
+                        platform_storage_postgres::PgOrganizationProductRepository::new(
+                            pool.clone(),
+                        ),
                     ),
                 ),
                 installations: Arc::new(
@@ -1676,6 +1698,18 @@ mod tests {
             ("/api/v1/control/security-events/{event_id}", "get"),
             ("/api/v1/control/staff-auth-events", "get"),
             ("/api/v1/control/staff-auth-events/{event_id}", "get"),
+            (
+                "/api/v1/control/organizations/{organization_id}/products",
+                "get",
+            ),
+            (
+                "/api/v1/control/organizations/{organization_id}/products",
+                "post",
+            ),
+            (
+                "/api/v1/control/organizations/{organization_id}/products/{product_id}",
+                "patch",
+            ),
         ];
         let actual: Vec<(&str, &str)> = current["paths"]
             .as_object()
@@ -5367,5 +5401,172 @@ mod tests {
         .await;
         assert_eq!(status, StatusCode::NOT_FOUND);
         assert_eq!(body["code"], json!("not_found"));
+    }
+
+    #[tokio::test]
+    async fn organization_product_mutations_are_idempotent_audited_and_rbac_checked() {
+        let pool = open(&isolated_test_url()).await.unwrap();
+        let admin_email = format!("op-admin-{}@hiqnet.test", Uuid::new_v4());
+        let reader_email = format!("op-reader-{}@hiqnet.test", Uuid::new_v4());
+        let password = "contraseña-staff-larga";
+        seed_staff(
+            &pool,
+            &admin_email,
+            password,
+            platform_core::staff::StaffRole::PlatformAdmin,
+        )
+        .await;
+        seed_staff(
+            &pool,
+            &reader_email,
+            password,
+            platform_core::staff::StaffRole::ReadOnly,
+        )
+        .await;
+        let organization = Uuid::new_v4();
+        let product = Uuid::new_v4();
+        sqlx::query(
+            "INSERT INTO organization (id, display_name, status, created_at)
+             VALUES ($1, 'OP API org', 'active', now())",
+        )
+        .bind(organization)
+        .execute(&pool)
+        .await
+        .unwrap();
+        sqlx::query(
+            "INSERT INTO product (id, key, name, description, status, product_type, created_at, updated_at)
+             VALUES ($1, $2, 'OP API product', '', 'active', 'saas', now(), now())",
+        )
+        .bind(product)
+        .bind(format!("op-api-{}", Uuid::new_v4().simple()))
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        let router = build_router(state(pool.clone()), false, test_auth_state(pool.clone()));
+        let origin = Some("http://127.0.0.1:8080");
+        let (status, headers, _) = send_auth(
+            &router,
+            "/api/v1/control/auth/login",
+            None,
+            origin,
+            Some(json!({"email": admin_email, "password": password})),
+        )
+        .await;
+        assert_eq!(status, StatusCode::NO_CONTENT);
+        let admin = staff_session_from(&headers);
+        let (status, headers, _) = send_auth(
+            &router,
+            "/api/v1/control/auth/login",
+            None,
+            origin,
+            Some(json!({"email": reader_email, "password": password})),
+        )
+        .await;
+        assert_eq!(status, StatusCode::NO_CONTENT);
+        let reader = staff_session_from(&headers);
+
+        let collection = format!("/api/v1/control/organizations/{organization}/products");
+        let item = format!("{collection}/{product}");
+        let body = Some(json!({"product_id": product}));
+
+        let (status, _, _) = send_method(
+            &router,
+            Method::POST,
+            &collection,
+            Some(&reader),
+            origin,
+            body.clone(),
+        )
+        .await;
+        assert_eq!(status, StatusCode::FORBIDDEN);
+
+        let (status, _, first) = send_method(
+            &router,
+            Method::POST,
+            &collection,
+            Some(&admin),
+            origin,
+            body.clone(),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(first["changed"], json!(true));
+        assert_eq!(first["product"]["association_status"], json!("active"));
+
+        let (status, _, second) = send_method(
+            &router,
+            Method::POST,
+            &collection,
+            Some(&admin),
+            origin,
+            body,
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(second["changed"], json!(false));
+
+        let (status, _, list) =
+            send_method(&router, Method::GET, &collection, Some(&reader), None, None).await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(list["items"].as_array().unwrap().len(), 1);
+
+        let (status, _, inactive) = send_method(
+            &router,
+            Method::PATCH,
+            &item,
+            Some(&admin),
+            origin,
+            Some(json!({"status": "inactive"})),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(inactive["changed"], json!(true));
+        assert_eq!(inactive["product"]["association_status"], json!("inactive"));
+
+        let (status, _, _) = send_method(
+            &router,
+            Method::PATCH,
+            &item,
+            Some(&admin),
+            origin,
+            Some(json!({"status": "deleted"})),
+        )
+        .await;
+        assert_eq!(status, StatusCode::BAD_REQUEST);
+
+        let (status, _, _) = send_method(
+            &router,
+            Method::POST,
+            &collection,
+            Some(&admin),
+            origin,
+            Some(json!({"product_id": Uuid::new_v4()})),
+        )
+        .await;
+        assert_eq!(status, StatusCode::NOT_FOUND);
+
+        let (status, _, _) = send_method(
+            &router,
+            Method::GET,
+            &format!("/api/v1/control/organizations/{}/products", Uuid::new_v4()),
+            Some(&admin),
+            None,
+            None,
+        )
+        .await;
+        assert_eq!(status, StatusCode::NOT_FOUND);
+
+        let audits: i64 = sqlx::query_scalar(
+            "SELECT count(*) FROM staff_audit_event
+             WHERE organization_id = $1 AND product_id = $2
+               AND action IN ('organization_product_activated', 'organization_product_deactivated')",
+        )
+        .bind(organization)
+        .bind(product)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        assert_eq!(audits, 2);
     }
 }
