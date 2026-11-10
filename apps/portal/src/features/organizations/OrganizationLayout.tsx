@@ -1,5 +1,5 @@
 import { NavLink, Outlet, useParams } from 'react-router-dom';
-import { Building2, LayoutDashboard, Users, Server } from 'lucide-react';
+import { Building2, LayoutDashboard, Users, Server, Package } from 'lucide-react';
 
 import { Badge } from '../../components/Badge';
 import { Button } from '../../components/Button';
@@ -94,6 +94,13 @@ export function OrganizationLayout() {
         >
           <Server size={16} aria-hidden="true" />
           Instalaciones
+        </NavLink>
+        <NavLink
+          to={`/app/organizations/${organization.id}/products`}
+          className={({ isActive }) => `section-tabs__link${isActive ? ' is-active' : ''}`}
+        >
+          <Package size={16} aria-hidden="true" />
+          Productos
         </NavLink>
       </nav>
 

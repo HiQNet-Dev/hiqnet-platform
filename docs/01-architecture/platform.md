@@ -102,9 +102,9 @@ Son ejes separados y no intercambiables. Las cookies, sesiones, nombres de ruta 
 | **Project** | Unidad técnica/operativa asociada 0..1 a Product | Registro staff | `project` (C2) | Implementado |
 | **Organization** | Tenant cliente | Dominio comercial | `organization` (C2) | Implementado |
 | **OrganizationProduct** | Habilitación de un producto para una organización | Operación administrativa | `organization_product` (C4/B4) | Implementado: lectura y mutaciones `active|inactive` sin DELETE |
-| **Plan** | Oferta comercial de un producto: nombre, features y límites | Catálogo staff | No existe tabla; `PlanName` hardcodeado (POS) | **Desarrollar** |
-| **Subscription** | Contrato comercial organización–producto–plan con vigencia y estado | Operación administrativa | No existe | **Desarrollar** |
-| **Entitlement** | Derecho efectivo derivado de una suscripción vigente | Resolución de dominio | `organization_product.entitlements` JSONB (no autoridad) | **Desarrollar resolver** |
+| **Plan** | Oferta comercial de un producto: nombre, features y límites | Catálogo staff | `plan`, `plan_feature`, `plan_limit` (B6) | Implementado |
+| **Subscription** | Contrato comercial organización–producto–plan con vigencia y estado | Operación administrativa | `subscription`, `subscription_event` (B6) | Implementado |
+| **Entitlement** | Derecho efectivo derivado de una suscripción vigente | Resolución de dominio | Resolver sobre `plan_feature`/`plan_limit` (B6) | Implementado; `organization_product.entitlements` no es autoridad |
 | **License** | Documento firmado que representa derechos para una instalación | Platform (Ed25519 v1) | `issued_license` | Técnico existente; emisión DEV-only |
 | **Installation** | Registro lógico de una instancia desplegada | Producto / enrolamiento | `installation` (C1/C4/C5) | Implementado; opcional por producto |
 

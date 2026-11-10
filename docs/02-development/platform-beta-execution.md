@@ -7,10 +7,11 @@ Fuente de verdad: repositorio Git, CI y PRs. Este documento es sólo un índice 
 ## Estado de `main`
 
 ```text
+c466f06  feat(commercial): núcleo comercial Beta
+7bb82e6  feat(control): mutaciones de OrganizationProduct
 44e9285  feat(control): backend C6 de auditoría y seguridad
 2147156  feat(portal): integrar enrolamiento e instalaciones (F02)
 2046df5  feat(portal): integrar Customer Portal F01
-565940f  docs(beta): ratify Platform Beta architecture and backlog
 ```
 
 ## Incrementos
@@ -20,11 +21,11 @@ Fuente de verdad: repositorio Git, CI y PRs. Este documento es sólo un índice 
 | B1 — Portal F01 | **MERGEADO** | PR #12 → `2046df5`; CI 4/4; E2E real del Portal |
 | B2 — Portal F02 | **MERGEADO** | PR #13 → `2147156`; CI 4/4; E2E synthetic POS + proof Ed25519 |
 | B3 — C6.1 backend | **MERGEADO** | PR #24 → `44e9285`; CI 4/4; migración `0010`, endpoints y pruebas |
-| B4 — OrganizationProduct | **EN RAMA / VALIDADO LOCAL** | Backend GET/POST/PATCH, UI en organización, auditoría e idempotencia |
-| B5 — C6.2 frontend | NO INICIADO | Depende de B3 |
-| B6 — Dominio comercial | NO INICIADO | Depende de B3/B4 |
-| B7 / B7b — UI y Portal comercial | NO INICIADO | Depende de B6 |
-| B8 — E2E full-stack | NO INICIADO | Depende de B4/B6/B7b |
+| B4 — OrganizationProduct | **MERGEADO** | PR #25 → `7bb82e6`; backend, UI, auditoría e idempotencia |
+| B5 — C6.2 frontend | **EN RAMA / VALIDADO LOCAL** | Audit, Security y Staff Auth en Control Center |
+| B6 — Dominio comercial | **MERGEADO** | PR #26 → `c466f06`; migración 0011, planes, suscripciones, entitlements |
+| B7 / B7b — UI y Portal comercial | **EN RAMA / VALIDADO LOCAL** | Plans/Subscriptions, entitlements en organización y productos del Portal |
+| B8 — E2E full-stack | NO INICIADO | Depende de B7/B7b |
 | B9 — Validación Beta | NO INICIADO | Depende de B8 |
 | B10 — Cierre Beta | NO INICIADO | Depende de B9 |
 
@@ -68,12 +69,19 @@ Portal lint/typecheck/test/build                        OK (9 tests)
 OpenAPI snapshot y clientes api:check                   OK
 ```
 
+## B6/B7/B7b/B5 — alcance implementado
+
+- B6: migración `0011`; planes con features/límites normalizados; suscripciones con trial único, idempotencia, transiciones y renovación; `subscription_event` append-only; resolver de entitlements; API staff y portal read-only.
+- B7: páginas Plans y Subscriptions; asociación y entitlements en el detalle de organización.
+- B7b: `/organizations/{id}/products` y `/{product_id}` en Customer Portal con membresía y 404 neutral.
+- B5: Audit, Platform events y Staff authentication en Control Center con filtros, detalle y metadata saneada.
+
 ## Pendiente inmediato
 
-1. Publicar la rama de B4 y abrir PR.
+1. Publicar la rama de UI B5/B7/B7b y abrir PR.
 2. Verificar CI.
-3. Fusionar B4 con squash.
-4. Continuar B6 Commercial Core (B5 puede ir después o en paralelo).
+3. Fusionar con squash.
+4. Ejecutar B8 E2E full-stack y B9 validación Beta.
 
 ## Reglas de recuperación
 

@@ -77,9 +77,9 @@ Productos futuros se integran como módulos del Control Center y capacidades de 
 La arquitectura multiproducto y el alcance Beta quedan ratificados en [Platform](platform.md). El dominio comercial pendiente se define en [ADR-0011](adr-0011-commercial-domain.md). El backlog cerrado y la matriz de seguridad están en [Backlog Beta](../02-development/platform-beta-backlog.md) y [Seguridad Beta](../02-development/platform-beta-security.md).
 
 - C1–C5: implementados y validados en `main`.
-- C6: contrato en ADR-0010; backend C6.1 implementado (B3); frontend C6.2 pendiente.
-- Portal: F01 y F02 integrados en `main`.
-- Dominio comercial: planes, suscripciones y entitlements pendientes (ADR-0011).
+- C6: backend C6.1 (B3) y frontend C6.2 (B5) implementados; hardening C6.3 pendiente.
+- Portal: F01, F02 y consulta comercial read-only implementados en `main`.
+- Dominio comercial: planes, suscripciones y entitlements implementados (B6); UI comercial en B7.
 - OrganizationProduct: lectura y mutaciones administrativas implementadas (B4); sin DELETE físico.
 - Licenciamiento: Ed25519 v1; emisión productiva deshabilitada.
 - Beta: en ejecución; siguiente incremento según el backlog.

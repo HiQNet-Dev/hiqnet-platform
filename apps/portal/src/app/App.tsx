@@ -10,6 +10,10 @@ import { OrganizationOverviewPage } from '../features/organizations/Organization
 import { MembersPage } from '../features/members/MembersPage';
 import { EnrollmentPage } from '../features/enrollment/EnrollmentPage';
 import { InstallationsPage } from '../features/installations/InstallationsPage';
+import {
+  ProductDetailPage as CommercialProductDetailPage,
+  ProductsPage as CommercialProductsPage,
+} from '../features/commercial/ProductsPage';
 import { NotFoundPage } from './NotFoundPage';
 
 export function AppRoutes() {
@@ -25,6 +29,8 @@ export function AppRoutes() {
             <Route index element={<OrganizationOverviewPage />} />
             <Route path="members" element={<MembersPage />} />
             <Route path="installations" element={<InstallationsPage />} />
+            <Route path="products" element={<CommercialProductsPage />} />
+            <Route path="products/:productId" element={<CommercialProductDetailPage />} />
           </Route>
           <Route path="/enroll" element={<EnrollmentPage />} />
           <Route path="/account" element={<Navigate to="/account/security" replace />} />
