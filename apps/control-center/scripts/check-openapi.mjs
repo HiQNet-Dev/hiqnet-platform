@@ -13,9 +13,9 @@ const result = spawnSync(process.execPath, [cli, source, "-o", generated], { std
 
 try {
   if (result.status !== 0) process.exit(result.status ?? 1);
-  const expected = readFileSync(resolve(appRoot, "src/api/generated/openapi.ts"));
-  const actual = readFileSync(generated);
-  if (!expected.equals(actual)) {
+  const expected = readFileSync(resolve(appRoot, "src/api/generated/openapi.ts"), "utf8").replace(/\r\n/g, "\n");
+  const actual = readFileSync(generated, "utf8").replace(/\r\n/g, "\n");
+  if (expected !== actual) {
     console.error("OpenAPI generado desactualizado. Ejecuta: pnpm api:generate");
     process.exit(1);
   }

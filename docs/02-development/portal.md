@@ -39,13 +39,13 @@ No se habilita CORS con `*` ni credentials. La cookie `hiqnet_session` es HttpOn
 
 ## Rutas iniciales
 
-| Ruta | Estado | API real |
-| --- | --- | --- |
-| `/login` | Implementada | `POST /api/v1/auth/login`, `GET /api/v1/auth/me` |
-| `/app/organizations` | Implementada | `GET/POST /api/v1/organizations` |
-| `/app/organizations/:id` | Implementada | `GET /api/v1/organizations/{id}` |
+| Ruta                             | Estado       | API real                                                   |
+| -------------------------------- | ------------ | ---------------------------------------------------------- |
+| `/login`                         | Implementada | `POST /api/v1/auth/login`, `GET /api/v1/auth/me`           |
+| `/app/organizations`             | Implementada | `GET/POST /api/v1/organizations`                           |
+| `/app/organizations/:id`         | Implementada | `GET /api/v1/organizations/{id}`                           |
 | `/app/organizations/:id/members` | Implementada | `GET/POST/PATCH/DELETE /api/v1/organizations/{id}/members` |
-| `/account/security` | Implementada | password change, sessions revoke, logout |
+| `/account/security`              | Implementada | password change, sessions revoke, logout                   |
 
 `Instalaciones` y `/enroll` quedan fuera de F01; se integran en F02.
 
@@ -67,10 +67,33 @@ Con API, PostgreSQL y Portal arrancados, crea una cuenta sintética con el boots
 ```bash
 PORTAL_E2E_EMAIL=cuenta@example.test \
 PORTAL_E2E_PASSWORD='<contraseña-local>' \
+PORTAL_E2E_ORGANIZATION='Enrollment E2E Base' \
 pnpm --filter @hiqnet/platform-portal e2e
 ```
 
-El test cubre login, organizaciones, creación, detalle, miembros, seguridad de cuenta y logout.
+El spec de F02 usa una organización ya asociada al producto activo `pos` mediante `organization_product`. Si tu base no la tiene, créala una vez con SQL local (no usar datos reales):
+
+```sql
+INSERT INTO product (id,key,name,description,status,product_type,created_at,updated_at)
+VALUES (gen_random_uuid(),'pos','HiQNet POS','Producto sintético E2E','active','desktop',now(),now())
+ON CONFLICT (key) DO UPDATE SET status='active', updated_at=now();
+
+INSERT INTO organization (id,display_name,status,created_at)
+VALUES ('11111111-1111-4111-8111-111111111111','Enrollment E2E Base','active',now())
+ON CONFLICT (id) DO NOTHING;
+
+INSERT INTO organization_membership (organization_id,account_id,role,role_version,joined_at)
+SELECT '11111111-1111-4111-8111-111111111111', id, 'owner', 1, now()
+FROM commercial_account WHERE email='cuenta@example.test'
+ON CONFLICT (organization_id,account_id) DO NOTHING;
+
+INSERT INTO organization_product (organization_id,product_id,status,activated_at)
+SELECT '11111111-1111-4111-8111-111111111111', id, 'active', now()
+FROM product WHERE key='pos'
+ON CONFLICT (organization_id,product_id) DO UPDATE SET status='active';
+```
+
+El test cubre login, organizaciones, creación, detalle, miembros, seguridad de cuenta y logout. El spec de F02 cubre el flujo synthetic POS → begin → Portal approve → proof Ed25519 → installations.
 
 ## Seguridad
 
@@ -82,9 +105,31 @@ El test cubre login, organizaciones, creación, detalle, miembros, seguridad de 
 
 ## Backend gaps conocidos
 
-| Gap | Impacto UX | API actual | Propuesta futura | Prioridad |
-| --- | --- | --- | --- | --- |
-| Miembros sólo exponen `account_id` | No se puede buscar por correo ni mostrar nombre | `GET /organizations/{id}/members` | Invitación/búsqueda por email y proyección pública | Alta |
-| No hay edición de nombre de organización | El owner no puede renombrar desde Portal | Sólo `POST` y `GET` | `PATCH /organizations/{id}` | Media |
-| No hay estado de Trial/plan | No se puede mostrar contexto comercial real | Sin endpoint | G4.2-C | Media |
-| Instalaciones/enrolamiento | Sección oculta hasta integrar F02 | Control API C5 | Portal F02 | Alta |
+| Gap                                      | Impacto UX                                                         | API actual                        | Propuesta futura                                   | Prioridad |
+| ---------------------------------------- | ------------------------------------------------------------------ | --------------------------------- | -------------------------------------------------- | --------- |
+| Miembros sólo exponen `account_id`       | No se puede buscar por correo ni mostrar nombre                    | `GET /organizations/{id}/members` | Invitación/búsqueda por email y proyección pública | Alta      |
+| No hay edición de nombre de organización | El owner no puede renombrar desde Portal                           | Sólo `POST` y `GET`               | `PATCH /organizations/{id}`                        | Media     |
+| No hay estado de Trial/plan              | No se puede mostrar contexto comercial real                        | Sin endpoint                      | G4.2-C                                             | Media     |
+| Enrollment preview                       | El Portal no puede mostrar dispositivo/plataforma antes de aprobar | Sin endpoint público seguro       | `GET /enrollment-requests/{user_code}/preview`     | Media     |
+| Rehost                                   | No hay UI/API administrativa                                       | Sin endpoint                      | G4.2-E                                             | Baja      |
+
+## Portal F02 — Enrollment e Installations
+
+Rutas añadidas tras integrar G4.2-B:
+
+| Ruta                                   | Estado       | API real                                        |
+| -------------------------------------- | ------------ | ----------------------------------------------- |
+| `/enroll`                              | Implementada | `POST /enrollment-requests/{user_code}/approve` |
+| `/app/organizations/:id/installations` | Implementada | `GET /organizations/{id}/installations`         |
+
+`/enroll` acepta `?code=ABCD-EFGH`, normaliza mayúsculas/espacios y nunca aprueba sin confirmación del owner. El navegador no recibe `device_code`, `nonce`, firma ni clave privada; el proof lo completa el POS.
+
+El listado sólo muestra `device_label`, `status`, `identity_status`, `bound_at`, `last_seen_at` e ID copiable. No expone claves, fingerprints ni hashes.
+
+E2E real:
+
+```bash
+PORTAL_E2E_EMAIL=... PORTAL_E2E_PASSWORD=... pnpm --filter @hiqnet/platform-portal e2e
+```
+
+Cubre F01 y el flujo synthetic POS → begin → Portal approve → proof Ed25519 → installations.

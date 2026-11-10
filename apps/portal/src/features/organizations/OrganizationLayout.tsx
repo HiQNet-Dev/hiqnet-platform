@@ -88,15 +88,13 @@ export function OrganizationLayout() {
           <Users size={16} aria-hidden="true" />
           Miembros
         </NavLink>
-        <span
-          className="section-tabs__link section-tabs__link--disabled"
-          aria-disabled="true"
-          title="Disponible cuando G4.2-B esté integrado en main"
+        <NavLink
+          to={`/app/organizations/${organization.id}/installations`}
+          className={({ isActive }) => `section-tabs__link${isActive ? ' is-active' : ''}`}
         >
           <Server size={16} aria-hidden="true" />
           Instalaciones
-          <span className="section-tabs__soon">Próximamente</span>
-        </span>
+        </NavLink>
       </nav>
 
       <Outlet context={{ organization } satisfies OrganizationOutletContext} />

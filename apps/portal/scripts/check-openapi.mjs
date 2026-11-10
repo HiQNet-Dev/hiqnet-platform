@@ -17,8 +17,8 @@ const result = spawnSync(process.execPath, [cli, schemaPath, '-o', temporary], {
 
 try {
   if (result.status !== 0) process.exit(result.status ?? 1);
-  const generated = readFileSync(temporary, 'utf8').trimEnd();
-  const current = readFileSync(generatedPath, 'utf8').trimEnd();
+  const generated = readFileSync(temporary, 'utf8').replace(/\r\n/g, '\n').trimEnd();
+  const current = readFileSync(generatedPath, 'utf8').replace(/\r\n/g, '\n').trimEnd();
   if (generated !== current) {
     console.error('El cliente OpenAPI está desactualizado. Ejecuta `pnpm api:generate`.');
     process.exit(1);
