@@ -120,6 +120,7 @@ Integrado en `main` mediante la migración `0008` (squash `00a6baa`, 2026-11-09)
 - **`entitlements`:** objeto JSONB extensible con `{}` por defecto. En C4 no se interpreta como autoridad de negocio ni contiene pricing, planes, límites licenciados, Trial o billing.
 - **Independencia de ejes:** `organization.status` y `organization_product.status` no se propagan ni se derivan entre sí.
 - **C4 read-only:** la migración permitirá que `status` y `entitlements` evolucionen en fases posteriores, pero C4 no publica mutaciones administrativas para la relación.
+- **Enmienda Beta (B4):** la mutación administrativa se implementa sobre la misma tabla con `GET/POST/PATCH` bajo `/api/v1/control/organizations/{id}/products`, capability `organizations.manage`, auditoría staff y sin DELETE físico. `active|inactive` reutiliza la fila y `activated_at` permanece inmutable.
 
 - **`product_type`:** `desktop | saas | web | mobile | service | integration | internal`; **`status`:** `development | active | maintenance | deprecated | retired`.
 - **`Project`:** independiente, con `product_id` opcional: cardinalidad **0..1 producto** por proyecto; un producto puede agrupar varios proyectos.

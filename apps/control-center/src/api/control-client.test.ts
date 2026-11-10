@@ -74,3 +74,37 @@ describe("controlClient de installations", () => {
     });
   });
 });
+
+describe("controlClient de OrganizationProduct", () => {
+  it("usa GET, POST y PATCH del contrato sin DELETE", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse({ items: [] }))
+      .mockResolvedValueOnce(jsonResponse({ changed: true }))
+      .mockResolvedValueOnce(jsonResponse({ changed: true }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await controlClient.organizationProducts("org-1");
+    await controlClient.activateOrganizationProduct("org-1", "product-1");
+    await controlClient.setOrganizationProductStatus("org-1", "product-1", "inactive");
+
+    const calls = fetchMock.mock.calls.map(([url, init]) => [
+      url,
+      (init as RequestInit | undefined)?.method ?? "GET",
+      (init as RequestInit | undefined)?.body,
+    ]);
+    expect(calls).toEqual([
+      ["/api/v1/control/organizations/org-1/products", "GET", undefined],
+      [
+        "/api/v1/control/organizations/org-1/products",
+        "POST",
+        JSON.stringify({ product_id: "product-1" }),
+      ],
+      [
+        "/api/v1/control/organizations/org-1/products/product-1",
+        "PATCH",
+        JSON.stringify({ status: "inactive" }),
+      ],
+    ]);
+  });
+});

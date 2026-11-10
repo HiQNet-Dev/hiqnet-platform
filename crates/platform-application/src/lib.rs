@@ -10,6 +10,7 @@ pub mod control;
 pub mod enrollment;
 pub mod error;
 pub mod installation_control;
+pub mod organization_product;
 pub mod ports;
 pub mod product;
 pub mod security;
@@ -31,6 +32,10 @@ pub use enrollment::{
     SecurityEventKind,
 };
 pub use error::{AppError, AppResult};
+pub use organization_product::{
+    OrganizationProductActor, OrganizationProductError, OrganizationProductMutation,
+    OrganizationProductRepository, OrganizationProductResult, OrganizationProductService,
+};
 pub use ports::{
     InstallationView, IssueLicenseRequest, LicenseSigner, PlanView, PlatformRepository,
     RegisterInstallationRequest, SharedRepository, SharedSigner,

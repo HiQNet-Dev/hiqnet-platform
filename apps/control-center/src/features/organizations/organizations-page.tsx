@@ -1,6 +1,6 @@
-import { FormEvent } from "react";
+import { FormEvent, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   controlClient,
   type OrganizationStatus,
@@ -8,6 +8,7 @@ import {
 import { EmptyState, LoadingState, RequestErrorState } from "../../components/states";
 import { applyDirectoryFilter, withDirectoryCursor } from "../directory/filters";
 import { formatDate, formatDateTime } from "../../lib/format-date";
+import { useCapability } from "../../auth/session";
 
 const organizationStatuses: OrganizationStatus[] = [
   "active",
@@ -132,9 +133,32 @@ export function OrganizationsPage() {
 
 export function OrganizationDetailPage() {
   const { organizationId = "" } = useParams();
+  const queryClient = useQueryClient();
+  const canManage = useCapability("organizations.manage");
+  const [selectedProduct, setSelectedProduct] = useState("");
   const query = useQuery({
     queryKey: ["control", "organization", organizationId],
     queryFn: () => controlClient.organization(organizationId),
+  });
+  const productsQuery = useQuery({
+    queryKey: ["control", "products", "association-options"],
+    queryFn: () => controlClient.products({ limit: 100 }),
+    enabled: canManage,
+  });
+  const refreshOrganization = () =>
+    queryClient.invalidateQueries({ queryKey: ["control", "organization", organizationId] });
+  const activate = useMutation({
+    mutationFn: (productId: string) =>
+      controlClient.activateOrganizationProduct(organizationId, productId),
+    onSuccess: async () => {
+      setSelectedProduct("");
+      await refreshOrganization();
+    },
+  });
+  const changeStatus = useMutation({
+    mutationFn: ({ productId, status }: { productId: string; status: "active" | "inactive" }) =>
+      controlClient.setOrganizationProductStatus(organizationId, productId, status),
+    onSuccess: refreshOrganization,
   });
 
   if (query.isPending) return <LoadingState label="Cargando organization…" />;
@@ -142,6 +166,10 @@ export function OrganizationDetailPage() {
     return <RequestErrorState error={query.error} retry={() => void query.refetch()} />;
   }
   const organization = query.data;
+  const associated = new Set(organization.products.map((product) => product.product_id));
+  const availableProducts = (productsQuery.data?.items ?? []).filter(
+    (product) => !associated.has(product.id),
+  );
 
   return (
     <section className="page">
@@ -215,6 +243,45 @@ export function OrganizationDetailPage() {
           <h2>Products</h2>
           <p>Asociaciones de producto registradas para esta organización.</p>
         </div>
+        {canManage && (
+          <form
+            className="filters"
+            aria-label="Asociar producto"
+            onSubmit={(event) => {
+              event.preventDefault();
+              if (selectedProduct) activate.mutate(selectedProduct);
+            }}
+          >
+            <label>
+              Product
+              <select
+                value={selectedProduct}
+                onChange={(event) => setSelectedProduct(event.target.value)}
+                disabled={productsQuery.isPending || activate.isPending}
+              >
+                <option value="">Select product…</option>
+                {availableProducts.map((product) => (
+                  <option key={product.id} value={product.id}>
+                    {product.name} ({product.key})
+                  </option>
+                ))}
+              </select>
+            </label>
+            <button className="button" type="submit" disabled={!selectedProduct || activate.isPending}>
+              {activate.isPending ? "Associating…" : "Associate product"}
+            </button>
+          </form>
+        )}
+        {activate.isError && (
+          <p role="alert" className="inline-error">
+            {activate.error.message}
+          </p>
+        )}
+        {changeStatus.isError && (
+          <p role="alert" className="inline-error">
+            {changeStatus.error.message}
+          </p>
+        )}
         {organization.products.length === 0 ? (
           <EmptyState
             title="No product associations"
@@ -230,6 +297,7 @@ export function OrganizationDetailPage() {
                   <th>Lifecycle</th>
                   <th>Association</th>
                   <th>Activated</th>
+                  {canManage && <th>Actions</th>}
                 </tr>
               </thead>
               <tbody>
@@ -250,6 +318,24 @@ export function OrganizationDetailPage() {
                       </span>
                     </td>
                     <td>{formatDate(product.activated_at)}</td>
+                    {canManage && (
+                      <td>
+                        <button
+                          className="button button--secondary"
+                          type="button"
+                          disabled={changeStatus.isPending}
+                          onClick={() =>
+                            changeStatus.mutate({
+                              productId: product.product_id,
+                              status:
+                                product.association_status === "active" ? "inactive" : "active",
+                            })
+                          }
+                        >
+                          {product.association_status === "active" ? "Deactivate" : "Activate"}
+                        </button>
+                      </td>
+                    )}
                   </tr>
                 ))}
               </tbody>

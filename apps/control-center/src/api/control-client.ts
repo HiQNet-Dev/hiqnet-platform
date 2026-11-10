@@ -13,6 +13,8 @@ export type AccountStatus = components["schemas"]["AccountStatusDto"];
 export type ControlOrganization = components["schemas"]["ControlOrganizationSummaryResponse"];
 export type ControlOrganizationPage = components["schemas"]["ControlOrganizationListResponse"];
 export type ControlOrganizationDetail = components["schemas"]["ControlOrganizationDetailResponse"];
+export type ControlOrganizationProduct = components["schemas"]["ControlOrganizationProductResponse"];
+export type ControlOrganizationProductMutation = components["schemas"]["ControlOrganizationProductMutationResponse"];
 export type ControlAccount = components["schemas"]["ControlAccountSummaryResponse"];
 export type ControlAccountPage = components["schemas"]["ControlAccountListResponse"];
 export type ControlAccountDetail = components["schemas"]["ControlAccountDetailResponse"];
@@ -64,9 +66,9 @@ export const controlClient = {
   },
   logout: () => request<void>("/auth/logout", { method: "POST" }, false),
   me: () => request<StaffMe>("/auth/me", {}, false),
-  products: (filters: { cursor?: string; status?: ProductStatus; type?: ProductType }) => {
+  products: (filters: { cursor?: string; status?: ProductStatus; type?: ProductType; limit?: number }) => {
     const search = new URLSearchParams();
-    search.set("limit", "50");
+    search.set("limit", String(filters.limit ?? 50));
     if (filters.cursor) search.set("cursor", filters.cursor);
     if (filters.status) search.set("status", filters.status);
     if (filters.type) search.set("type", filters.type);
@@ -83,6 +85,20 @@ export const controlClient = {
     return request<ControlOrganizationPage>(`/organizations?${search.toString()}`);
   },
   organization: (id: string) => request<ControlOrganizationDetail>(`/organizations/${encodeURIComponent(id)}`),
+  organizationProducts: (organizationId: string) =>
+    request<{ items: ControlOrganizationProduct[] }>(
+      `/organizations/${encodeURIComponent(organizationId)}/products`,
+    ),
+  activateOrganizationProduct: (organizationId: string, productId: string) =>
+    request<ControlOrganizationProductMutation>(
+      `/organizations/${encodeURIComponent(organizationId)}/products`,
+      { method: "POST", body: JSON.stringify({ product_id: productId }) },
+    ),
+  setOrganizationProductStatus: (organizationId: string, productId: string, status: "active" | "inactive") =>
+    request<ControlOrganizationProductMutation>(
+      `/organizations/${encodeURIComponent(organizationId)}/products/${encodeURIComponent(productId)}`,
+      { method: "PATCH", body: JSON.stringify({ status }) },
+    ),
   accounts: (filters: { cursor?: string; status?: AccountStatus; search?: string }) => {
     const search = new URLSearchParams();
     search.set("limit", "50");
