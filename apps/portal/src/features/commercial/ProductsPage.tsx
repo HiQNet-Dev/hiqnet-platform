@@ -5,11 +5,7 @@ import { EmptyState } from '../../components/EmptyState';
 import { ErrorBanner } from '../../components/ErrorBanner';
 import { PageHeader } from '../../components/PageHeader';
 import { Skeleton } from '../../components/Skeleton';
-import {
-  useOrganizationProduct,
-  useOrganizationProducts,
-  type PortalProduct,
-} from './queries';
+import { useOrganizationProduct, useOrganizationProducts, type PortalProduct } from './queries';
 
 function subscriptionTone(status: string | undefined) {
   if (status === 'active') return 'success' as const;
@@ -18,7 +14,13 @@ function subscriptionTone(status: string | undefined) {
   return 'neutral' as const;
 }
 
-function ProductRows({ organizationId, items }: { organizationId: string; items: PortalProduct[] }) {
+function ProductRows({
+  organizationId,
+  items,
+}: {
+  organizationId: string;
+  items: PortalProduct[];
+}) {
   return (
     <div className="table-wrap">
       <table className="data-table">
