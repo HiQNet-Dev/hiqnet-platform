@@ -123,6 +123,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/control/audit": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Lista eventos de auditoría staff */
+        get: operations["listControlAudit"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/control/audit/{event_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Obtiene un evento de auditoría staff */
+        get: operations["getControlAudit"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/control/auth/login": {
         parameters: {
             query?: never;
@@ -363,6 +397,74 @@ export interface paths {
         head?: never;
         /** Actualiza un proyecto */
         patch: operations["updateControlProject"];
+        trace?: never;
+    };
+    "/api/v1/control/security-events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Lista eventos de seguridad de plataforma */
+        get: operations["listControlSecurityEvents"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/control/security-events/{event_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Obtiene un evento de seguridad de plataforma */
+        get: operations["getControlSecurityEvent"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/control/staff-auth-events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Lista eventos de autenticación staff */
+        get: operations["listControlStaffAuthEvents"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/control/staff-auth-events/{event_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Obtiene un evento de autenticación staff */
+        get: operations["getControlStaffAuthEvent"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/api/v1/enrollment-requests": {
@@ -660,6 +762,8 @@ export interface components {
         };
         /** @enum {string} */
         AssociationStatusDto: "active" | "inactive";
+        /** @enum {string} */
+        AuditResultDto: "success" | "denied" | "failure";
         BeginEnrollmentBody: {
             /** @example 0.1.0 */
             app_version: string;
@@ -721,6 +825,52 @@ export interface components {
             id: string;
             status: components["schemas"]["AccountStatusDto"];
         };
+        ControlAuditEventDetailResponse: {
+            action: string;
+            actor?: components["schemas"]["ControlStaffActorDetailResponse"] | null;
+            /** Format: uuid */
+            id: string;
+            metadata: unknown;
+            /** Format: date-time */
+            occurred_at: string;
+            organization?: components["schemas"]["ControlOrganizationRefResponse"] | null;
+            product?: components["schemas"]["ControlProductRefResponse"] | null;
+            /** Format: uuid */
+            resource_id?: string | null;
+            resource_label?: string | null;
+            resource_type: string;
+            result: components["schemas"]["AuditResultDto"];
+        };
+        ControlAuditEventListResponse: {
+            items: components["schemas"]["ControlAuditEventSummaryResponse"][];
+            next_cursor?: string | null;
+        };
+        ControlAuditEventSummaryResponse: {
+            action: string;
+            actor?: components["schemas"]["ControlStaffActorResponse"] | null;
+            /** Format: uuid */
+            id: string;
+            /** Format: date-time */
+            occurred_at: string;
+            organization?: components["schemas"]["ControlOrganizationRefResponse"] | null;
+            product?: components["schemas"]["ControlProductRefResponse"] | null;
+            /** Format: uuid */
+            resource_id?: string | null;
+            resource_label?: string | null;
+            resource_type: string;
+            result: components["schemas"]["AuditResultDto"];
+        };
+        ControlCommercialAccountDetailResponse: {
+            display_name: string;
+            email: string;
+            /** Format: uuid */
+            id: string;
+        };
+        ControlCommercialAccountRefResponse: {
+            display_name: string;
+            /** Format: uuid */
+            id: string;
+        };
         ControlInstallationDetailResponse: {
             current_binding?: components["schemas"]["InstallationBindingResponse"] | null;
             /** Format: date-time */
@@ -731,6 +881,11 @@ export interface components {
         ControlInstallationListResponse: {
             items: components["schemas"]["ControlInstallationSummaryResponse"][];
             next_cursor?: string | null;
+        };
+        ControlInstallationRefResponse: {
+            device_label: string;
+            /** Format: uuid */
+            id: string;
         };
         ControlInstallationSummaryResponse: {
             administrative_status: components["schemas"]["AdministrativeStatusDto"];
@@ -788,6 +943,11 @@ export interface components {
             product_name: string;
             product_status: components["schemas"]["ProductLifecycleDto"];
         };
+        ControlOrganizationRefResponse: {
+            display_name: string;
+            /** Format: uuid */
+            id: string;
+        };
         ControlOrganizationSummaryResponse: {
             /** Format: date-time */
             created_at: string;
@@ -795,6 +955,70 @@ export interface components {
             /** Format: uuid */
             id: string;
             status: components["schemas"]["OrganizationStatusDto"];
+        };
+        ControlProductRefResponse: {
+            /** Format: uuid */
+            id: string;
+            key: string;
+            name: string;
+        };
+        ControlSecurityEventDetailResponse: {
+            account?: components["schemas"]["ControlCommercialAccountDetailResponse"] | null;
+            /** Format: uuid */
+            id: string;
+            installation?: components["schemas"]["ControlInstallationRefResponse"] | null;
+            kind: components["schemas"]["SecurityKindDto"];
+            metadata: unknown;
+            /** Format: date-time */
+            occurred_at: string;
+            organization?: components["schemas"]["ControlOrganizationRefResponse"] | null;
+        };
+        ControlSecurityEventListResponse: {
+            items: components["schemas"]["ControlSecurityEventSummaryResponse"][];
+            next_cursor?: string | null;
+        };
+        ControlSecurityEventSummaryResponse: {
+            account?: components["schemas"]["ControlCommercialAccountRefResponse"] | null;
+            /** Format: uuid */
+            id: string;
+            installation?: components["schemas"]["ControlInstallationRefResponse"] | null;
+            kind: components["schemas"]["SecurityKindDto"];
+            /** Format: date-time */
+            occurred_at: string;
+            organization?: components["schemas"]["ControlOrganizationRefResponse"] | null;
+        };
+        ControlStaffActorDetailResponse: {
+            /** Format: uuid */
+            account_id: string;
+            display_name: string;
+            email: string;
+            status: string;
+        };
+        ControlStaffActorResponse: {
+            /** Format: uuid */
+            account_id: string;
+            display_name: string;
+        };
+        ControlStaffAuthEventDetailResponse: {
+            account?: components["schemas"]["ControlStaffActorDetailResponse"] | null;
+            action: components["schemas"]["StaffAuthActionDto"];
+            /** Format: uuid */
+            id: string;
+            metadata: unknown;
+            /** Format: date-time */
+            occurred_at: string;
+        };
+        ControlStaffAuthEventListResponse: {
+            items: components["schemas"]["ControlStaffAuthEventSummaryResponse"][];
+            next_cursor?: string | null;
+        };
+        ControlStaffAuthEventSummaryResponse: {
+            account?: components["schemas"]["ControlStaffActorResponse"] | null;
+            action: components["schemas"]["StaffAuthActionDto"];
+            /** Format: uuid */
+            id: string;
+            /** Format: date-time */
+            occurred_at: string;
         };
         CreateOrganizationRequest: {
             /** @example Mi negocio */
@@ -1130,6 +1354,10 @@ export interface components {
         };
         /** @enum {string} */
         RehostStatusDto: "pending" | "consumed" | "expired" | "cancelled";
+        /** @enum {string} */
+        SecurityKindDto: "enrollment_conflict" | "duplicate_key" | "tenant_change_attempt" | "replay_rejected" | "rehost_performed" | "identity_revoked" | "authorization_revoked_during_proof" | "idempotency_conflict" | "clone_suspected";
+        /** @enum {string} */
+        StaffAuthActionDto: "login_success" | "login_failure" | "logout" | "session_revoked" | "account_locked" | "password_changed";
         StaffLoginRequest: {
             /** @example staff@hiqnet.test */
             email: string;
@@ -1538,6 +1766,143 @@ export interface operations {
                 };
             };
             /** @description Almacenamiento no disponible */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    listControlAudit: {
+        parameters: {
+            query?: {
+                staff_account_id?: string;
+                action?: string;
+                resource_type?: string;
+                resource_id?: string;
+                organization_id?: string;
+                product_id?: string;
+                result?: string;
+                from?: string;
+                to?: string;
+                /** @example 50 */
+                limit?: number;
+                cursor?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Eventos de auditoría */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ControlAuditEventListResponse"];
+                };
+            };
+            /** @description Consulta inválida */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Sesión staff requerida */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Capability insuficiente */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description PostgreSQL no disponible */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    getControlAudit: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description UUID del evento */
+                event_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Evento de auditoría */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ControlAuditEventDetailResponse"];
+                };
+            };
+            /** @description Identificador inválido */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Sesión staff requerida */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Capability insuficiente */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Recurso no encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description PostgreSQL no disponible */
             503: {
                 headers: {
                     [name: string]: unknown;
@@ -2701,6 +3066,272 @@ export interface operations {
                 };
             };
             /** @description Almacenamiento no disponible */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    listControlSecurityEvents: {
+        parameters: {
+            query?: {
+                kind?: string;
+                organization_id?: string;
+                installation_id?: string;
+                account_id?: string;
+                from?: string;
+                to?: string;
+                /** @example 50 */
+                limit?: number;
+                cursor?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Eventos de seguridad */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ControlSecurityEventListResponse"];
+                };
+            };
+            /** @description Consulta inválida */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Sesión staff requerida */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Capability insuficiente */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description PostgreSQL no disponible */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    getControlSecurityEvent: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description UUID del evento */
+                event_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Evento de seguridad */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ControlSecurityEventDetailResponse"];
+                };
+            };
+            /** @description Identificador inválido */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Sesión staff requerida */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Capability insuficiente */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Recurso no encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description PostgreSQL no disponible */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    listControlStaffAuthEvents: {
+        parameters: {
+            query?: {
+                account_id?: string;
+                action?: string;
+                from?: string;
+                to?: string;
+                /** @example 50 */
+                limit?: number;
+                cursor?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Eventos de autenticación staff */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ControlStaffAuthEventListResponse"];
+                };
+            };
+            /** @description Consulta inválida */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Sesión staff requerida */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Capability insuficiente */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description PostgreSQL no disponible */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    getControlStaffAuthEvent: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description UUID del evento */
+                event_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Evento de autenticación staff */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ControlStaffAuthEventDetailResponse"];
+                };
+            };
+            /** @description Identificador inválido */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Sesión staff requerida */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Capability insuficiente */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Recurso no encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description PostgreSQL no disponible */
             503: {
                 headers: {
                     [name: string]: unknown;
