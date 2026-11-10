@@ -1283,9 +1283,17 @@ pub async fn run() -> anyhow::Result<()> {
         }
         _ => true,
     };
-    let allowed_origin = std::env::var("HIQNET_PLATFORM_ALLOWED_ORIGIN")
-        .ok()
-        .filter(|value| !value.is_empty());
+    // Lista separada por comas de orígenes exactos; sin comodines ni prefijos.
+    let allowed_origins = std::env::var("HIQNET_PLATFORM_ALLOWED_ORIGIN")
+        .map(|value| {
+            value
+                .split(',')
+                .map(str::trim)
+                .filter(|origin| !origin.is_empty())
+                .map(str::to_owned)
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
     let session_hours: i64 = std::env::var("HIQNET_PLATFORM_SESSION_TTL_HOURS")
         .ok()
         .and_then(|value| value.parse().ok())
@@ -1369,7 +1377,7 @@ pub async fn run() -> anyhow::Result<()> {
     let auth_state = AuthState {
         service: auth_service,
         cookie_secure,
-        allowed_origin,
+        allowed_origins,
         development,
         session_ttl: time::Duration::hours(session_hours),
         limiter: Arc::new(auth::LoginLimiter::new(
@@ -1513,7 +1521,7 @@ mod tests {
                 platform_storage_postgres::PgAuthRepository::new(pool.clone()),
             )),
             cookie_secure: false,
-            allowed_origin: Some("http://127.0.0.1:8080".into()),
+            allowed_origins: vec!["http://127.0.0.1:8080".into()],
             development: true,
             session_ttl: time::Duration::hours(1),
             limiter: Arc::new(auth::LoginLimiter::new(

@@ -77,6 +77,6 @@ pnpm --filter @hiqnet/platform-portal api:generate
 pnpm --filter @hiqnet/platform-portal dev
 ```
 
-Vite proxya `/api` hacia `http://127.0.0.1:8080`; configura la API con `HIQNET_PLATFORM_ALLOWED_ORIGIN=http://127.0.0.1:5173`. Guía completa: [Portal](portal.md).
+Vite proxya `/api` hacia `http://127.0.0.1:8080`; configura la API con `HIQNET_PLATFORM_ALLOWED_ORIGIN` incluyendo el origen del frontend que uses. Con Control Center (5174) y Portal (5173) activos a la vez: `HIQNET_PLATFORM_ALLOWED_ORIGIN=http://127.0.0.1:5173,http://127.0.0.1:5174`. Guía completa: [Portal](portal.md).
 
 Apagado: `Ctrl+C` en Vite y `docker compose stop api postgres` si no necesitas el entorno completo. Adminer se apaga con `docker compose --profile db-ui down`.
