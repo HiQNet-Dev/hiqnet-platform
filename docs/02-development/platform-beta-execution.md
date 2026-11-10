@@ -35,6 +35,7 @@ c466f06  feat(commercial): núcleo comercial Beta (#26)
 | B8 — E2E full-stack | **MERGEADO** | PR #28 → `665946b`; job CI `Portal E2E full-stack` |
 | B9 — Validación Beta | **COMPLETADA** | PR #29 → `ec46015`; PR #30 → `697870a` |
 | B10 — Cierre documental | **COMPLETADO** | README, notas de Beta, runbook, backup/restore y transición POS |
+| B10.1 — Product Registry administrable | **COMPLETADO** | Alta y edición en Control Center; E2E real en 5 viewports; `read_only` sin mutaciones |
 | Publicación de `platform-v0.1.0-beta.1` | **PENDIENTE DE AUTORIZACIÓN** | Requiere push de tag; ver [Notas de Beta](platform-beta-notes.md) §6 |
 
 ## B3 — alcance implementado
@@ -94,14 +95,22 @@ Correcciones aportadas por B9:
 - Prettier del Portal con `endOfLine: auto` para que `format:check` funcione igual en Windows y CI (PR #29).
 - Lista de orígenes exactos en `HIQNET_PLATFORM_ALLOWED_ORIGIN` para permitir dos frontends sobre una API (PR #30).
 
+## B10.1 — Product Registry administrable
+
+- `control-client`: `createProduct` y `updateProduct` tipados desde el contrato OpenAPI.
+- `ProductsPage`: formulario de alta (key, name, type, status, description) visible sólo con `products.manage`; validación de cliente y mensajes estables para 400/403/404/409.
+- `ProductDetailPage`: formulario de edición con `key` y `type` inmutables, envío sólo de campos cambiados y confirmación modal en cualquier cambio de estado.
+- `ControlDialog` extraído a `components/dialog.tsx` y reutilizado por Instalaciones.
+- Pruebas: 5 unitarias de validación, 5 E2E simuladas por viewport (capabilities, validación, duplicado, confirmación) y 3 E2E full-stack por viewport (alta y edición reales, auditoría y `read_only` → 403).
+
 ## Pendiente
 
 1. **Publicar `platform-v0.1.0-beta.1`** cuando se autorice explícitamente. La simulación está validada; no se ha creado tag ni release.
-2. **Product Registry sin alta/edición en la UI.** La API ya lo soporta; primera mejora posterior a la Beta.
-3. **MFA/step-up** antes de ampliar la audiencia.
-4. **`sqlx 0.9`** para cerrar los dos advisories medios.
-5. **Retención de auditoría y hardening de `TRUNCATE`.**
-6. **Contratos de licenciamiento productivo** (custodia de clave, elegibilidad, auditoría de emisión) que se abordan con POS.
+2. **MFA/step-up** antes de ampliar la audiencia.
+3. **`sqlx 0.9`** para cerrar los dos advisories medios.
+4. **Retención de auditoría y hardening de `TRUNCATE`.**
+5. **Contratos de licenciamiento productivo** (custodia de clave, elegibilidad, auditoría de emisión) que se abordan con POS.
+6. **Alta y edición de Projects en la UI.** La API ya lo soporta; mismo patrón que Products.
 
 ## Reglas de recuperación
 

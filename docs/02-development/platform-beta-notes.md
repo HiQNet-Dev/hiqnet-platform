@@ -24,7 +24,7 @@ No es una aplicación de escritorio, móvil nativa ni PWA. No hay Tauri, Electro
 |---|---|
 | Identidad staff, login, logout, sesión revocable | Entregado |
 | RBAC staff con 17 capabilities y 6 roles | Entregado |
-| Product Registry (listado y detalle) | Entregado |
+| Product Registry (listado, detalle, alta y edición) | Entregado |
 | Project Registry (registro asociado a producto) | Entregado |
 | Organizaciones y cuentas comerciales (consulta y detalle) | Entregado |
 | Asociación organización-producto (activar/desactivar) | Entregado |
@@ -67,18 +67,17 @@ Estado de los controles: HTTPS/TLS, `Secure`, `HttpOnly`, `SameSite`, `Origin` e
 
 Se documentan para que no se descubran en producción:
 
-1. **Product Registry es de sólo lectura en la UI.** La API soporta `POST /api/v1/control/products` y `PATCH .../{key}` con `products.manage` y auditoría, pero el Control Center no ofrece formulario de alta ni edición. Es la primera mejora natural después de la Beta.
-2. **Sin MFA/step-up.** Aceptado para staff interno; requisito para ampliar audiencia.
-3. **`security.read` y `audit.read` las tienen todos los roles.** Riesgo de confidencialidad interna, acotado por la sanitización de metadata.
-4. **`security.manage` no tiene superficie.** Existe en la matriz y se consume en una fase posterior.
-5. **`TRUNCATE` no está bloqueado por los triggers append-only.** Mitigado con privilegios de base y backups.
-6. **Sin retención ni particionado de auditoría.** El volumen crece sin política automática.
-7. **Rate limiters en memoria y por instancia.** Un despliegue multi-instancia necesitará un limitador compartido.
-8. **`staff_auth_event` no registra todos los eventos posibles.** Faltan writers para `session_revoked`, `account_locked` y `password_changed`.
-9. **Sin PITR ni backups automáticos.** Depende del host; ver [Backup y restauración](../03-operations/backup-restore.md).
-10. **Dos advisories medios de `cargo audit` aceptados** (`libsqlite3-sys`, `rsa`): aparecen como dependencias opcionales en `Cargo.lock` sin ruta de compilación. Se cierran al migrar a `sqlx 0.9`.
-11. **La CSP propuesta no se validó contra un proxy real.** Debe verificarse en el despliegue.
-12. **Emisión productiva de licencias deshabilitada.** `ALLOW_DEV_ISSUANCE=false`; la custodia de clave se decide con POS.
+1. **`security.read` y `audit.read` las tienen todos los roles.** Riesgo de confidencialidad interna, acotado por la sanitización de metadata.
+2. **`security.manage` no tiene superficie.** Existe en la matriz y se consume en una fase posterior.
+3. **`TRUNCATE` no está bloqueado por los triggers append-only.** Mitigado con privilegios de base y backups.
+4. **Sin retención ni particionado de auditoría.** El volumen crece sin política automática.
+5. **Rate limiters en memoria y por instancia.** Un despliegue multi-instancia necesitará un limitador compartido.
+6. **`staff_auth_event` no registra todos los eventos posibles.** Faltan writers para `session_revoked`, `account_locked` y `password_changed`.
+7. **Sin PITR ni backups automáticos.** Depende del host; ver [Backup y restauración](../03-operations/backup-restore.md).
+8. **Dos advisories medios de `cargo audit` aceptados** (`libsqlite3-sys`, `rsa`): aparecen como dependencias opcionales en `Cargo.lock` sin ruta de compilación. Se cierran al migrar a `sqlx 0.9`.
+9. **La CSP propuesta no se validó contra un proxy real.** Debe verificarse en el despliegue.
+10. **Emisión productiva de licencias deshabilitada.** `ALLOW_DEV_ISSUANCE=false`; la custodia de clave se decide con POS.
+11. **Sin MFA/step-up.** Aceptado para staff interno; requisito para ampliar audiencia.
 
 ## 6. Identificación y publicación de la versión
 
@@ -154,11 +153,11 @@ PLATFORM_STAFF_EMAIL=... PLATFORM_STAFF_PASSWORD=... \
 |---|---|
 | `cargo fmt --check` / `clippy -D warnings` | Verde |
 | `cargo test --workspace` (PostgreSQL 17 real) | 150 pruebas, 0 fallos, 1 ignorada |
-| Control Center lint/typecheck/test/build/api:check | Verde (15 unitarias) |
+| Control Center lint/typecheck/test/build/api:check | Verde (20 unitarias) |
 | Portal lint/format/typecheck/test/build/api:check | Verde (9 unitarias) |
 | E2E Portal full-stack | 4/4 (login, cuenta, enrolamiento, comercial y aislamiento) |
-| E2E Control Center full-stack | 5/5 viewports (1920, 1440, 1024, 768, 390) |
-| E2E Control Center con API simulada | 155 pruebas, 5 omitidas (las full-stack sin credenciales) |
+| E2E Control Center full-stack | 15/15 en 5 viewports (1920, 1440, 1024, 768, 390) |
+| E2E Control Center con API simulada | 180 pruebas, 15 omitidas (las full-stack sin credenciales) |
 | Migración desde base vacía | 11 migraciones aplicadas |
 | Migración incremental | Verde |
 | Backup/restore | Ensayado con conteos coincidentes |

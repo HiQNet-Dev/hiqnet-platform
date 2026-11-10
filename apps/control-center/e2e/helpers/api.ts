@@ -1,5 +1,10 @@
-const API_BASE = process.env.PLATFORM_API_URL ?? "http://127.0.0.1:8080";
-const CONTROL_ORIGIN = process.env.CONTROL_ORIGIN ?? "http://127.0.0.1:5174";
+/**
+ * Helpers de API para el E2E full-stack del Control Center.
+ * Hablan con la API Axum real usando `Origin` del Control Center, de modo que
+ * cada mutación atraviesa la misma política CSRF que el navegador.
+ */
+export const API_BASE = process.env.PLATFORM_API_URL ?? "http://127.0.0.1:8080";
+export const CONTROL_ORIGIN = process.env.CONTROL_ORIGIN ?? "http://127.0.0.1:5174";
 
 async function json<T>(response: Response): Promise<T> {
   if (!response.ok) {
@@ -38,9 +43,11 @@ function headers(cookie: string) {
   return { "Content-Type": "application/json", Origin: CONTROL_ORIGIN, Cookie: cookie };
 }
 
+export type ProductPayload = { id: string; key: string; name: string; status: string };
+
 export async function createProduct(cookie: string) {
   const key = `cc-${crypto.randomUUID().slice(0, 8)}`;
-  return json<{ id: string; key: string; name: string }>(
+  return json<ProductPayload>(
     await fetch(`${API_BASE}/api/v1/control/products`, {
       method: "POST",
       headers: headers(cookie),
@@ -55,14 +62,37 @@ export async function createProduct(cookie: string) {
   );
 }
 
-export async function createCommercialOrganization(cookie: string) {
-  return json<{ id: string; display_name: string }>(
-    await fetch(`${API_BASE}/api/v1/organizations`, {
-      method: "POST",
+/** Devuelve el status HTTP del intento de alta, sin lanzar en errores esperados. */
+export async function createProductStatus(cookie: string, key: string): Promise<number> {
+  const response = await fetch(`${API_BASE}/api/v1/control/products`, {
+    method: "POST",
+    headers: headers(cookie),
+    body: JSON.stringify({
+      key,
+      name: `No permitido ${key}`,
+      description: "",
+      status: "active",
+      type: "internal",
+    }),
+  });
+  return response.status;
+}
+
+export async function getProduct(cookie: string, key: string) {
+  return json<ProductPayload>(
+    await fetch(`${API_BASE}/api/v1/control/products/${encodeURIComponent(key)}`, {
       headers: headers(cookie),
-      body: JSON.stringify({ display_name: `Organización CC ${Date.now()}` }),
     }),
   );
+}
+
+export async function findAuditEvent(cookie: string, action: string, resourceId: string) {
+  const response = await json<{ items: { action: string; resource_id: string | null }[] }>(
+    await fetch(`${API_BASE}/api/v1/control/audit?action=${encodeURIComponent(action)}&limit=50`, {
+      headers: headers(cookie),
+    }),
+  );
+  return response.items.find((item) => item.resource_id === resourceId);
 }
 
 /** Organización sembrada y propiedad de la cuenta comercial E2E. */

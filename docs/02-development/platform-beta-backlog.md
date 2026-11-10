@@ -32,7 +32,7 @@ No incluye pagos, facturación, C7, sync cloud, apps nativas ni control remoto.
 | `platform-storage-postgres` | CONSERVAR / COMPLETAR | Añadir persistencia comercial y consultas C6 | SQLx incremental |
 | `platform-licensing` | CONSERVAR / ADAPTAR | Mantener Ed25519 v1; emisión productiva diferida | No cambiar `LicenseGrant` v1 |
 | `apps/api` | CONSERVAR / COMPLETAR | Añadir endpoints comerciales, OrganizationProduct y C6 | OpenAPI aditivo |
-| `apps/control-center` | CONSERVAR / COMPLETAR | Añadir Plans, Subscriptions, OrgProduct, Audit, Security | Reutilizar shell/estilos |
+| `apps/control-center` | CONSERVAR / COMPLETAR | Añadir alta y edición de Products, Plans, Subscriptions, OrgProduct, Audit, Security | Reutilizar shell/estilos |
 | `apps/portal` | COMPLETAR | Integrar PR #12 y #13 | Rebase + conflictos CI/workspace |
 | Migraciones `0001–0009` | CONSERVAR | No reescribir | Incrementales |
 | Auth staff/comercial | CONSERVAR | No rehacer | Cookies y sesiones separadas |
@@ -65,6 +65,7 @@ Estado operativo: **B1–B10 integrados o completados**. El detalle de commits, 
 | B8 | Escenario E2E full-stack | Pasos de §4 con frontend, Axum y PostgreSQL reales | Escenario §4 completo; aislamiento cross-tenant |
 | B9 | Validación Beta | Migración limpia, backup/restore, seguridad, rendimiento, E2E | Checklist §5 y seguridad §5.1/§5.2 verdes |
 | B10 | Cierre documental | README, runbook deploy/reversión, notas de Beta, transición POS | Revisión y autorización de release |
+| B10.1 | Product Registry administrable | Alta y edición de productos en Control Center con RBAC, validación, confirmaciones y auditoría | E2E real de alta/edición; `read_only` sin mutaciones |
 
 ### P1 — Necesarios para la calidad de Beta
 

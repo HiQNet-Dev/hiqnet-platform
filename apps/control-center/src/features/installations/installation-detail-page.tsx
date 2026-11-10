@@ -1,4 +1,4 @@
-import { FormEvent, ReactNode, useEffect, useId, useRef, useState } from "react";
+import { FormEvent, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -8,6 +8,7 @@ import {
 } from "../../api/control-client";
 import { useCapability } from "../../auth/session";
 import { ErrorState, LoadingState } from "../../components/states";
+import { ControlDialog } from "../../components/dialog";
 import { formatDateTime } from "../../lib/format-date";
 import {
   administrativeStatusLabel,
@@ -427,37 +428,6 @@ function MutationError({ error }: { error: unknown }) {
       {installationErrorCopy(error)}
     </p>
   ) : null;
-}
-
-function ControlDialog({
-  title,
-  onClose,
-  children,
-}: {
-  title: string;
-  onClose: () => void;
-  children: ReactNode;
-}) {
-  const ref = useRef<HTMLDialogElement>(null);
-  const titleId = useId();
-  useEffect(() => {
-    const dialog = ref.current;
-    if (dialog && !dialog.open) dialog.showModal();
-  }, []);
-  return (
-    <dialog
-      ref={ref}
-      className="dialog"
-      aria-labelledby={titleId}
-      onCancel={(event) => {
-        event.preventDefault();
-        onClose();
-      }}
-    >
-      <h2 id={titleId}>{title}</h2>
-      {children}
-    </dialog>
-  );
 }
 
 async function copyToClipboard(value: string) {

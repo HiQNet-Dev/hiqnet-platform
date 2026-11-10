@@ -8,6 +8,8 @@ export type Project = components["schemas"]["ProjectResponse"];
 export type ProjectPage = components["schemas"]["ProjectListResponse"];
 export type ProductStatus = components["schemas"]["ProductStatusDto"];
 export type ProductType = components["schemas"]["ProductTypeDto"];
+export type CreateProductInput = components["schemas"]["CreateProductRequest"];
+export type UpdateProductInput = components["schemas"]["UpdateProductRequest"];
 export type OrganizationStatus = components["schemas"]["OrganizationStatusDto"];
 export type AccountStatus = components["schemas"]["AccountStatusDto"];
 export type ControlOrganization = components["schemas"]["ControlOrganizationSummaryResponse"];
@@ -89,6 +91,13 @@ export const controlClient = {
     return request<ProductPage>(`/products?${search.toString()}`);
   },
   product: (key: string) => request<Product>(`/products/${encodeURIComponent(key)}`),
+  createProduct: (body: CreateProductInput) =>
+    request<Product>("/products", { method: "POST", body: JSON.stringify(body) }),
+  updateProduct: (key: string, body: UpdateProductInput) =>
+    request<Product>(`/products/${encodeURIComponent(key)}`, {
+      method: "PATCH",
+      body: JSON.stringify(body),
+    }),
   projects: (productKey: string) => request<ProjectPage>(`/projects?product_key=${encodeURIComponent(productKey)}&limit=50`),
   organizations: (filters: { cursor?: string; status?: OrganizationStatus; search?: string }) => {
     const search = new URLSearchParams();

@@ -203,6 +203,7 @@ jobs:
         run: |
           printf 'PortalE2E-2026!\n' | target/debug/dev-bootstrap-account portal-e2e@example.test 'Portal E2E'
           printf 'StaffE2E-2026!\n' | target/debug/dev-bootstrap-staff staff-e2e@hiqnet.test 'Staff E2E' platform_admin
+          printf 'ReadOnlyE2E-2026!\n' | target/debug/dev-bootstrap-staff staff-readonly-e2e@hiqnet.test 'Staff ReadOnly E2E' read_only
       - name: Sembrar organización/producto para F02
         env:
           PGPASSWORD: hiqnet_dev
@@ -243,4 +244,6 @@ jobs:
         env:
           PLATFORM_STAFF_EMAIL: staff-e2e@hiqnet.test
           PLATFORM_STAFF_PASSWORD: StaffE2E-2026!
+          PLATFORM_READONLY_EMAIL: staff-readonly-e2e@hiqnet.test
+          PLATFORM_READONLY_PASSWORD: ReadOnlyE2E-2026!
         run: pnpm --filter @hiqnet/control-center exec playwright test e2e/full-stack.spec.ts --reporter=line
