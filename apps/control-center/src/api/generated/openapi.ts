@@ -327,6 +327,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/control/organizations/{organization_id}/entitlements": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Resuelve entitlements efectivos */
+        get: operations["getControlEntitlements"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/control/organizations/{organization_id}/products": {
         parameters: {
             query?: never;
@@ -360,6 +377,42 @@ export interface paths {
         head?: never;
         /** Activa o desactiva una asociación organización-producto */
         patch: operations["updateControlOrganizationProduct"];
+        trace?: never;
+    };
+    "/api/v1/control/plans": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Lista planes comerciales */
+        get: operations["listControlPlans"];
+        put?: never;
+        /** Crea un plan comercial */
+        post: operations["createControlPlan"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/control/plans/{plan_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Obtiene un plan comercial */
+        get: operations["getControlPlan"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Actualiza un plan comercial */
+        patch: operations["updateControlPlan"];
         trace?: never;
     };
     "/api/v1/control/products": {
@@ -496,6 +549,109 @@ export interface paths {
         get: operations["getControlStaffAuthEvent"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/control/subscriptions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Lista suscripciones */
+        get: operations["listControlSubscriptions"];
+        put?: never;
+        /** Crea una suscripción */
+        post: operations["createControlSubscription"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/control/subscriptions/{subscription_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Obtiene una suscripción con historial */
+        get: operations["getControlSubscription"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/control/subscriptions/{subscription_id}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Cancela una suscripción */
+        post: operations["cancelControlSubscription"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/control/subscriptions/{subscription_id}/reactivate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Reactiva una suscripción */
+        post: operations["reactivateControlSubscription"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/control/subscriptions/{subscription_id}/renew": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Renueva una suscripción */
+        post: operations["renewControlSubscription"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/control/subscriptions/{subscription_id}/suspend": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Suspende una suscripción */
+        post: operations["suspendControlSubscription"];
         delete?: never;
         options?: never;
         head?: never;
@@ -710,6 +866,40 @@ export interface paths {
         patch: operations["changeOrganizationMemberRole"];
         trace?: never;
     };
+    "/api/v1/organizations/{organization_id}/products": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Lista productos contratados de la organización */
+        get: operations["listOrganizationProducts"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/organizations/{organization_id}/products/{product_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Obtiene un producto contratado */
+        get: operations["getOrganizationProduct"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/plans": {
         parameters: {
             query?: never;
@@ -829,6 +1019,19 @@ export interface components {
             current_password: string;
             /** @example nueva-contraseña-2026 */
             new_password: string;
+        };
+        CommercialPlanRefResponse: {
+            /** Format: uuid */
+            id: string;
+            is_trial: boolean;
+            key: string;
+            name: string;
+        };
+        CommercialProductRefResponse: {
+            /** Format: uuid */
+            id: string;
+            key: string;
+            name: string;
         };
         ControlAccountDetailResponse: {
             /** Format: date-time */
@@ -1070,6 +1273,21 @@ export interface components {
             /** @example Mi negocio */
             display_name: string;
         };
+        CreatePlanRequest: {
+            description?: string;
+            features?: {
+                [key: string]: boolean;
+            };
+            is_trial?: boolean;
+            key: string;
+            limits?: {
+                [key: string]: number;
+            };
+            name: string;
+            /** Format: uuid */
+            product_id: string;
+            status?: components["schemas"]["PlanStatusDto"] | null;
+        };
         CreateProductRequest: {
             description?: string;
             key: string;
@@ -1084,6 +1302,16 @@ export interface components {
             product_key?: string | null;
             project_type: components["schemas"]["ProjectTypeDto"];
             status: components["schemas"]["ProductStatusDto"];
+        };
+        CreateSubscriptionRequest: {
+            ends_at: string;
+            /** Format: uuid */
+            organization_id: string;
+            /** Format: uuid */
+            plan_id: string;
+            /** Format: uuid */
+            product_id: string;
+            starts_at: string;
         };
         EnrollmentChallengeResponse: {
             /** @example sintetico-device-code */
@@ -1115,6 +1343,22 @@ export interface components {
             organization_id: string;
             /** @example completed */
             status: string;
+        };
+        EntitlementsResponse: {
+            effective: boolean;
+            /** Format: date-time */
+            ends_at?: string | null;
+            features: {
+                [key: string]: boolean;
+            };
+            limits: {
+                [key: string]: number;
+            };
+            plan?: components["schemas"]["CommercialPlanRefResponse"] | null;
+            reason: string;
+            /** Format: date-time */
+            starts_at?: string | null;
+            status?: components["schemas"]["SubscriptionStatusDto"] | null;
         };
         ErrorResponse: {
             /** @example not_found */
@@ -1302,18 +1546,82 @@ export interface components {
         };
         /** @enum {string} */
         OrganizationStatusDto: "active" | "legacy_unclaimed" | "archived";
+        PlanListResponse: {
+            items: components["schemas"]["PlanResponse"][];
+            next_cursor?: string | null;
+        };
         PlanResponse: {
-            /** @example Trial (30 días) */
-            display_name: string;
-            /**
-             * @example [
-             *       "catalog",
-             *       "sales"
-             *     ]
-             */
-            features: string[];
-            /** @example trial */
-            plan: string;
+            /** Format: date-time */
+            created_at: string;
+            description: string;
+            features: {
+                [key: string]: boolean;
+            };
+            /** Format: uuid */
+            id: string;
+            is_trial: boolean;
+            key: string;
+            limits: {
+                [key: string]: number;
+            };
+            name: string;
+            product: components["schemas"]["CommercialProductRefResponse"];
+            status: components["schemas"]["PlanStatusDto"];
+            /** Format: int64 */
+            subscription_count: number;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        /** @enum {string} */
+        PlanStatusDto: "draft" | "active" | "maintenance" | "deprecated" | "retired";
+        PortalEntitlementsResponse: {
+            effective: boolean;
+            /** Format: date-time */
+            ends_at?: string | null;
+            features: {
+                [key: string]: boolean;
+            };
+            limits: {
+                [key: string]: number;
+            };
+            plan?: components["schemas"]["PortalPlanRefResponse"] | null;
+            reason: string;
+            /** Format: date-time */
+            starts_at?: string | null;
+            status?: string | null;
+        };
+        PortalPlanRefResponse: {
+            /** Format: uuid */
+            id: string;
+            is_trial: boolean;
+            key: string;
+            name: string;
+        };
+        PortalProductListResponse: {
+            items: components["schemas"]["PortalProductResponse"][];
+        };
+        PortalProductRefResponse: {
+            /** Format: uuid */
+            id: string;
+            key: string;
+            name: string;
+        };
+        PortalProductResponse: {
+            entitlements: components["schemas"]["PortalEntitlementsResponse"];
+            organization_product_status: string;
+            product: components["schemas"]["PortalProductRefResponse"];
+            subscription?: components["schemas"]["PortalSubscriptionResponse"] | null;
+        };
+        PortalSubscriptionResponse: {
+            /** Format: date-time */
+            ends_at: string;
+            /** Format: uuid */
+            id: string;
+            is_trial: boolean;
+            plan: components["schemas"]["PortalPlanRefResponse"];
+            /** Format: date-time */
+            starts_at: string;
+            status: string;
         };
         /** @enum {string} */
         ProductLifecycleDto: "development" | "active" | "maintenance" | "deprecated" | "retired";
@@ -1400,6 +1708,11 @@ export interface components {
         };
         /** @enum {string} */
         RehostStatusDto: "pending" | "consumed" | "expired" | "cancelled";
+        RenewSubscriptionRequest: {
+            ends_at: string;
+            /** Format: uuid */
+            plan_id?: string | null;
+        };
         /** @enum {string} */
         SecurityKindDto: "enrollment_conflict" | "duplicate_key" | "tenant_change_attempt" | "replay_rejected" | "rehost_performed" | "identity_revoked" | "authorization_revoked_during_proof" | "idempotency_conflict" | "clone_suspected";
         /** @enum {string} */
@@ -1418,8 +1731,67 @@ export interface components {
             email: string;
             role: string;
         };
+        SubscriptionDetailResponse: {
+            events: components["schemas"]["SubscriptionEventResponse"][];
+            subscription: components["schemas"]["SubscriptionResponse"];
+        };
+        SubscriptionEventResponse: {
+            event: string;
+            from_status?: string | null;
+            /** Format: uuid */
+            id: string;
+            /** Format: date-time */
+            occurred_at: string;
+            reason?: string | null;
+            to_status?: string | null;
+        };
+        SubscriptionListResponse: {
+            items: components["schemas"]["SubscriptionResponse"][];
+            next_cursor?: string | null;
+        };
+        SubscriptionResponse: {
+            /** Format: date-time */
+            cancelled_at?: string | null;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            ends_at: string;
+            /** Format: uuid */
+            id: string;
+            is_trial: boolean;
+            /** Format: uuid */
+            organization_id: string;
+            plan: components["schemas"]["CommercialPlanRefResponse"];
+            /** Format: uuid */
+            product_id: string;
+            /** Format: uuid */
+            renewed_from_subscription_id?: string | null;
+            /** Format: date-time */
+            starts_at: string;
+            status: components["schemas"]["SubscriptionStatusDto"];
+            /** Format: date-time */
+            suspended_at?: string | null;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        /** @enum {string} */
+        SubscriptionStatusDto: "active" | "suspended" | "cancelled" | "expired";
+        TransitionSubscriptionRequest: {
+            reason?: string | null;
+        };
         UpdateOrganizationProductRequest: {
             status: components["schemas"]["AssociationStatusDto"];
+        };
+        UpdatePlanRequest: {
+            description?: string | null;
+            features?: {
+                [key: string]: boolean;
+            } | null;
+            limits?: {
+                [key: string]: number;
+            } | null;
+            name?: string | null;
+            status?: components["schemas"]["PlanStatusDto"] | null;
         };
         /**
          * @description `key` y `type` son inmutables. Los campos omitidos o `null` no cambian. Los
@@ -2584,6 +2956,77 @@ export interface operations {
             };
         };
     };
+    getControlEntitlements: {
+        parameters: {
+            query: {
+                /** @description UUID del producto */
+                product_id: string;
+            };
+            header?: never;
+            path: {
+                /** @description UUID de la organización */
+                organization_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Entitlements efectivos */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EntitlementsResponse"];
+                };
+            };
+            /** @description Solicitud inválida */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Sesión staff requerida */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Capability insuficiente */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Organización no encontrada */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description PostgreSQL no disponible */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
     listControlOrganizationProducts: {
         parameters: {
             query?: never;
@@ -2780,6 +3223,295 @@ export interface operations {
             };
             /** @description Asociación no encontrada */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description PostgreSQL no disponible */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    listControlPlans: {
+        parameters: {
+            query?: {
+                product_id?: string;
+                status?: string;
+                /** @example 50 */
+                limit?: number;
+                cursor?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Planes */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlanListResponse"];
+                };
+            };
+            /** @description Consulta inválida */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Sesión staff requerida */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Capability insuficiente */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description PostgreSQL no disponible */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    createControlPlan: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreatePlanRequest"];
+            };
+        };
+        responses: {
+            /** @description Plan creado */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlanResponse"];
+                };
+            };
+            /** @description Solicitud inválida */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Sesión staff requerida */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Capability insuficiente */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Producto no encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Plan duplicado o trial ya existente */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description PostgreSQL no disponible */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    getControlPlan: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description UUID del plan */
+                plan_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Plan */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlanResponse"];
+                };
+            };
+            /** @description Identificador inválido */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Sesión staff requerida */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Capability insuficiente */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Plan no encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description PostgreSQL no disponible */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    updateControlPlan: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description UUID del plan */
+                plan_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdatePlanRequest"];
+            };
+        };
+        responses: {
+            /** @description Plan actualizado */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlanResponse"];
+                };
+            };
+            /** @description Solicitud inválida */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Sesión staff requerida */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Capability insuficiente */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Plan no encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Condiciones inmutables o transición inválida */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -3587,6 +4319,539 @@ export interface operations {
             };
             /** @description Recurso no encontrado */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description PostgreSQL no disponible */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    listControlSubscriptions: {
+        parameters: {
+            query?: {
+                organization_id?: string;
+                product_id?: string;
+                status?: string;
+                /** @example 50 */
+                limit?: number;
+                cursor?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Suscripciones */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SubscriptionListResponse"];
+                };
+            };
+            /** @description Consulta inválida */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Sesión staff requerida */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Capability insuficiente */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description PostgreSQL no disponible */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    createControlSubscription: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateSubscriptionRequest"];
+            };
+        };
+        responses: {
+            /** @description Suscripción creada */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SubscriptionResponse"];
+                };
+            };
+            /** @description Solicitud inválida o Idempotency-Key ausente */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Sesión staff requerida */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Capability insuficiente */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Organización o plan no encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Conflicto de estado o idempotencia */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description PostgreSQL no disponible */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    getControlSubscription: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description UUID de la suscripción */
+                subscription_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Suscripción */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SubscriptionDetailResponse"];
+                };
+            };
+            /** @description Identificador inválido */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Sesión staff requerida */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Capability insuficiente */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Suscripción no encontrada */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description PostgreSQL no disponible */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    cancelControlSubscription: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description UUID de la suscripción */
+                subscription_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TransitionSubscriptionRequest"];
+            };
+        };
+        responses: {
+            /** @description Suscripción cancelada */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SubscriptionResponse"];
+                };
+            };
+            /** @description Solicitud inválida */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Sesión staff requerida */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Capability insuficiente */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Suscripción no encontrada */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Transición inválida */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description PostgreSQL no disponible */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    reactivateControlSubscription: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description UUID de la suscripción */
+                subscription_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TransitionSubscriptionRequest"];
+            };
+        };
+        responses: {
+            /** @description Suscripción reactivada */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SubscriptionResponse"];
+                };
+            };
+            /** @description Solicitud inválida */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Sesión staff requerida */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Capability insuficiente */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Suscripción no encontrada */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Transición inválida */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description PostgreSQL no disponible */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    renewControlSubscription: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description UUID de la suscripción */
+                subscription_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RenewSubscriptionRequest"];
+            };
+        };
+        responses: {
+            /** @description Nueva suscripción */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SubscriptionResponse"];
+                };
+            };
+            /** @description Solicitud inválida o Idempotency-Key ausente */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Sesión staff requerida */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Capability insuficiente */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Suscripción o plan no encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Transición o idempotencia inválida */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description PostgreSQL no disponible */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    suspendControlSubscription: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description UUID de la suscripción */
+                subscription_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TransitionSubscriptionRequest"];
+            };
+        };
+        responses: {
+            /** @description Suscripción suspendida */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SubscriptionResponse"];
+                };
+            };
+            /** @description Solicitud inválida */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Sesión staff requerida */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Capability insuficiente */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Suscripción no encontrada */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Transición inválida */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -4746,6 +6011,126 @@ export interface operations {
             };
             /** @description Rol sin cambios o último propietario protegido */
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description PostgreSQL no disponible */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    listOrganizationProducts: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description UUID de la organización */
+                organization_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Productos contratados */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PortalProductListResponse"];
+                };
+            };
+            /** @description Solicitud inválida */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Sesión comercial requerida */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Organización ajena o inexistente (neutral) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description PostgreSQL no disponible */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    getOrganizationProduct: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description UUID de la organización */
+                organization_id: string;
+                /** @description UUID del producto */
+                product_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Producto contratado */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PortalProductResponse"];
+                };
+            };
+            /** @description Solicitud inválida */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Sesión comercial requerida */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Recurso ajeno o inexistente (neutral) */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };
