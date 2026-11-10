@@ -66,3 +66,17 @@ El workflow `release-platform.yml` sólo publica tras un **push de tag válido**
 7. Apagado: `docker compose --profile db-ui down` (o `docker compose stop adminer` para conservar el resto).
 
 El flujo sintético completo (`login → organización → begin enrollment → approve → proof firmado → list installations`) se documenta en [API y Swagger](api.md#enrolamiento-seguro-de-instalaciones-g42b). Para el E2E de este incremento se usó una base aislada `hiqnet_g42b`; no se modifican datos de otras bases.
+
+## Portal comercial React
+
+El Portal vive en `apps/portal` y se desarrolla con Vite en <http://127.0.0.1:5173>. Requiere Node 24 LTS y pnpm 11.
+
+```bash
+pnpm install
+pnpm --filter @hiqnet/platform-portal api:generate
+pnpm --filter @hiqnet/platform-portal dev
+```
+
+Vite proxya `/api` hacia `http://127.0.0.1:8080`; configura la API con `HIQNET_PLATFORM_ALLOWED_ORIGIN=http://127.0.0.1:5173`. Guía completa: [Portal](portal.md).
+
+Apagado: `Ctrl+C` en Vite y `docker compose stop api postgres` si no necesitas el entorno completo. Adminer se apaga con `docker compose --profile db-ui down`.
