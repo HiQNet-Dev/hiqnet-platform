@@ -7,27 +7,35 @@ Fuente de verdad: repositorio Git, CI y PRs. Este documento es sólo un índice 
 ## Estado de `main`
 
 ```text
-c466f06  feat(commercial): núcleo comercial Beta
-7bb82e6  feat(control): mutaciones de OrganizationProduct
-44e9285  feat(control): backend C6 de auditoría y seguridad
-2147156  feat(portal): integrar enrolamiento e instalaciones (F02)
-2046df5  feat(portal): integrar Customer Portal F01
+697870a  fix(auth): lista de orígenes exactos para CSRF en despliegue multiproducto (#30)
+ec46015  chore(beta): cierre de B9 con deps de seguridad y gates portables (#29)
+665946b  test(portal): E2E full-stack comercial y CI real (#28)
+2adb523  feat(beta): UI comercial, portal read-only y Audit/Security (#27)
+c466f06  feat(commercial): núcleo comercial Beta (#26)
+7bb82e6  feat(control): mutaciones de OrganizationProduct (#25)
+44e9285  feat(control): backend C6 de auditoría y seguridad (#24)
+2147156  feat(portal): integrar enrolamiento e instalaciones (F02) (#13)
+2046df5  feat(portal): integrar Customer Portal F01 (#12)
+565940f  docs(beta): ratify Platform Beta architecture and backlog
 ```
 
 ## Incrementos
 
 | Incremento | Estado | Evidencia |
 |---|---|---|
-| B1 — Portal F01 | **MERGEADO** | PR #12 → `2046df5`; CI 4/4; E2E real del Portal |
-| B2 — Portal F02 | **MERGEADO** | PR #13 → `2147156`; CI 4/4; E2E synthetic POS + proof Ed25519 |
-| B3 — C6.1 backend | **MERGEADO** | PR #24 → `44e9285`; CI 4/4; migración `0010`, endpoints y pruebas |
-| B4 — OrganizationProduct | **MERGEADO** | PR #25 → `7bb82e6`; backend, UI, auditoría e idempotencia |
-| B5 — C6.2 frontend | **EN RAMA / VALIDADO LOCAL** | Audit, Security y Staff Auth en Control Center |
-| B6 — Dominio comercial | **MERGEADO** | PR #26 → `c466f06`; migración 0011, planes, suscripciones, entitlements |
-| B7 / B7b — UI y Portal comercial | **EN RAMA / VALIDADO LOCAL** | Plans/Subscriptions, entitlements en organización y productos del Portal |
-| B8 — E2E full-stack | **EN RAMA / VALIDADO LOCAL + CI JOB** | Producto sintético no-POS, plan, suscripción, entitlements, Portal y aislamiento |
-| B9 — Validación Beta | NO INICIADO | Depende de B8 |
-| B10 — Cierre Beta | NO INICIADO | Depende de B9 |
+| Fase 0 — Auditoría | **COMPLETADA** | Informe e inventario previos |
+| Fase 1 — Ratificación | **COMPLETADA** | `565940f`; ADR-0010, ADR-0011, backlog y seguridad ratificados |
+| B1 — Portal F01 | **MERGEADO** | PR #12 → `2046df5`; CI 5/5 |
+| B2 — Portal F02 | **MERGEADO** | PR #13 → `2147156`; enrolamiento y proof Ed25519 |
+| B3 — C6.1 backend | **MERGEADO** | PR #24 → `44e9285`; migración `0010` |
+| B4 — OrganizationProduct | **MERGEADO** | PR #25 → `7bb82e6` |
+| B5 — C6.2 frontend | **MERGEADO** | PR #27 → `2adb523` |
+| B6 — Dominio comercial | **MERGEADO** | PR #26 → `c466f06`; migración `0011` |
+| B7 / B7b — UI y Portal comercial | **MERGEADO** | PR #27 → `2adb523` |
+| B8 — E2E full-stack | **MERGEADO** | PR #28 → `665946b`; job CI `Portal E2E full-stack` |
+| B9 — Validación Beta | **COMPLETADA** | PR #29 → `ec46015`; PR #30 → `697870a` |
+| B10 — Cierre documental | **COMPLETADO** | README, notas de Beta, runbook, backup/restore y transición POS |
+| Publicación de `platform-v0.1.0-beta.1` | **PENDIENTE DE AUTORIZACIÓN** | Requiere push de tag; ver [Notas de Beta](platform-beta-notes.md) §6 |
 
 ## B3 — alcance implementado
 
@@ -38,17 +46,6 @@ c466f06  feat(commercial): núcleo comercial Beta
 - OpenAPI regenerado y clientes tipados de ambos frontends regenerados.
 - Pruebas: aplicación (cursor, límites, sanitización, RBAC), PostgreSQL (keyset, filtros, joins, append-only, índices) y HTTP (401/400/404, metadata saneada, reutilización de cursor).
 
-## Validaciones B3
-
-```text
-cargo fmt --all -- --check              OK
-cargo clippy --workspace --all-targets -- -D warnings  OK
-cargo test --workspace                  OK (134 passed / 1 ignored)
-Control Center lint/typecheck/test/build OK (14 tests)
-Portal lint/typecheck/test/build         OK (9 tests)
-OpenAPI snapshot generado y clientes api:check OK
-```
-
 ## B4 — alcance implementado
 
 - `GET /api/v1/control/organizations/{id}/products` (`organizations.read`).
@@ -56,18 +53,6 @@ OpenAPI snapshot generado y clientes api:check OK
 - Activación idempotente, desactivación sin DELETE, `activated_at` inmutable.
 - Auditoría transaccional `organization_product_activated|deactivated`.
 - UI en detalle de organización: asociar producto, activar/desactivar, estados y errores.
-- Pruebas de aplicación, PostgreSQL y HTTP (RBAC, 404 neutral, idempotencia, auditoría).
-
-## Validaciones B4
-
-```text
-cargo fmt --all -- --check                              OK
-cargo clippy --workspace --all-targets -- -D warnings  OK
-cargo test --workspace                                  OK (140 passed / 1 ignored)
-Control Center lint/typecheck/test/build                OK (15 tests)
-Portal lint/typecheck/test/build                        OK (9 tests)
-OpenAPI snapshot y clientes api:check                   OK
-```
 
 ## B6/B7/B7b/B5 — alcance implementado
 
@@ -80,18 +65,49 @@ OpenAPI snapshot y clientes api:check                   OK
 
 - `apps/portal/e2e/commercial.spec.ts` cubre producto sintético no-POS, asociación, plan, suscripción, entitlements, Portal y cross-tenant.
 - Job CI `Portal E2E full-stack` levanta PostgreSQL, API Axum y Portal Vite, siembra cuentas y ejecuta Playwright real.
-- Evidencia local: 4 tests del Portal (F01, F02 y comercial) contra API/PostgreSQL reales.
+- **Cierre del hueco (PR #30):** `apps/control-center/e2e/full-stack.spec.ts` recorre la UI del Control Center contra API y PostgreSQL reales en **5 viewports** (1920, 1440, 1024, 768, 390), incluyendo una suspensión de suscripción desde el navegador.
 
-## Pendiente inmediato
+## B9 — validación ejecutada
 
-1. Publicar la rama de B8 y abrir PR.
-2. Verificar CI, incluido el nuevo job full-stack.
-3. Fusionar y ejecutar B9 (migración limpia, backup/restore, seguridad y estabilización).
+| Gate | Resultado |
+|---|---|
+| `cargo fmt --all -- --check` | OK |
+| `cargo clippy --workspace --all-targets -- -D warnings` | OK |
+| `cargo test --workspace` (PostgreSQL 17 real) | 150 passed / 0 failed / 1 ignored |
+| Control Center lint/typecheck/test/build/api:check | OK (15 unitarias) |
+| Portal lint/format/typecheck/test/build/api:check | OK (9 unitarias) |
+| E2E Portal full-stack | 4/4 |
+| E2E Control Center full-stack | 5/5 viewports |
+| E2E Control Center con API simulada | 155 passed / 5 skipped |
+| Migración desde base vacía | 11 migraciones |
+| Migración incremental | OK |
+| Backup/restore | Conteos coincidentes |
+| Keyset con 50 000 eventos | < 0,15 ms por página, `Index Only Scan` |
+| Latencia HTTP de listados | 6–12 ms en local |
+| Bundles | Control Center 109 kB gzip · Portal 111 kB gzip |
+| `cargo audit` | 2 advisories medios aceptados (§7.5 de seguridad) |
+| `pnpm audit --prod --audit-level high` | Sin hallazgos |
+
+Correcciones aportadas por B9:
+
+- `time` → 0.3.47 y `ctutils` → 0.4.4 (PR #29).
+- Prettier del Portal con `endOfLine: auto` para que `format:check` funcione igual en Windows y CI (PR #29).
+- Lista de orígenes exactos en `HIQNET_PLATFORM_ALLOWED_ORIGIN` para permitir dos frontends sobre una API (PR #30).
+
+## Pendiente
+
+1. **Publicar `platform-v0.1.0-beta.1`** cuando se autorice explícitamente. La simulación está validada; no se ha creado tag ni release.
+2. **Product Registry sin alta/edición en la UI.** La API ya lo soporta; primera mejora posterior a la Beta.
+3. **MFA/step-up** antes de ampliar la audiencia.
+4. **`sqlx 0.9`** para cerrar los dos advisories medios.
+5. **Retención de auditoría y hardening de `TRUNCATE`.**
+6. **Contratos de licenciamiento productivo** (custodia de clave, elegibilidad, auditoría de emisión) que se abordan con POS.
 
 ## Reglas de recuperación
 
-- No repetir B1/B2: ya están en `main`.
-- No crear migraciones `0010` duplicadas.
-- No modificar migraciones `0001–0009`.
+- No repetir B1–B10: están en `main`.
+- No crear migraciones `0010`/`0011` duplicadas.
+- No modificar migraciones `0001–0011`.
 - No fusionar sin CI verde.
 - No usar force-push sobre ramas publicadas.
+- No publicar tags ni releases sin autorización explícita.

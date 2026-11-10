@@ -49,7 +49,7 @@ No hay módulos RETIRAR.
 
 ### P0 — Bloqueantes de Beta
 
-Estado operativo: B1 y B2 integrados en `main`; B3 backend C6.1 implementado en rama y pendiente de integración. El detalle de commits, pruebas y siguiente acción se mantiene en [Ejecución Beta](platform-beta-execution.md).
+Estado operativo: **B1–B10 integrados o completados**. El detalle de commits, pruebas y evidencias se mantiene en [Ejecución Beta](platform-beta-execution.md) y el resultado funcional en [Notas de Beta](platform-beta-notes.md).
 
 | ID | Incremento | Entregable | Criterio de aceptación |
 |---|---|---|---|
@@ -119,6 +119,8 @@ Con datos persistentes de prueba y servicios reales:
 El escenario se ejecuta con API Axum + PostgreSQL reales. Los mocks no son evidencia suficiente.
 
 ## 5. Criterios de cierre de Beta
+
+> **Estado al cerrar B10:** todos los criterios funcionales y técnicos fueron verificados; el detalle y la evidencia están en [Ejecución Beta](platform-beta-execution.md) §B9 y en [Notas de Beta](platform-beta-notes.md) §8. La publicación del tag `platform-v0.1.0-beta.1` sigue requiriendo autorización explícita.
 
 ### Funcional
 
