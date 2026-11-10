@@ -23,7 +23,7 @@ Esta sección complementa §1–§4 y no cambia los checks de roles. Queda pendi
 | `platform_admin`   | Todo                               | Productos, organizaciones, cuentas, instalaciones (incluido rehost), suscripciones, despliegues | Gestionar staff; mutar configuración de seguridad                                               |
 | `operator`         | Todo                               | Instalaciones (suspender/reactivar), despliegues                                                | Reautorizar identidad de dispositivo (`installations.rehost`); gestionar productos, organizaciones, cuentas, staff o seguridad |
 | `support`          | Todo (sin secretos)                | Nada destructivo (acciones de soporte no destructivas, si se aprueban)                          | Mutar cuentas/organizaciones/productos, gestionar staff o seguridad                             |
-| `security_auditor` | Todo, incluida auditoría y eventos | Configuración de seguridad y triage de eventos                                                  | Mutar datos de negocio (organizaciones, cuentas, instalaciones)                                 |
+| `security_auditor` | Todo, incluida auditoría y eventos | Nada en C6: `security.manage` reservada para una futura superficie mutable; C6 es read-only | Mutar datos de negocio (organizaciones, cuentas, instalaciones) |
 | `read_only`        | Todo (sin secretos)                | Nada                                                                                            | Cualquier mutación                                                                              |
 
 ## 2. Detalle por capability
@@ -59,6 +59,8 @@ Leyenda: `✓` permitido · `—` denegado.
 - **Sin bypasses:** `super_admin` se autentica, se audita y respeta sesión/Origin.
 - **Least privilege:** ante duda, denegar y revisar.
 - **`installations.rehost` (C5):** capability independiente de `installations.manage`; reemplaza la identidad criptográfica de una instalación. Exige además un `enrollment_request_id` aprobado por el owner comercial; el staff no sustituye esa autoridad.
+- **`security.manage` (reservada):** existe en la matriz, pero C6 inicial es read-only y no expone ninguna operación que la consuma. No concede acceso adicional a los read models de C6, no concede `installations.rehost` y no implica incident management ni configuración de seguridad. Su uso se difiere hasta que exista un dominio mutable real.
+- **Read models C6:** Audit usa `audit.read`; Security (Platform events y Staff authentication) usa `security.read`. `support` y `read_only` conservan ambas lecturas según la matriz ratificada; es una decisión consciente con blast radius documentado.
 
 ## 4. Decisiones ratificadas
 

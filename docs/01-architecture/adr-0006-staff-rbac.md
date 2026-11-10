@@ -19,7 +19,7 @@ El RBAC comercial (`owner/admin/member`) pertenece a organizaciones cliente y **
 | `platform_admin`   | Operación de productos, organizaciones, cuentas, instalaciones y despliegues. No gestiona staff.  |
 | `operator`         | Operación diaria: instalaciones y despliegues. Lectura amplia; mutaciones acotadas.               |
 | `support`          | Atención al cliente: lectura de organizaciones/cuentas/instalaciones y acciones no destructivas.  |
-| `security_auditor` | Lectura global + gestión de eventos de seguridad. No modifica datos de negocio.                   |
+| `security_auditor` | Lectura global + gestión futura de eventos de seguridad. No modifica datos de negocio.                   |
 | `read_only`        | Lectura global sin mutaciones.                                                                    |
 
 ### 2.2 Capabilities (nombres propuestos)
@@ -39,6 +39,7 @@ staff.manage
 - Los roles son **presets** de capabilities. En C1 se persiste el rol; el modelo debe permitir añadir capabilities explícitas y overrides en fases posteriores sin migración destructiva.
 - Los **proyectos del registro** (`Project`) se gestionan con `products.read`/`products.manage`; no se introducen capabilities `projects.*` en C2. Si una fase posterior necesita delegar proyectos de forma independiente, se añadirá mediante cambio explícito de este ADR y de la matriz.
 - **`installations.rehost`** (C5) separa el reemplazo de identidad criptográfica de la operación administrativa (`installations.manage`). Sólo `super_admin` y `platform_admin` lo reciben; `operator` puede suspender/reactivar pero no reautorizar una identidad de dispositivo.
+- **`security.manage`** queda **reservada** para una futura superficie mutable de seguridad. C6 inicial es read-only: no expone ninguna operación que la consuma, no concede acceso adicional a los read models de C6, no concede `installations.rehost` y no implica incident management ni configuración de seguridad. Su uso se difiere hasta que exista un dominio mutable real que lo justifique.
 
 ### 2.3 Reglas
 
@@ -85,8 +86,8 @@ Resumen de capabilities:
 
 - **Roles finales:** `super_admin`, `platform_admin`, `operator`, `support`, `security_auditor`, `read_only`.
 - **Matriz capability × rol:** la de la sección 3.
-- **`security_auditor`:** puede gestionar configuración de seguridad y triage, no datos de negocio.
-- **4-eyes:** se difiere a C6; en C1/C2 basta confirmación explícita y auditoría.
+- **`security_auditor`:** conserva `security.read`, `security.manage` y `audit.read`. En C6 inicial usa sólo `audit.read` y `security.read`; `security.manage` no tiene superficie HTTP C6. No modifica datos de negocio y **no** tiene `installations.rehost`.
+- **4-eyes:** se difiere a la futura fase que introduzca una mutación administrativa o de seguridad suficientemente crítica. C6 inicial es read-only y no requiere doble aprobación; en C1/C2 basta confirmación explícita y auditoría. Esta frase sustituye la decisión previa que situaba 4-eyes en C6.
 
 ## 6. Riesgos
 
