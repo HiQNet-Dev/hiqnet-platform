@@ -25,7 +25,7 @@ c466f06  feat(commercial): núcleo comercial Beta
 | B5 — C6.2 frontend | **EN RAMA / VALIDADO LOCAL** | Audit, Security y Staff Auth en Control Center |
 | B6 — Dominio comercial | **MERGEADO** | PR #26 → `c466f06`; migración 0011, planes, suscripciones, entitlements |
 | B7 / B7b — UI y Portal comercial | **EN RAMA / VALIDADO LOCAL** | Plans/Subscriptions, entitlements en organización y productos del Portal |
-| B8 — E2E full-stack | NO INICIADO | Depende de B7/B7b |
+| B8 — E2E full-stack | **EN RAMA / VALIDADO LOCAL + CI JOB** | Producto sintético no-POS, plan, suscripción, entitlements, Portal y aislamiento |
 | B9 — Validación Beta | NO INICIADO | Depende de B8 |
 | B10 — Cierre Beta | NO INICIADO | Depende de B9 |
 
@@ -76,12 +76,17 @@ OpenAPI snapshot y clientes api:check                   OK
 - B7b: `/organizations/{id}/products` y `/{product_id}` en Customer Portal con membresía y 404 neutral.
 - B5: Audit, Platform events y Staff authentication en Control Center con filtros, detalle y metadata saneada.
 
+## B8 — E2E full-stack
+
+- `apps/portal/e2e/commercial.spec.ts` cubre producto sintético no-POS, asociación, plan, suscripción, entitlements, Portal y cross-tenant.
+- Job CI `Portal E2E full-stack` levanta PostgreSQL, API Axum y Portal Vite, siembra cuentas y ejecuta Playwright real.
+- Evidencia local: 4 tests del Portal (F01, F02 y comercial) contra API/PostgreSQL reales.
+
 ## Pendiente inmediato
 
-1. Publicar la rama de UI B5/B7/B7b y abrir PR.
-2. Verificar CI.
-3. Fusionar con squash.
-4. Ejecutar B8 E2E full-stack y B9 validación Beta.
+1. Publicar la rama de B8 y abrir PR.
+2. Verificar CI, incluido el nuevo job full-stack.
+3. Fusionar y ejecutar B9 (migración limpia, backup/restore, seguridad y estabilización).
 
 ## Reglas de recuperación
 
