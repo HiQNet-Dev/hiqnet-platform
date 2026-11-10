@@ -1,0 +1,13 @@
+{
+  "_comment": "Excepciones justificadas de la política de tamaño. Sólo se reducen; subir un valor exige justificación en el PR.",
+  "files": {
+    "apps/api/src/control_commercial.rs": {
+      "lines": 900,
+      "reason": "DTOs y endpoints comerciales del Control Center en un único contrato; funciones de máximo 37 líneas. Dividir por DTOs obliga a repartir el contrato OpenAPI sin ganancia de cohesión."
+    },
+    "crates/platform-application/src/audit_security.rs": {
+      "lines": 817,
+      "reason": "Read models de auditoría y seguridad con whitelist de metadata; cohesión alta y funciones de máximo 42 líneas."
+    }
+  }
+}

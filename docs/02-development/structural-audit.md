@@ -93,8 +93,8 @@ Riesgo de regresión: **alto** (superficie HTTP completa). Esfuerzo: **alto**. E
 
 | Archivo | Líneas | Problema | Decisión |
 |---|---|---|---|
-| `apps/control-center/src/features/installations/installation-detail-page.tsx` | 481 | Página, diálogos y helpers de error en un archivo | **Extraer** diálogos y helpers (R5) |
-| `apps/control-center/src/features/commercial/subscriptions-page.tsx` | 422 | Lista + detalle + dos formularios | **Extraer** detalle (R5) |
+| `apps/control-center/src/features/installations/installation-detail-page.tsx` | 481 | Página, diálogos y helpers de error en un archivo | **Mantener**: bajo el umbral de 500 y cubierto por E2E; la extracción de diálogos no reduce acoplamiento real |
+| `apps/control-center/src/features/commercial/subscriptions-page.tsx` | 422 | Lista + detalle + dos formularios | **Mantener**: bajo 500; el detalle comparte estado con la lista |
 | `apps/control-center/src/features/organizations/organizations-page.tsx` | 375 | Lista + detalle | Mantener con excepción documentada |
 | `apps/portal/src/features/enrollment/EnrollmentPage.tsx` | 323 | Flujo de enrolamiento con estados | Mantener: bajo 500 y cohesivo |
 
@@ -166,4 +166,39 @@ Regla aplicada a todos: **sin cambios de comportamiento**. Se preservan rutas, D
 
 ## 9. Métricas finales
 
-Se completan al cerrar R5, con la misma medición y el mismo script que la línea base.
+Medición con el mismo script y las mismas exclusiones que la línea base, tras R1–R5.
+
+| Métrica | Antes | Después |
+|---|---|---|
+| Archivos > 1 000 líneas | **6** | **0** |
+| Archivos entre 801 y 1 000 | **4** | **2** (ambos con excepción registrada) |
+| Archivos entre 501 y 800 | 6 | 11 (antes había 6 archivos de más de 1 000 que ahora son varios de tamaño medio) |
+| Archivo manual más largo | **6 109** (`apps/api/src/lib.rs`) | **901** (`apps/api/src/control_commercial.rs`) |
+| Archivos medidos | 166 | 221 (módulos por responsabilidad, no crates nuevos) |
+| Dependencias circulares | 0 | **0** |
+| Pruebas Rust | 150 passed / 1 ignored | **150 passed / 1 ignored** |
+| E2E Control Center full-stack | 15/15 | 15/15 |
+| E2E Portal full-stack | 4/4 | 4/4 |
+| OpenAPI | 55 rutas / 110 esquemas | **idéntico byte a byte** |
+| Build incremental de la crate API | 6,9 s | 7,8 s (una muestra; sin cambio material) |
+| Defectos nuevos detectados | 0 | **0** |
+
+Funciones de más de 200 líneas: 11 archivos las contenían antes y 17 después. El número no mejora porque **dividir archivos no divide funciones**: la mayoría son escenarios de prueba lineales, y las dos funciones de producción largas (`complete_proof` 480 y `authorize_rehost` 305) se mantienen deliberadamente por ser secuencias transaccionales y criptográficas únicas.
+
+### Excepciones registradas
+
+| Archivo | Líneas | Motivo |
+|---|---|---|
+| `apps/api/src/control_commercial.rs` | 900 | DTOs y endpoints de un mismo contrato; funciones de máximo 37 líneas |
+| `crates/platform-application/src/audit_security.rs` | 817 | Read models C6 cohesivos con whitelist de metadata |
+
+`crates/platform-storage-postgres/src/commercial_domain/repository.rs` (750) y `installation_control.rs` (601) no son excepciones: están por debajo del umbral de revisión obligatoria, aunque el primero no puede dividirse por ser una implementación de trait.
+
+## 10. Regla preventiva
+
+`python scripts/check_size_policy.py` corre en CI (job `Archivos prohibidos`) y falla si:
+
+- aparece un archivo de más de 1 000 líneas sin excepción registrada;
+- un archivo crece por encima de su línea base.
+
+Las advertencias de 500–1 000 líneas se imprimen para revisión, sin romper CI. La línea base (`scripts/maintenance_baseline.json`) sólo se reduce.
