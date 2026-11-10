@@ -132,3 +132,16 @@ Integrado en `main` mediante la migración `0008` (squash `00a6baa`, 2026-11-09)
 - Sincronización automática con Git/GitHub.
 - Catálogo de proveedores cloud.
 - Métricas de salud inventadas.
+
+## 8. Enmienda ratificada Fase 1 (Beta)
+
+Esta sección aclara el modelo sin reescribir las decisiones históricas de §2–§7. Ratificada en Fase 1.
+
+- **Planes como datos:** el catálogo de planes pertenece a cada Product y se persiste como datos. `PlanName`/`FeatureKey` actuales se conservan por compatibilidad con licencias v1 y se usan como seed del producto `pos`; no son el catálogo universal.
+- **Capacidades opcionales:** instalaciones, enrolamiento y licencias offline son capacidades de producto, no requisitos universales. Un producto puede operar sin ellas.
+- **OrganizationProduct ≠ Subscription:** `organization_product.status` habilita un producto; no concede derechos comerciales. La autoridad comercial es `Subscription + Plan`.
+- **`organization_product.entitlements`:** JSONB extensible/legacy; en Beta no es la autoridad de derechos. El resolver de entitlements se define en [ADR-0011](adr-0011-commercial-domain.md).
+- **Módulos por producto:** el modelo de §2 (cada producto declara capacidades que el sidebar renderiza) es una extensión futura. La Beta usa módulos genéricos capability-gated por staff; no se implementa un motor de módulos por producto.
+- **Sin pricing/billing:** se mantiene fuera de alcance.
+
+En caso de conflicto, prevalecerá [ADR-0011](adr-0011-commercial-domain.md) para el dominio comercial Beta.

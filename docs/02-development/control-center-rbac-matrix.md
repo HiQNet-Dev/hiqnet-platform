@@ -6,6 +6,15 @@
 
 Esta matriz define, por rol, qué puede **leer**, qué puede **modificar** y qué **nunca** puede hacer. La autoridad final es el backend; la UI sólo refleja permisos.
 
+## 0. Enmienda ratificada Fase 1 (Beta)
+
+Esta sección complementa §1–§4 y no cambia los checks de roles. Ratificada en Fase 1 y no altera las decisiones C6 de `security.manage` ni 4-eyes, que se alinean con PR #22.
+
+- **Capabilities comerciales Beta:** no se crean nuevas. Planes usan `products.read`/`products.manage`; suscripciones y entitlements usan `subscriptions.read`/`subscriptions.manage`; OrganizationProduct usa `organizations.manage`.
+- **Consecuencia:** `operator`, `support`, `security_auditor` y `read_only` pueden leer planes/suscripciones/entitlements; sólo `super_admin` y `platform_admin` tienen `products.manage` y `subscriptions.manage`, y pueden crear/editar planes y transicionar suscripciones.
+- **`security.read`/`audit.read`:** concedidas a todos los roles según la matriz ratificada. Riesgo de confidencialidad interna aceptado para Beta con staff interno y metadata saneada; no para contratistas o audiencia amplia. Ver [Seguridad Beta](platform-beta-security.md).
+- **Customer Portal:** no accede a `/control`, auditoría/seguridad ni a datos de otras organizaciones; sólo lectura comercial de su propia organización.
+
 ## 1. Matriz operativa
 
 | Rol                | Puede leer                         | Puede modificar                                                                                 | Nunca puede                                                                                     |
