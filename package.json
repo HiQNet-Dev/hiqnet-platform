@@ -1,13 +1,22 @@
 {
   "name": "hiqnet-platform-workspace",
   "private": true,
-  "packageManager": "pnpm@11.24.0",
-
+  "packageManager": "pnpm@11.28.5",
+  "engines": {
+    "node": ">=24"
+  },
   "scripts": {
     "control:lint": "pnpm --filter @hiqnet/control-center lint",
     "control:typecheck": "pnpm --filter @hiqnet/control-center typecheck",
     "control:test": "pnpm --filter @hiqnet/control-center test",
     "control:build": "pnpm --filter @hiqnet/control-center build",
-    "control:api:check": "pnpm --filter @hiqnet/control-center api:check"
+    "control:api:check": "pnpm --filter @hiqnet/control-center api:check",
+    "portal:dev": "pnpm --filter @hiqnet/platform-portal dev",
+    "portal:lint": "pnpm --filter @hiqnet/platform-portal lint",
+    "portal:format:check": "pnpm --filter @hiqnet/platform-portal format:check",
+    "portal:typecheck": "pnpm --filter @hiqnet/platform-portal typecheck",
+    "portal:test": "pnpm --filter @hiqnet/platform-portal test",
+    "portal:build": "pnpm --filter @hiqnet/platform-portal build",
+    "portal:api:check": "pnpm --filter @hiqnet/platform-portal api:check"
   }
 }
