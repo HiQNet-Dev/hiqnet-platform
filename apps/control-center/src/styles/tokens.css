@@ -1,0 +1,111 @@
+/* ==========================================================================
+   HiQNet Platform — Design tokens (Control Center)
+   Fuente de verdad para color, tipografía, espaciado, radios, profundidad y
+   movimiento. Deriva del sistema oficial de HiQNet (colors y fuentes), con
+   variaciones semánticas justificadas para una interfaz administrativa:
+   superficies de tabla/formulario, estados y densidad.
+   ========================================================================== */
+
+:root {
+  color-scheme: dark;
+
+  /* --- Marca y superficies ---------------------------------------------- */
+  --color-bg: #0d0f12;
+  --color-bg-deep: #07090b;
+  --color-surface: #0f1217;
+  --color-surface-raised: #151922;
+  --color-surface-inset: #0c0f13;
+
+  /* --- Texto ------------------------------------------------------------ */
+  --color-fg: #eceef2;
+  --color-fg-muted: #a5afbd;
+  --color-fg-subtle: #7d8594;
+
+  /* --- Líneas ----------------------------------------------------------- */
+  --color-line: #232b35;
+  --color-line-soft: #191f27;
+  --color-line-strong: #343b45;
+
+  /* --- Acento único ----------------------------------------------------- */
+  --color-accent: #2ad1f2;
+  --color-accent-strong: #8ceaff;
+  --color-accent-dim: #2094b0;
+  --color-accent-ink: #03171c;
+  --color-accent-soft: rgb(42 209 242 / 0.1);
+  --color-focus: #58dcf5;
+
+  /* --- Estados semánticos (variación justificada sobre la marca) -------- */
+  --color-danger: #f2685c;
+  --color-danger-soft: rgb(242 104 92 / 0.12);
+  --color-danger-line: rgb(242 104 92 / 0.38);
+  --color-success: #52d1a4;
+  --color-success-soft: rgb(82 209 164 / 0.12);
+  --color-warning: #e6b45a;
+  --color-warning-soft: rgb(230 180 90 / 0.13);
+  --color-info: var(--color-accent);
+  --color-info-soft: var(--color-accent-soft);
+
+  /* --- Tipografía ------------------------------------------------------- */
+  --font-display: "Space Grotesk Variable", "Space Grotesk", ui-sans-serif, system-ui, sans-serif;
+  --font-body: "Inter Variable", "Inter", ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --font-mono: "SFMono-Regular", "Cascadia Code", Consolas, "Liberation Mono", monospace;
+
+  --text-display: clamp(1.75rem, 2.4vw, 2.25rem);
+  --text-display--line-height: 1.08;
+  --text-display--letter-spacing: -0.03em;
+
+  --text-title: 1.25rem;
+  --text-title--line-height: 1.2;
+  --text-title--letter-spacing: -0.015em;
+
+  --text-subtitle: 1rem;
+  --text-body: 0.9375rem;
+  --text-body--line-height: 1.55;
+
+  --text-small: 0.8125rem;
+  --text-small--line-height: 1.5;
+
+  --text-label: 0.6875rem;
+  --text-label--line-height: 1.35;
+  --text-label--letter-spacing: 0.12em;
+
+  /* --- Espaciado -------------------------------------------------------- */
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.5rem;
+  --space-6: 2rem;
+  --space-7: 3rem;
+  --space-8: 4rem;
+
+  /* --- Radios ----------------------------------------------------------- */
+  --radius-xs: 3px;
+  --radius-sm: 5px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-pill: 999px;
+
+  /* --- Profundidad ------------------------------------------------------ */
+  --shadow-panel: 0 1px 0 0 rgb(255 255 255 / 0.03) inset, 0 18px 40px -28px rgb(0 0 0 / 0.8);
+  --shadow-overlay: 0 24px 70px -30px rgb(0 0 0 / 0.9);
+
+  /* --- Layout ----------------------------------------------------------- */
+  --sidebar-width: 15.5rem;
+  --topbar-height: 4rem;
+  --container: 86rem;
+
+  --border-width: 1px;
+
+  /* --- Movimiento ------------------------------------------------------- */
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --dur-micro: 120ms;
+  --dur-fast: 180ms;
+  --dur-panel: 320ms;
+
+  /* --- Z-index ---------------------------------------------------------- */
+  --z-base: 0;
+  --z-sticky: 40;
+  --z-overlay: 80;
+  --z-top: 100;
+}

@@ -1,31 +1,35 @@
 :root {
-  color-scheme: light;
-  --bg: #f4f6fa;
-  --surface: #ffffff;
-  --surface-muted: #f8fafc;
-  --border: #dce3ef;
-  --border-strong: #c3cddd;
-  --text: #172033;
-  --text-secondary: #5b677c;
-  --text-muted: #7c879b;
-  --accent: #1d4ed8;
-  --accent-strong: #1e40af;
-  --accent-soft: #e8efff;
-  --navy: #0b1730;
-  --navy-soft: #152442;
-  --success: #0f766e;
-  --success-soft: #e6f5f1;
-  --warning: #9a5b00;
-  --warning-soft: #fff4dd;
-  --danger: #b42318;
-  --danger-soft: #feeceb;
-  --radius-sm: 6px;
-  --radius-md: 10px;
-  --radius-lg: 16px;
-  --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.05);
-  --shadow-md: 0 10px 30px rgba(15, 23, 42, 0.08);
+  color-scheme: dark;
+  --bg: #0d0f12;
+  --surface: #0f1217;
+  --surface-muted: #0c0f13;
+  --border: #232b35;
+  --border-strong: #343b45;
+  --text: #eceef2;
+  --text-secondary: #a5afbd;
+  --text-muted: #7d8594;
+  --accent: #2ad1f2;
+  --accent-strong: #8ceaff;
+  --accent-soft: rgba(42, 209, 242, 0.1);
+  --accent-ink: #03171c;
+  --navy: #07090b;
+  --navy-soft: #151922;
+  --success: #52d1a4;
+  --success-soft: rgba(82, 209, 164, 0.12);
+  --warning: #e6b45a;
+  --warning-soft: rgba(230, 180, 90, 0.13);
+  --danger: #f2685c;
+  --danger-soft: rgba(242, 104, 92, 0.12);
+  --radius-sm: 5px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-md: 0 18px 40px -28px rgba(0, 0, 0, 0.8);
   --font-sans:
-    'Inter', 'Segoe UI', system-ui, -apple-system, BlinkMacSystemFont, 'Helvetica Neue', Arial,
+    'Inter Variable', 'Inter', 'Segoe UI', system-ui, -apple-system, BlinkMacSystemFont,
+    'Helvetica Neue', Arial, sans-serif;
+  --font-display:
+    'Space Grotesk Variable', 'Space Grotesk', 'Inter Variable', 'Inter', ui-sans-serif, system-ui,
     sans-serif;
   --sidebar-width: 248px;
 }
@@ -73,7 +77,7 @@ a {
 }
 
 :focus-visible {
-  outline: 3px solid rgba(29, 78, 216, 0.35);
+  outline: 2px solid #58dcf5;
   outline-offset: 2px;
 }
 
@@ -1614,4 +1618,224 @@ code {
   100% {
     background-position: -200% 0;
   }
+}
+
+/* ==========================================================================
+   HiQNet Platform — tema y marca oficial
+   Ajustes sobre el sistema existente: superficies oscuras, acento cian único
+   y logotipo/isotipo originales. Mantiene las clases y flujos actuales.
+   ========================================================================== */
+
+@font-face {
+  font-family: 'Space Grotesk Variable';
+  font-style: normal;
+  font-weight: 300 700;
+  font-display: swap;
+  src: url('@fontsource-variable/space-grotesk/files/space-grotesk-latin-wght-normal.woff2')
+    format('woff2-variations');
+}
+
+@font-face {
+  font-family: 'Inter Variable';
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url('@fontsource-variable/inter/files/inter-latin-wght-normal.woff2')
+    format('woff2-variations');
+}
+
+.brand-mark__logo {
+  display: block;
+  height: 1.75rem;
+  width: auto;
+}
+
+.brand-mark__mark {
+  display: block;
+  width: 1.75rem;
+  height: 1.75rem;
+}
+
+h1,
+h2,
+h3 {
+  font-family: var(--font-display);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
+body {
+  font-family: var(--font-sans);
+}
+
+.eyebrow {
+  color: var(--text-muted);
+}
+
+.topbar {
+  background: color-mix(in srgb, var(--bg) 88%, transparent);
+  backdrop-filter: blur(10px);
+  border-bottom-color: var(--border);
+}
+
+.topbar__status {
+  color: var(--text-muted);
+}
+
+.button--primary {
+  color: var(--accent-ink);
+}
+
+.button--primary:hover:not(:disabled) {
+  background: var(--accent-strong);
+  color: var(--accent-ink);
+}
+
+.button--secondary {
+  background: transparent;
+  border-color: var(--border-strong);
+}
+
+.button--secondary:hover:not(:disabled) {
+  border-color: var(--accent-dim, #2094b0);
+  background: var(--accent-soft);
+}
+
+.button--danger {
+  color: var(--accent-ink);
+}
+
+.button--danger:hover:not(:disabled) {
+  background: var(--danger);
+  filter: brightness(1.08);
+}
+
+.input {
+  background: var(--surface-muted);
+  color: var(--text);
+  border-color: var(--border-strong);
+}
+
+.input:hover {
+  border-color: var(--border-strong);
+}
+
+.input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.data-table th {
+  background: var(--surface-muted);
+  color: var(--text-muted);
+}
+
+.data-table tbody tr:hover {
+  background: var(--surface-muted);
+}
+
+.panel {
+  background: var(--surface);
+  border-color: var(--border);
+}
+
+.avatar {
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+}
+
+.sidebar {
+  background: var(--navy);
+  color: var(--text-secondary);
+}
+
+.sidebar__brand strong {
+  color: var(--text);
+}
+
+.sidebar__brand span {
+  color: var(--text-muted);
+}
+
+.sidebar__link {
+  color: var(--text-secondary);
+}
+
+.sidebar__link:hover {
+  color: var(--text);
+  background: rgb(255 255 255 / 0.04);
+}
+
+.sidebar__link--active {
+  color: var(--text);
+  background: var(--accent-soft);
+}
+
+.sidebar__account strong {
+  color: var(--text);
+}
+
+.sidebar__account span {
+  color: var(--text-muted);
+}
+
+/* Login: panel de marca sobrio sobre fondo profundo, con un acento discreto. */
+.login-brand {
+  background:
+    radial-gradient(circle at 82% 12%, rgb(42 209 242 / 0.1), transparent 38%),
+    radial-gradient(circle at 12% 88%, rgb(139 92 246 / 0.09), transparent 42%), var(--navy);
+  color: var(--text);
+}
+
+.login-brand .brand-mark__text,
+.login-brand .brand-mark__logo {
+  color: var(--text);
+}
+
+.login-brand__message h1 {
+  color: var(--text);
+}
+
+.login-brand__message p {
+  color: var(--text-secondary);
+}
+
+.login-brand__message .eyebrow {
+  color: var(--accent-strong);
+}
+
+.login-brand__footnote {
+  color: var(--text-muted);
+}
+
+.login-panel {
+  background: var(--bg);
+}
+
+/* El panel de login es un flex column: el logotipo no debe estirarse. */
+.login-brand > .brand-mark__logo {
+  align-self: flex-start;
+  height: 2.25rem;
+  width: auto;
+}
+
+/* Superficies y estados que aún usaban el tema claro anterior. */
+.badge--neutral {
+  background: var(--surface-raised);
+  color: var(--text-secondary);
+}
+
+.panel--danger-zone {
+  border-color: var(--danger);
+}
+
+.section-tabs__soon {
+  background: var(--surface-raised);
+  color: var(--text-muted);
+}
+
+.security-note {
+  border-color: var(--border-strong);
+  background: var(--accent-soft);
+  color: var(--accent-strong);
 }
