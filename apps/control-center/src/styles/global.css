@@ -409,6 +409,12 @@ code {
   border-right: 0;
 }
 
+/* Un campo suelto ocupa la fila completa: evita una celda vacía con la regla
+   inferior cortada a la mitad. */
+.details div:last-child:nth-child(odd) {
+  grid-column: 1 / -1;
+}
+
 .details dt {
   font-size: var(--text-label);
   letter-spacing: var(--text-label--letter-spacing);
@@ -420,15 +426,61 @@ code {
   margin: var(--space-1) 0 0;
   font-size: var(--text-small);
   color: var(--color-fg);
+  overflow-wrap: anywhere;
 }
 
 .details--inline {
   margin: var(--space-3) 0 0;
 }
 
+/* Dentro de un panel la ficha no repite marco: evita cajas anidadas y separa
+   los campos con reglas internas. */
+.panel .details {
+  margin: var(--space-4) 0 0;
+  border: 0;
+  border-top: var(--border-width) solid var(--color-line-soft);
+  border-radius: 0;
+  background: transparent;
+}
+
+.panel .details div {
+  padding: var(--space-3) var(--space-4) var(--space-3) 0;
+  border-right: 0;
+  border-bottom: var(--border-width) solid var(--color-line-soft);
+}
+
+.panel .details div:nth-child(odd) {
+  padding-right: var(--space-5);
+}
+
+.panel .details div:nth-child(even) {
+  padding-left: var(--space-5);
+  border-left: var(--border-width) solid var(--color-line-soft);
+}
+
+.panel .details div:last-child {
+  border-bottom: 0;
+}
+
+.panel .details--inline {
+  margin-top: var(--space-3);
+}
+
 .related {
   display: grid;
   gap: var(--space-4);
+  margin: 0 0 var(--space-7);
+}
+
+/* Sin esta separación las tablas y formularios de secciones consecutivas se
+   leen como un único bloque de datos. */
+.related + .related {
+  padding-top: var(--space-6);
+  border-top: var(--border-width) solid var(--color-line-soft);
+}
+
+.related > div > p {
+  max-width: 60ch;
 }
 
 .back-link {
@@ -489,7 +541,9 @@ code {
   border-color: var(--color-accent-strong);
 }
 
-.button--secondary {
+/* Sólo la paginación de los listados (hijo directo de .page) necesita margen:
+   el modificador no debe desplazar acciones dentro de celdas ni pestañas. */
+.page > .button--secondary {
   margin-top: var(--space-4);
 }
 
@@ -530,13 +584,30 @@ code {
 .filters {
   display: flex;
   flex-wrap: wrap;
-  align-items: end;
+  /* Las etiquetas se alinean arriba aunque un control sea más alto (textarea);
+     los botones de envío se anclan al pie de la fila. */
+  align-items: start;
   gap: var(--space-3);
   padding: var(--space-4) var(--space-4);
   margin-bottom: var(--space-4);
   border: var(--border-width) solid var(--color-line);
   border-radius: var(--radius-md);
   background: var(--color-surface);
+}
+
+.filters > .button {
+  align-self: end;
+}
+
+.filters label:has(> input[type="checkbox"]) {
+  /* Misma rejilla que el resto de campos: etiqueta arriba y control centrado
+     en la línea de los demás controles. */
+  grid-template-rows: auto 2.375rem;
+  align-items: center;
+}
+
+.filters label:has(> input[type="checkbox"]) input {
+  cursor: pointer;
 }
 
 .filters label,
@@ -595,6 +666,20 @@ select:disabled,
 textarea:disabled {
   opacity: 0.55;
   cursor: not-allowed;
+}
+
+/* El control nativo no hereda el tratamiento de los campos de texto. */
+input[type="checkbox"],
+input[type="radio"] {
+  width: 1rem;
+  height: 1rem;
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  accent-color: var(--color-accent);
+  cursor: pointer;
+  flex: none;
 }
 
 .filters textarea,
@@ -657,6 +742,14 @@ tr:last-child td {
   border-bottom: 0;
 }
 
+/* Acciones secundarias dentro de una fila: densidad menor que un botón de
+   página para no engordar la tabla. */
+td .button {
+  min-height: 1.875rem;
+  padding: var(--space-1) var(--space-3);
+  font-size: 0.75rem;
+}
+
 .table-link {
   display: grid;
   gap: 2px;
@@ -694,12 +787,13 @@ tr:last-child td {
   font-size: 0.6875rem;
   font-weight: 600;
   letter-spacing: 0.02em;
-  text-transform: capitalize;
   white-space: nowrap;
 }
 
 .badge--active,
-.badge--consumed {
+.badge--consumed,
+.badge--success,
+.badge--approved {
   background: var(--color-success-soft);
   color: var(--color-success);
 }
@@ -708,7 +802,8 @@ tr:last-child td {
 .badge--deprecated,
 .badge--inactive,
 .badge--pending,
-.badge--suspended {
+.badge--suspended,
+.badge--denied {
   background: var(--color-warning-soft);
   color: var(--color-warning);
 }
@@ -728,7 +823,9 @@ tr:last-child td {
 
 .badge--disabled,
 .badge--retired,
-.badge--expired {
+.badge--expired,
+.badge--failure,
+.badge--error {
   background: var(--color-danger-soft);
   color: var(--color-danger);
 }
@@ -743,6 +840,40 @@ tr:last-child td {
   max-width: 40rem;
 }
 
+.state h2 {
+  margin: 0;
+  font-size: var(--text-title);
+  line-height: var(--text-title--line-height);
+  letter-spacing: var(--text-title--letter-spacing);
+}
+
+.state p {
+  margin-top: var(--space-2);
+  color: var(--color-fg-muted);
+  font-size: var(--text-small);
+}
+
+.state .button {
+  margin-top: var(--space-5);
+}
+
+/* Los estados de vista sustituyen a .page: conservan sus márgenes internos. */
+.shell__main > .state {
+  margin: clamp(var(--space-5), 2.6vw, var(--space-7)) clamp(var(--space-4), 3vw, 2.75rem);
+}
+
+/* Comprobación de sesión, todavía fuera del shell. */
+#root > .state {
+  min-height: 100svh;
+  max-width: none;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  border: 0;
+  background: transparent;
+  text-align: center;
+}
+
 .state--loading {
   border: 0;
   background: transparent;
@@ -753,7 +884,7 @@ tr:last-child td {
 
 .state--error {
   border-color: var(--color-danger-line);
-  background: var(--color-danger-soft);
+  background: color-mix(in srgb, var(--color-danger) 8%, var(--color-surface));
 }
 
 /* --- Diálogos ----------------------------------------------------------- */
@@ -763,6 +894,8 @@ tr:last-child td {
   border-radius: var(--radius-lg);
   padding: var(--space-6);
   width: min(100%, 34rem);
+  max-height: min(90svh, 44rem);
+  overflow: auto;
   background: var(--color-surface-raised);
   color: var(--color-fg);
   box-shadow: var(--shadow-overlay);
@@ -916,6 +1049,35 @@ tr:last-child td {
   margin-bottom: var(--space-2);
 }
 
+/* --- Pestañas ----------------------------------------------------------- */
+
+.tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin: 0 0 var(--space-4);
+  padding-bottom: var(--space-3);
+  border-bottom: var(--border-width) solid var(--color-line);
+}
+
+.tabs .button {
+  border-color: transparent;
+  background: transparent;
+  color: var(--color-fg-muted);
+}
+
+.tabs .button:hover:not(:disabled) {
+  border-color: transparent;
+  color: var(--color-fg);
+  background: rgb(255 255 255 / 0.05);
+}
+
+.tabs .button[aria-current="page"] {
+  border-color: var(--color-accent-dim);
+  background: var(--color-accent-soft);
+  color: var(--color-fg);
+}
+
 /* --- Utilidades --------------------------------------------------------- */
 
 .muted {
@@ -940,6 +1102,22 @@ tr:last-child td {
   letter-spacing: 0.02em;
 }
 
+pre {
+  margin: 0;
+  max-width: 100%;
+  padding: var(--space-4) var(--space-5);
+  border: var(--border-width) solid var(--color-line);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-inset);
+  color: var(--color-fg-muted);
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  overflow-x: auto;
+}
+
 /* --- Responsive --------------------------------------------------------- */
 
 @media (max-width: 64rem) {
@@ -949,6 +1127,15 @@ tr:last-child td {
 
   .details div {
     border-right: 0;
+  }
+
+  .panel .details div:nth-child(odd) {
+    padding-right: 0;
+  }
+
+  .panel .details div:nth-child(even) {
+    padding-left: 0;
+    border-left: 0;
   }
 }
 
@@ -965,6 +1152,9 @@ tr:last-child td {
 @media (max-width: 48rem) {
   .shell {
     grid-template-columns: minmax(0, 1fr);
+    /* Sin filas explícitas, el alto sobrante de min-height se reparte entre
+       barra y contenido y el topbar se desplaza en páginas cortas. */
+    grid-template-rows: auto minmax(0, 1fr);
   }
 
   .sidebar {
@@ -994,6 +1184,10 @@ tr:last-child td {
     gap: var(--space-1);
     overflow-x: auto;
     scrollbar-width: none;
+    /* El degradado derecho indica que quedan secciones por descubrir en
+       lugar de cortar una etiqueta a media palabra. */
+    padding-right: 1.5rem;
+    mask-image: linear-gradient(to right, #000 0, #000 calc(100% - 1.5rem), transparent 100%);
   }
 
   .sidebar nav::-webkit-scrollbar {
@@ -1029,19 +1223,9 @@ tr:last-child td {
     gap: var(--space-3);
   }
 
-  .filters {
-    flex-direction: column;
-    align-items: stretch;
-  }
-
-  .filters label,
-  .filters input,
-  .filters select,
-  .filters textarea,
-  .search-form,
-  .search-form label,
-  .search-form input {
-    width: 100%;
+  th,
+  td {
+    padding: var(--space-2) var(--space-3);
   }
 
   .actions .button {
@@ -1082,6 +1266,39 @@ tr:last-child td {
     text-transform: uppercase;
     color: var(--color-fg-subtle);
     margin-bottom: 2px;
+  }
+}
+
+@media (max-width: 40rem) {
+  .filters {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .filters > .button {
+    align-self: stretch;
+  }
+
+  .filters label,
+  .filters input,
+  .filters select,
+  .filters textarea,
+  .filters .search-form,
+  .filters .search-form label,
+  .filters .search-form input,
+  .filters .button {
+    width: 100%;
+  }
+}
+
+@media (max-width: 30rem) {
+  .dialog {
+    width: calc(100% - 2 * var(--space-4));
+    padding: var(--space-5);
+  }
+
+  .state {
+    padding: var(--space-5);
   }
 }
 
