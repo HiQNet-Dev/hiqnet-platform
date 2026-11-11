@@ -32,18 +32,11 @@ function toRfc3339(value: string) {
 
 function SecurityTabs() {
   return (
-    <nav className="filters" aria-label="Datasets de seguridad">
-      <NavLink
-        to="/control/security"
-        end
-        className={({ isActive }) => (isActive ? "button" : "button button--secondary")}
-      >
+    <nav className="tabs" aria-label="Datasets de seguridad">
+      <NavLink to="/control/security" end className="button">
         Platform events
       </NavLink>
-      <NavLink
-        to="/control/security/staff-auth"
-        className={({ isActive }) => (isActive ? "button" : "button button--secondary")}
-      >
+      <NavLink to="/control/security/staff-auth" className="button">
         Staff authentication
       </NavLink>
     </nav>
