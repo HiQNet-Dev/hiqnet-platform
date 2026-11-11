@@ -104,6 +104,29 @@ jobs:
           pnpm control:test
           pnpm control:build
           pnpm control:api:check
+      - name: Seleccionar mirror apt alcanzable
+        shell: bash
+        run: |
+          set -euo pipefail
+          reachable() { curl -fsSL --max-time 20 -o /dev/null "$1/dists/noble/InRelease"; }
+          if reachable http://azure.archive.ubuntu.com/ubuntu; then
+            echo "Mirror configurado alcanzable"
+            exit 0
+          fi
+          for mirror in http://archive.ubuntu.com/ubuntu https://archive.ubuntu.com/ubuntu; do
+            if reachable "$mirror"; then
+              echo "Usando mirror alcanzable: $mirror"
+              if [ -f /etc/apt/sources.list.d/ubuntu.sources ]; then
+                sudo sed -i -E "s#^URIs:.*#URIs: $mirror#" /etc/apt/sources.list.d/ubuntu.sources
+              fi
+              if [ -f /etc/apt/sources.list ]; then
+                sudo sed -i -E "s#https?://[a-zA-Z0-9.-]+/ubuntu#$mirror#g" /etc/apt/sources.list
+              fi
+              sudo rm -rf /var/lib/apt/lists/*
+              exit 0
+            fi
+          done
+          echo "::warning::ningún mirror alternativo alcanzable; se intenta con el configurado"
       - name: Instalar Chromium para E2E
         run: |
           set -euo pipefail
@@ -242,6 +265,29 @@ jobs:
           SELECT '11111111-1111-4111-8111-111111111111', id, 'active', now()
           FROM product WHERE key='pos';
           SQL
+      - name: Seleccionar mirror apt alcanzable
+        shell: bash
+        run: |
+          set -euo pipefail
+          reachable() { curl -fsSL --max-time 20 -o /dev/null "$1/dists/noble/InRelease"; }
+          if reachable http://azure.archive.ubuntu.com/ubuntu; then
+            echo "Mirror configurado alcanzable"
+            exit 0
+          fi
+          for mirror in http://archive.ubuntu.com/ubuntu https://archive.ubuntu.com/ubuntu; do
+            if reachable "$mirror"; then
+              echo "Usando mirror alcanzable: $mirror"
+              if [ -f /etc/apt/sources.list.d/ubuntu.sources ]; then
+                sudo sed -i -E "s#^URIs:.*#URIs: $mirror#" /etc/apt/sources.list.d/ubuntu.sources
+              fi
+              if [ -f /etc/apt/sources.list ]; then
+                sudo sed -i -E "s#https?://[a-zA-Z0-9.-]+/ubuntu#$mirror#g" /etc/apt/sources.list
+              fi
+              sudo rm -rf /var/lib/apt/lists/*
+              exit 0
+            fi
+          done
+          echo "::warning::ningún mirror alternativo alcanzable; se intenta con el configurado"
       - name: Instalar Chromium
         run: |
           set -euo pipefail
