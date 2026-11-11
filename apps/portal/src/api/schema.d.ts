@@ -1479,6 +1479,11 @@ export interface components {
             installation_id: string;
             plan: string;
             public_key_b64: string;
+            /**
+             * @description true cuando la respuesta reentrega el grant ya emitido (recuperación),
+             *     false cuando es una emisión nueva.
+             */
+            recovered: boolean;
             signature_b64: string;
             /** Format: date-time */
             valid_until: string;
@@ -2629,7 +2634,16 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Licencia firmada y auditada */
+            /** @description Recuperación: el grant ya emitido para la misma suscripción se reentrega sin duplicar (recovered=true) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IssuedLicenseResponse"];
+                };
+            };
+            /** @description Licencia firmada y auditada (emisión nueva) */
             201: {
                 headers: {
                     [name: string]: unknown;

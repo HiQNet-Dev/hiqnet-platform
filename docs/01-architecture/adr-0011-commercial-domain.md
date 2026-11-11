@@ -184,6 +184,7 @@ La expiración lógica (`now >= ends_at`) se evalúa antes que `suspended`/`canc
 - La elegibilidad y la auditoría de la emisión controlada se implementan en el endpoint de staff; la emisión productiva con KMS/HSM sigue requiriendo decisión y autorización explícitas.
 - El **trial comercial** de Beta no reemplaza ni migra automáticamente el trial técnico legacy de POS (`installation.trial_started_at`/`trial_ends_at` y `POST /installations/{id}/trial`). Ambos coexisten; la integración POS definirá la autoridad final. No se modifica el endpoint legacy en Beta.
 - No se transforma silenciosamente el documento de licencia v1: un plan o una capacidad no representable en el catálogo v1 rechaza la emisión (422).
+- **Recuperación e idempotencia**: unicidad (instalación, suscripción); la solicitud repetida reentrega el grant original (auditoría `license.recovered`, no cuenta como emisión); la renovación crea una suscripción nueva y su emisión es un grant nuevo; los grants previos quedan como historial.
 
 ### D-BETA-COM-07 — RBAC sin nuevas capabilities en Beta
 

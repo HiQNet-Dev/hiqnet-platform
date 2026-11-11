@@ -1110,8 +1110,18 @@
           "required": true
         },
         "responses": {
+          "200": {
+            "description": "Recuperación: el grant ya emitido para la misma suscripción se reentrega sin duplicar (recovered=true)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IssuedLicenseResponse"
+                }
+              }
+            }
+          },
           "201": {
-            "description": "Licencia firmada y auditada",
+            "description": "Licencia firmada y auditada (emisión nueva)",
             "content": {
               "application/json": {
                 "schema": {
@@ -7927,7 +7937,8 @@
           "valid_until",
           "grant_json",
           "signature_b64",
-          "public_key_b64"
+          "public_key_b64",
+          "recovered"
         ],
         "properties": {
           "grant_id": {
@@ -7946,6 +7957,10 @@
           },
           "public_key_b64": {
             "type": "string"
+          },
+          "recovered": {
+            "type": "boolean",
+            "description": "true cuando la respuesta reentrega el grant ya emitido (recuperación),\nfalse cuando es una emisión nueva."
           },
           "signature_b64": {
             "type": "string"

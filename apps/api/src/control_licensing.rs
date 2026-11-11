@@ -103,7 +103,8 @@ async fn audit_denial(
     params(("installation_id" = String, Path, description = "UUID de la instalación")),
     request_body(content = IssueControlLicenseRequest, description = "product_id: UUID del producto contratado; plan, features y vigencia se resuelven en Platform"),
     responses(
-        (status = 201, description = "Licencia firmada y auditada", body = IssuedLicenseResponse),
+        (status = 201, description = "Licencia firmada y auditada (emisión nueva)", body = IssuedLicenseResponse),
+        (status = 200, description = "Recuperación: el grant ya emitido para la misma suscripción se reentrega sin duplicar (recovered=true)", body = IssuedLicenseResponse),
         (status = 400, description = "UUID o JSON malformado", body = ErrorResponse),
         (status = 401, description = "Sesión staff requerida", body = ErrorResponse),
         (status = 403, description = "Capability insuficiente u origen no permitido", body = ErrorResponse),
@@ -208,7 +209,11 @@ pub(crate) async fn issue_control_license(
     }
     .map_err(issuance_error)?;
 
-    Ok((StatusCode::CREATED, Json(issued.into())))
+    if issued.recovered {
+        Ok((StatusCode::OK, Json(issued.into())))
+    } else {
+        Ok((StatusCode::CREATED, Json(issued.into())))
+    }
 }
 
 /// Resuelve el derecho comercial de la organización sobre el producto.

@@ -137,6 +137,9 @@ pub struct IssuedLicenseResponse {
     pub grant_json: String,
     pub signature_b64: String,
     pub public_key_b64: String,
+    /// true cuando la respuesta reentrega el grant ya emitido (recuperación),
+    /// false cuando es una emisión nueva.
+    pub recovered: bool,
 }
 
 impl From<IssuedLicenseView> for IssuedLicenseResponse {
@@ -149,6 +152,7 @@ impl From<IssuedLicenseView> for IssuedLicenseResponse {
             grant_json: value.grant_json,
             signature_b64: value.signature_b64,
             public_key_b64: value.public_key_b64,
+            recovered: value.recovered,
         }
     }
 }

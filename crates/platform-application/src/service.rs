@@ -23,6 +23,9 @@ pub struct IssuedLicenseView {
     pub grant_json: String,
     pub signature_b64: String,
     pub public_key_b64: String,
+    /// true cuando la respuesta es una recuperación del grant ya emitido
+    /// (mismo documento), no una emisión nueva.
+    pub recovered: bool,
 }
 
 pub struct PlatformService {
@@ -142,6 +145,7 @@ impl PlatformService {
             grant_json,
             signature_b64: signature,
             public_key_b64,
+            recovered: false,
         })
     }
 
@@ -172,13 +176,21 @@ impl PlatformService {
             .await
     }
 
-    /// Emite una licencia a partir de derechos comerciales ya verificados.
+    /// Emite una licencia a partir de derechos comerciales ya verificados, o
+    /// recupera el grant ya existente para el mismo par (instalación,
+    /// suscripción).
     ///
     /// El plan, las capacidades y la vigencia provienen de [`EntitledPlan`], que
     /// a su vez sale de `CommercialService::entitlements`. La instalación debe
     /// pertenecer a la misma organización con derechos y el actor debe contar
     /// con la capacidad de gestionar instalaciones: la decisión comercial se
     /// comprueba aquí, no sólo en la capa HTTP.
+    ///
+    /// La recuperación reentrega el documento original sin firmar de nuevo ni
+    /// crear un segundo grant; se audita como `license.recovered`, no como
+    /// emisión. Ante una emisión concurrente (violación de unicidad), el
+    /// perdedor recupera el grant del ganador: ambas solicitudes terminan con
+    /// el mismo documento.
     pub async fn issue_entitled_license(
         &self,
         installation_id: InstallationId,
@@ -200,6 +212,19 @@ impl PlatformService {
             return Err(AppError::NotFound);
         }
         IssuedLicense::validate_validity(now, entitled.valid_until)?;
+
+        // Recuperación (B): el grant de esta suscripción ya fue emitido y
+        // almacenado. Se reentrega tal cual, con el contexto comercial y el
+        // actor revalidados arriba.
+        if let Some(existing) = self
+            .repository
+            .find_license(installation_id, entitled.subscription_id)
+            .await?
+        {
+            return self
+                .recover_license(existing, entitled, actor, signer, now)
+                .await;
+        }
 
         let grant = LicenseGrant {
             version: LICENSE_DOC_VERSION,
@@ -233,15 +258,32 @@ impl PlatformService {
             signature_b64: signature.clone(),
         };
         // Licencia y auditoría se escriben juntas: si la auditoría falla, no
-        // queda una emisión registrada como exitosa.
-        self.repository
+        // queda una emisión registrada como exitosa. Una violación de unicidad
+        // indica una emisión concurrente ganada por otra solicitud: el grant
+        // ganador se recupera en lugar de reportar conflicto.
+        match self
+            .repository
             .record_license_with_audit(
                 &issued,
                 actor.staff_account_id(),
                 entitled.product_id,
                 entitled.subscription_id,
             )
-            .await?;
+            .await
+        {
+            Ok(()) => {}
+            Err(AppError::Conflict) => {
+                let existing = self
+                    .repository
+                    .find_license(installation_id, entitled.subscription_id)
+                    .await?
+                    .ok_or(AppError::Conflict)?;
+                return self
+                    .recover_license(existing, entitled, actor, signer, now)
+                    .await;
+            }
+            Err(error) => return Err(error),
+        }
 
         Ok(IssuedLicenseView {
             grant_id: issued.grant_id,
@@ -251,6 +293,37 @@ impl PlatformService {
             grant_json,
             signature_b64: signature,
             public_key_b64,
+            recovered: false,
+        })
+    }
+
+    /// Reentrega un grant ya emitido, con auditoría de recuperación.
+    async fn recover_license(
+        &self,
+        existing: IssuedLicense,
+        entitled: EntitledPlan,
+        actor: &CommercialActor,
+        signer: &SharedSigner,
+        now: OffsetDateTime,
+    ) -> AppResult<IssuedLicenseView> {
+        self.repository
+            .record_license_recovery(
+                &existing,
+                actor.staff_account_id(),
+                entitled.product_id,
+                entitled.subscription_id,
+                now,
+            )
+            .await?;
+        Ok(IssuedLicenseView {
+            grant_id: existing.grant_id,
+            installation_id: existing.installation_id,
+            plan: existing.plan,
+            valid_until: existing.valid_until,
+            grant_json: existing.grant_json,
+            signature_b64: existing.signature_b64,
+            public_key_b64: signer.public_key_b64(),
+            recovered: true,
         })
     }
 }
@@ -272,6 +345,8 @@ mod tests {
         installation: Option<Installation>,
         audit_fails: bool,
         recorded: std::sync::Arc<Mutex<Vec<IssuedLicense>>>,
+        existing: Mutex<Vec<IssuedLicense>>,
+        recoveries: std::sync::Arc<Mutex<Vec<Uuid>>>,
     }
 
     impl StubRepository {
@@ -280,6 +355,8 @@ mod tests {
                 installation: None,
                 audit_fails: false,
                 recorded: std::sync::Arc::new(Mutex::new(Vec::new())),
+                existing: Mutex::new(Vec::new()),
+                recoveries: std::sync::Arc::new(Mutex::new(Vec::new())),
             }
         }
 
@@ -328,6 +405,14 @@ mod tests {
             panic!("la emisión comercial no debe usar el registro DEV")
         }
 
+        async fn find_license(
+            &self,
+            _: InstallationId,
+            _: Uuid,
+        ) -> AppResult<Option<IssuedLicense>> {
+            Ok(self.existing.lock().unwrap().first().cloned())
+        }
+
         async fn record_license_with_audit(
             &self,
             license: &IssuedLicense,
@@ -339,6 +424,21 @@ mod tests {
                 return Err(AppError::Storage);
             }
             self.recorded.lock().unwrap().push(license.clone());
+            Ok(())
+        }
+
+        async fn record_license_recovery(
+            &self,
+            license: &IssuedLicense,
+            _: StaffAccountId,
+            _: Uuid,
+            _: Uuid,
+            _: OffsetDateTime,
+        ) -> AppResult<()> {
+            self.recoveries
+                .lock()
+                .unwrap()
+                .push(license.grant_id.as_uuid());
             Ok(())
         }
 
@@ -486,5 +586,45 @@ mod tests {
 
     fn signer_arc() -> SharedSigner {
         std::sync::Arc::new(StaticSigner) as SharedSigner
+    }
+
+    fn grant_previo(installation: InstallationId, organization: OrganizationId) -> IssuedLicense {
+        IssuedLicense {
+            grant_id: GrantId::new(),
+            installation_id: installation,
+            organization_id: organization,
+            plan: "pro".to_owned(),
+            features_json: "[\"catalog\"]".to_owned(),
+            issued_at: now(),
+            valid_until: now() + time::Duration::days(45),
+            grant_json: "{\"grant_json_original\":true}".to_owned(),
+            signature_b64: "firma-original".to_owned(),
+        }
+    }
+
+    #[tokio::test]
+    async fn recuperacion_reentrega_el_grant_original_sin_nueva_emision() {
+        let organization = OrganizationId::new();
+        let repository = StubRepository::assertion().with_installation(organization);
+        let repository = std::sync::Arc::new(repository);
+        let (recorded, recoveries) = (repository.recorded.clone(), repository.recoveries.clone());
+        {
+            let mut existing = repository.existing.lock().unwrap();
+            existing.push(grant_previo(InstallationId::new(), organization));
+        }
+        let service = PlatformService::new(repository as SharedRepository, Some(signer_arc()));
+        let mut right = entitled();
+        right.organization_id = organization;
+        let view = service
+            .issue_entitled_license(InstallationId::new(), right, &manager(), now())
+            .await
+            .unwrap();
+        // El documento original, sin re-firmar: ni un segundo grant ni una
+        // emisión nueva contabilizada.
+        assert!(view.recovered);
+        assert_eq!(view.grant_json, "{\"grant_json_original\":true}");
+        assert_eq!(view.signature_b64, "firma-original");
+        assert!(recorded.lock().unwrap().is_empty());
+        assert_eq!(recoveries.lock().unwrap().len(), 1);
     }
 }

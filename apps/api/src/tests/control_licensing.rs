@@ -430,39 +430,10 @@ async fn plan_o_capacidad_ajenos_al_contrato_v1_se_rechazan() {
     assert_eq!(body["code"], "unsupported_feature");
 }
 
+/// Reintento tras perder la respuesta HTTP (B): la segunda solicitud recupera
+/// el grant original sin borrar registros ni emitir otro documento.
 #[tokio::test]
-async fn emision_duplicada_para_la_misma_suscripcion_se_rechaza() {
-    let scenario = escenario(
-        "local",
-        json!({"catalog": true, "sales": true}),
-        FIN_VIGENCIA,
-        "active",
-    )
-    .await;
-    let (first, _) = emitir(&scenario, None).await;
-    assert_eq!(first, StatusCode::CREATED);
-    let (second, body) = emitir(&scenario, None).await;
-    assert_eq!(second, StatusCode::CONFLICT, "{body}");
-    assert_eq!(body["code"], "conflict");
-
-    let exitosos = eventos(&scenario.pool, "license.issued", &scenario.installation).await;
-    assert_eq!(
-        exitosos.len(),
-        1,
-        "sólo una emisión registrada como exitosa"
-    );
-    let denegados = eventos(
-        &scenario.pool,
-        "license.issuance_denied",
-        &scenario.installation,
-    )
-    .await;
-    assert_eq!(denegados.len(), 1);
-    assert_eq!(denegados[0].2["reason"], "duplicate");
-}
-
-#[tokio::test]
-async fn reintento_tras_perder_el_grant_emite_un_documento_nuevo() {
+async fn recuperacion_reentrega_el_mismo_grant_sin_nueva_emision() {
     let scenario = escenario(
         "local",
         json!({"catalog": true, "sales": true}),
@@ -472,19 +443,63 @@ async fn reintento_tras_perder_el_grant_emite_un_documento_nuevo() {
     .await;
     let (first, body) = emitir(&scenario, None).await;
     assert_eq!(first, StatusCode::CREATED, "{body}");
-    let grant_id: Uuid = serde_json::from_value(body["grant_id"].clone()).unwrap();
-    sqlx::query("DELETE FROM issued_license WHERE grant_id = $1")
-        .bind(grant_id)
-        .execute(&scenario.pool)
-        .await
-        .unwrap();
+    assert_eq!(body["recovered"], false);
+    let grant_original = body["grant_json"].clone();
+    let firma_original = body["signature_b64"].clone();
 
-    // Reintento válido: el documento anterior se perdió, no existe duplicado
-    // que impida re-firmar, y el nuevo grant verifica igual.
+    // Segunda solicitud con el mismo contexto comercial: recuperación, no
+    // duplicado. Se reentrega exactamente el documento original.
     let (second, body) = emitir(&scenario, None).await;
-    assert_eq!(second, StatusCode::CREATED, "{body}");
-    let nuevo: Uuid = serde_json::from_value(body["grant_id"].clone()).unwrap();
-    assert_ne!(nuevo, grant_id);
+    assert_eq!(second, StatusCode::OK, "{body}");
+    assert_eq!(body["recovered"], true);
+    assert_eq!(body["grant_json"], grant_original);
+    assert_eq!(body["signature_b64"], firma_original);
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>(
+            "SELECT count(*) FROM issued_license WHERE installation_id = $1",
+        )
+        .bind(scenario.installation)
+        .fetch_one(&scenario.pool)
+        .await
+        .unwrap(),
+        1,
+        "sólo un grant para la suscripción"
+    );
+
+    // La recuperación se audita aparte y no se contabiliza como emisión.
+    let emitidas = eventos(&scenario.pool, "license.issued", &scenario.installation).await;
+    assert_eq!(emitidas.len(), 1);
+    let recuperadas = eventos(&scenario.pool, "license.recovered", &scenario.installation).await;
+    assert_eq!(recuperadas.len(), 1);
+    assert_eq!(recuperadas[0].0, "success");
+    assert_eq!(recuperadas[0].1, body["grant_id"].as_str().unwrap());
+    let denegados = eventos(
+        &scenario.pool,
+        "license.issuance_denied",
+        &scenario.installation,
+    )
+    .await;
+    assert!(denegados.is_empty());
+}
+
+/// Solicitudes concurrentes: la unicidad (instalación, suscripción) garantiza
+/// un único grant; la solicitud perdedora recupera el documento ganador.
+#[tokio::test]
+async fn emisiones_concurrentes_producen_un_solo_grant() {
+    let scenario = escenario(
+        "local",
+        json!({"catalog": true, "sales": true}),
+        FIN_VIGENCIA,
+        "active",
+    )
+    .await;
+    let (a, b) = tokio::join!(emitir(&scenario, None), emitir(&scenario, None));
+    assert!(a.0.is_success(), "{}", a.1);
+    assert!(b.0.is_success(), "{}", b.1);
+    assert_eq!(a.1["grant_id"], b.1["grant_id"]);
+    assert_eq!(a.1["grant_json"], b.1["grant_json"]);
+    let emitidas = eventos(&scenario.pool, "license.issued", &scenario.installation).await;
+    assert_eq!(emitidas.len(), 1, "una única emisión real");
     let total: i64 =
         sqlx::query_scalar("SELECT count(*) FROM issued_license WHERE installation_id = $1")
             .bind(scenario.installation)
@@ -492,6 +507,144 @@ async fn reintento_tras_perder_el_grant_emite_un_documento_nuevo() {
             .await
             .unwrap();
     assert_eq!(total, 1);
+}
+
+/// La recuperación exige contexto comercial vigente: si la suscripción venció
+/// después de emitir, no se reentrega el grant ni se emite otro.
+#[tokio::test]
+async fn recuperacion_de_grant_con_suscripcion_vencida_se_rechaza() {
+    let scenario = escenario(
+        "local",
+        json!({"catalog": true, "sales": true}),
+        FIN_VIGENCIA,
+        "active",
+    )
+    .await;
+    let (first, body) = emitir(&scenario, None).await;
+    assert_eq!(first, StatusCode::CREATED, "{body}");
+    let subscription_id: Uuid =
+        sqlx::query_scalar("SELECT subscription_id FROM issued_license WHERE installation_id = $1")
+            .bind(scenario.installation)
+            .fetch_one(&scenario.pool)
+            .await
+            .unwrap();
+    sqlx::query("UPDATE subscription SET ends_at = now() - interval '1 day' WHERE id = $1")
+        .bind(subscription_id)
+        .execute(&scenario.pool)
+        .await
+        .unwrap();
+
+    let (second, body) = emitir(&scenario, None).await;
+    assert_eq!(second, StatusCode::FORBIDDEN, "{body}");
+    assert_eq!(body["code"], "not_entitled");
+    assert!(
+        eventos(&scenario.pool, "license.recovered", &scenario.installation)
+            .await
+            .is_empty()
+    );
+    let denegados = eventos(
+        &scenario.pool,
+        "license.issuance_denied",
+        &scenario.installation,
+    )
+    .await;
+    assert_eq!(denegados.len(), 1);
+    assert_eq!(denegados[0].2["reason"], "not_entitled");
+}
+
+/// Suscripción suspendida: sin derecho efectivo, la emisión (y con ella la
+/// recuperación) se rechaza.
+#[tokio::test]
+async fn suscripcion_suspendida_se_rechaza() {
+    let scenario = escenario(
+        "local",
+        json!({"catalog": true, "sales": true}),
+        FIN_VIGENCIA,
+        "active",
+    )
+    .await;
+    sqlx::query(
+        "UPDATE subscription SET status = 'suspended', suspended_at = now() WHERE organization_id = $1",
+    )
+    .bind(scenario.organization)
+    .execute(&scenario.pool)
+    .await
+    .unwrap();
+    let (status, body) = emitir(&scenario, None).await;
+    assert_eq!(status, StatusCode::FORBIDDEN, "{body}");
+    assert_eq!(body["code"], "not_entitled");
+    assert!(
+        eventos(&scenario.pool, "license.issued", &scenario.installation)
+            .await
+            .is_empty()
+    );
+}
+
+/// La renovación (C) crea una suscripción nueva: la emisión posterior es una
+/// primera emisión para esa suscripción (grant nuevo), el grant anterior queda
+/// en el historial y no se reutiliza ni se elimina.
+#[tokio::test]
+async fn renovacion_posterior_emite_grant_nuevo_para_la_nueva_suscripcion() {
+    let scenario = escenario(
+        "local",
+        json!({"catalog": true, "sales": true}),
+        FIN_VIGENCIA,
+        "active",
+    )
+    .await;
+    let (first, body) = emitir(&scenario, None).await;
+    assert_eq!(first, StatusCode::CREATED, "{body}");
+    let grant_original: Uuid = serde_json::from_value(body["grant_id"].clone()).unwrap();
+    let subscription_original: Uuid =
+        sqlx::query_scalar("SELECT subscription_id FROM issued_license WHERE grant_id = $1")
+            .bind(grant_original)
+            .fetch_one(&scenario.pool)
+            .await
+            .unwrap();
+
+    // Renovación por el dominio comercial: nueva suscripción con ventana nueva.
+    let renewal = Request::builder()
+        .method(Method::POST)
+        .uri(format!(
+            "/api/v1/control/subscriptions/{subscription_original}/renew"
+        ))
+        .header(header::COOKIE, &scenario.admin)
+        .header(header::ORIGIN, "http://127.0.0.1:8080")
+        .header("Idempotency-Key", format!("renew-{}", Uuid::new_v4()))
+        .header(header::CONTENT_TYPE, "application/json")
+        .body(Body::from(
+            json!({"plan_id": null, "ends_at": "2031-01-01T00:00:00Z"}).to_string(),
+        ))
+        .unwrap();
+    let response = scenario.router.clone().oneshot(renewal).await.unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+
+    // Emisión tras renovar: el derecho vigente es la suscripción nueva, así
+    // que la emisión es nueva (201) y produce un grant distinto.
+    let (second, body) = emitir(&scenario, None).await;
+    assert_eq!(second, StatusCode::CREATED, "{body}");
+    assert_eq!(body["recovered"], false);
+    let grant_nuevo: Uuid = serde_json::from_value(body["grant_id"].clone()).unwrap();
+    assert_ne!(grant_nuevo, grant_original);
+    let subscription_nueva: Uuid =
+        sqlx::query_scalar("SELECT subscription_id FROM issued_license WHERE grant_id = $1")
+            .bind(grant_nuevo)
+            .fetch_one(&scenario.pool)
+            .await
+            .unwrap();
+    assert_ne!(subscription_nueva, subscription_original);
+    let total: i64 =
+        sqlx::query_scalar("SELECT count(*) FROM issued_license WHERE installation_id = $1")
+            .bind(scenario.installation)
+            .fetch_one(&scenario.pool)
+            .await
+            .unwrap();
+    assert_eq!(total, 2, "historial de grants preservado");
+    // La vigencia nueva proviene de la suscripción renovada, no del cliente.
+    let grant: Value = serde_json::from_str(body["grant_json"].as_str().unwrap()).unwrap();
+    assert_eq!(grant["plan"], "local");
+    let emitidas = eventos(&scenario.pool, "license.issued", &scenario.installation).await;
+    assert_eq!(emitidas.len(), 2);
 }
 
 #[tokio::test]

@@ -112,7 +112,7 @@ Requisitos que Platform impone, no implementa:
 | Custodia y rotación de la clave Ed25519 | Hoy la clave viene de configuración; la emisión comercial exige firmante y habilitación explícita de pruebas | Emisión productiva de licencias |
 | Elegibilidad de emisión | **Resuelta**: suscripción activa, producto habilitado, organización activa, instalación perteneciente y capability del actor se verifican antes de firmar | — |
 | Auditoría de emisión | **Resuelta**: `license.issued` y `license.issuance_denied` en `staff_audit_event`, transaccional con el registro del grant | — |
-| Duplicados y reintentos | **Resuelto**: unicidad (instalación, suscripción); duplicado 409; reemisión tras pérdida permitida | — |
+| Duplicados y reintentos | **Resuelto**: unicidad (instalación, suscripción); la repetición **recupera el grant original** (200, `recovered=true`) sin re-firmar ni duplicar, auditada como `license.recovered`; emisiones concurrentes convergen al mismo documento; reemisión sólo tras renovación (suscripción nueva) | — |
 | Política de renovación offline | Ventana de gracia, reintentos y conflicto | Operación offline en campo |
 | Revocación de licencia | POS debe detectar una licencia revocada al reconectar | Soporte y abuso |
 | Contrato de errores de integración | Códigos estables para POS | UX de POS |
