@@ -68,6 +68,28 @@ con backdrop difuminado, estados vacío/carga/error y skeleton.
 Estados obligatorios: normal, hover, focus-visible, disabled, loading y error.
 Iconografía de línea coherente; no se usan emojis como iconos de interfaz.
 
+Criterios de composición aplicados en las fases C y D:
+
+- **Un solo `h1` por pantalla.** Las secciones dentro de una organización usan
+  `PageHeader level={2}` y una escala menor; la cabecera de la organización
+  conserva la jerarquía principal.
+- **Fichas de datos dentro de paneles** sin caja anidada: reglas internas en
+  lugar de un segundo marco, y el último campo impar ocupa la fila completa.
+- **Pestañas**: `.tabs` en Control Center (cambio de conjunto de datos) y
+  `.section-tabs` en el Portal (secciones de una organización). El estado activo
+  se expresa con `aria-current`/`is-active`, nunca con el modificador de
+  paginación.
+- **Formularios**: etiquetas alineadas arriba aunque un campo sea un textarea; el
+  botón de envío se ancla al pie de la fila. Controles nativos (checkbox, radio)
+  mantienen su tamaño y no heredan el estilo de los campos de texto.
+- **Botones**: `.button` trae las métricas de tamaño por defecto, de modo que un
+  enlace con la clase base nunca se colapse; los modificadores solo ajustan
+  densidad.
+- **Tablas**: acciones de fila compactas, densidad reducida en pantallas
+  estrechas y scroll contenido en lugar de comprimir columnas.
+- **Estados**: un fallo de API muestra el banner de error y **no** además el
+  estado vacío correspondiente.
+
 ## Responsive y accesibilidad
 
 Breakpoints validados: 1920×1080, 1440×900, 1366×768, 1024×768, 768×1024,
@@ -75,6 +97,11 @@ Breakpoints validados: 1920×1080, 1440×900, 1366×768, 1024×768, 768×1024,
 
 - Sin desbordamiento horizontal accidental; tablas con scroll contenido y modo
   tarjeta donde el componente lo define.
+- En el shell móvil, las filas del grid son explícitas
+  (`auto` + `minmax(0, 1fr)`): sin ellas el alto sobrante se reparte entre la
+  barra y el contenido y el topbar aparece a media página en vistas cortas.
+- La navegación horizontal (barra del Control Center y pestañas de sección del
+  Portal) indica continuidad con un degradado en el borde derecho.
 - Foco visible con `#58DCF5`, navegación por teclado y skip link en el shell.
 - Contraste AA en texto e indicadores; `prefers-reduced-motion` desactiva
   transiciones.
@@ -82,15 +109,25 @@ Breakpoints validados: 1920×1080, 1440×900, 1366×768, 1024×768, 768×1024,
 
 ## Evidencia visual
 
-Capturas bajo demanda (no forman parte del CI obligatorio y no comparan píxeles):
+Capturas bajo demanda (no comparan píxeles). Los specs se omiten sin
+`HIQNET_VISUAL_DIR`:
 
 ```bash
 HIQNET_VISUAL_DIR=/tmp/hiqnet-visual pnpm --filter @hiqnet/control-center e2e visual
-HIQNET_VISUAL_DIR=/tmp/hiqnet-visual pnpm --filter @hiqnet/platform-portal e2e visual
+
+# Portal: el config visual añade el servidor de desarrollo
+cd apps/portal
+HIQNET_VISUAL_DIR=visual-artifacts pnpm exec playwright test visual \
+  --config=playwright.visual.config.ts
 ```
 
-Los specs viven en `apps/*/e2e/visual.spec.ts` y se omiten sin la variable de
-entorno.
+Guardas que sí se ejecutan siempre (API simulada, sin backend):
+
+- `apps/control-center/e2e/layout.spec.ts`: el topbar arranca donde termina la
+  barra móvil y no hay desbordamiento horizontal a 320 px.
+- `apps/control-center/e2e/visual-contrast.spec.ts` y
+  `apps/portal/e2e/visual-contrast.spec.ts`: contraste AA calculado sobre colores
+  computados de roles clave (títulos, textos, botones, badges, navegación).
 
 ## Reglas para futuras pantallas
 
@@ -101,3 +138,8 @@ entorno.
 4. Toda pantalla nueva debe cubrir los estados y los breakpoints anteriores.
 5. No introducir una librería UI adicional sin evaluar primero el valor real
    frente a la complejidad que añade.
+6. Mantener la jerarquía: un `h1` por pantalla; el resto de encabezados baja de
+   nivel, no de estilo.
+7. Control Center y Portal comparten marca y criterios, pero no son copias:
+   Control Center prioriza densidad operativa; el Portal, lectura y acciones del
+   cliente.

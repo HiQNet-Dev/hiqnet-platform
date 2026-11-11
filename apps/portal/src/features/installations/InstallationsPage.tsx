@@ -95,6 +95,7 @@ export function InstallationsPage() {
   return (
     <div className="page-stack">
       <PageHeader
+        level={2}
         eyebrow="Dispositivos"
         title="Instalaciones"
         description="Equipos HiQNet POS vinculados a esta organización. El estado se actualiza con la autoridad real de Platform."
@@ -110,9 +111,10 @@ export function InstallationsPage() {
         }
       />
 
-      {installations.isError && <ErrorBanner error={installations.error} />}
-
-      {installations.isPending ? (
+      {/* Un fallo de API no debe presentarse además como "aún no hay instalaciones". */}
+      {installations.isError ? (
+        <ErrorBanner error={installations.error} />
+      ) : installations.isPending ? (
         <div className="panel">
           <Skeleton className="skeleton--row" />
           <Skeleton className="skeleton--row" />

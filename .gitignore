@@ -12,6 +12,7 @@ signing/
 # --- Builds ---
 target/
 __pycache__/
+visual-artifacts/
 dist/
 node_modules/
 coverage/
