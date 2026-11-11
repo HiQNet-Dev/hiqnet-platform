@@ -9,6 +9,10 @@ pub(crate) struct Settings {
     pub(crate) database_url: String,
     pub(crate) signing_key_b64: Option<String>,
     pub(crate) allow_dev_issuance: bool,
+    /// Habilitación explícita de la emisión comercial controlada. Sin ella el
+    /// firmante sólo sirve a los flujos DEV; la emisión productiva sigue
+    /// prohibida hasta que exista custodia de clave autorizada.
+    pub(crate) allow_license_issuance: bool,
     pub(crate) admin_token: Option<String>,
     pub(crate) development: bool,
     pub(crate) cookie_secure: bool,
@@ -34,6 +38,9 @@ impl Settings {
             .ok()
             .filter(|value| !value.is_empty());
         let allow_dev_issuance = std::env::var("HIQNET_PLATFORM_ALLOW_DEV_ISSUANCE")
+            .map(|value| value == "true")
+            .unwrap_or(false);
+        let allow_license_issuance = std::env::var("HIQNET_PLATFORM_ALLOW_LICENSE_ISSUANCE")
             .map(|value| value == "true")
             .unwrap_or(false);
         let admin_token = std::env::var("HIQNET_PLATFORM_ADMIN_TOKEN")
@@ -81,6 +88,7 @@ impl Settings {
             database_url,
             signing_key_b64,
             allow_dev_issuance,
+            allow_license_issuance,
             admin_token,
             development,
             cookie_secure,

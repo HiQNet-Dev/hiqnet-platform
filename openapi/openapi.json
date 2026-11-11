@@ -1080,6 +1080,134 @@
         ]
       }
     },
+    "/api/v1/control/installations/{installation_id}/licenses": {
+      "post": {
+        "tags": [
+          "Licencias"
+        ],
+        "summary": "Emite una licencia firmada desde el derecho comercial vigente",
+        "operationId": "issueControlLicense",
+        "parameters": [
+          {
+            "name": "installation_id",
+            "in": "path",
+            "description": "UUID de la instalación",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "description": "product_id: UUID del producto contratado; plan, features y vigencia se resuelven en Platform",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/IssueControlLicenseRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Licencia firmada y auditada",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IssuedLicenseResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "UUID o JSON malformado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sesión staff requerida",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Capability insuficiente u origen no permitido",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Instalación u organización inexistentes; una instalación ajena no se revela",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Ya existe una licencia para la misma suscripción",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Content-Type distinto de application/json",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Plan o capacidad del plan no representables en el contrato v1",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Emisión deshabilitada o PostgreSQL no disponible",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "staffSession": []
+          }
+        ]
+      }
+    },
     "/api/v1/control/installations/{installation_id}/reactivate": {
       "post": {
         "tags": [
@@ -7756,6 +7884,18 @@
               "string",
               "null"
             ]
+          }
+        }
+      },
+      "IssueControlLicenseRequest": {
+        "type": "object",
+        "required": [
+          "product_id"
+        ],
+        "properties": {
+          "product_id": {
+            "type": "string",
+            "format": "uuid"
           }
         }
       },

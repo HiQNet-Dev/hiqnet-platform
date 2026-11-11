@@ -11,6 +11,7 @@ pub mod control;
 pub mod enrollment;
 pub mod error;
 pub mod installation_control;
+pub mod license_issuance;
 pub mod organization_product;
 pub mod ports;
 pub mod product;

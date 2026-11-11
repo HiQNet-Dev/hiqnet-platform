@@ -18,6 +18,8 @@ pub struct AppState {
     pub enrollment_approve_limiter: Arc<auth::LoginLimiter>,
     pub admin_token: Option<String>,
     pub licensing_enabled: bool,
+    /// Emisión comercial controlada: exige firmante y habilitación explícita.
+    pub license_issuance_enabled: bool,
     pub db_pool: PgPool,
 }
 
@@ -27,6 +29,10 @@ pub(crate) fn err(error: AppError) -> (StatusCode, Json<ErrorResponse>) {
             StatusCode::NOT_FOUND
         }
         AppError::Unauthorized | AppError::AdminDisabled => StatusCode::UNAUTHORIZED,
+        AppError::NotEntitled => StatusCode::FORBIDDEN,
+        AppError::UnsupportedPlan | AppError::UnsupportedFeature => {
+            StatusCode::UNPROCESSABLE_ENTITY
+        }
         AppError::LicensingDisabled
         | AppError::Storage
         | AppError::Domain(DomainError::LicensingDisabled) => StatusCode::SERVICE_UNAVAILABLE,

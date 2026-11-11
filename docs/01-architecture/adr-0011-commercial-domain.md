@@ -177,14 +177,13 @@ La expiración lógica (`now >= ends_at`) se evalúa antes que `suspended`/`canc
 
 ### D-BETA-COM-06 — Compatibilidad de licenciamiento v1
 
-- `LicenseGrant` v1 y `issued_license` **no cambian** en Beta.
+- `LicenseGrant` v1 **no cambia**; `issued_license` incorpora `subscription_id` (migración 0012) como trazabilidad opcional (NULL en DEV).
 - El dominio comercial **no depende** de `installation` ni `issued_license`: un producto sin licencias offline o sin instalaciones puede tener plan, suscripción y entitlements sin emitir licencia.
 - `issued_license.plan` sigue siendo TEXT; la migración a un `plan_id` no es requisito de Beta.
-- La emisión productiva sigue deshabilitada por configuración (`ALLOW_DEV_ISSUANCE=false` por defecto, sin `devAdminToken` productivo).
-- La suscripción es la base futura de elegibilidad, pero la emisión productiva requiere un ADR/implementación posterior con custodia de clave, elegibilidad, auditoría y compatibilidad POS.
+- La emisión productiva sigue deshabilitada por configuración (`ALLOW_DEV_ISSUANCE=false` y `HIQNET_PLATFORM_ALLOW_LICENSE_ISSUANCE` desactivada por defecto).
+- La elegibilidad y la auditoría de la emisión controlada se implementan en el endpoint de staff; la emisión productiva con KMS/HSM sigue requiriendo decisión y autorización explícitas.
 - El **trial comercial** de Beta no reemplaza ni migra automáticamente el trial técnico legacy de POS (`installation.trial_started_at`/`trial_ends_at` y `POST /installations/{id}/trial`). Ambos coexisten; la integración POS definirá la autoridad final. No se modifica el endpoint legacy en Beta.
-- No se transforma silenciosamente el documento de licencia v1.
-- No se utiliza `devAdminToken` como mecanismo comercial.
+- No se transforma silenciosamente el documento de licencia v1: un plan o una capacidad no representable en el catálogo v1 rechaza la emisión (422).
 
 ### D-BETA-COM-07 — RBAC sin nuevas capabilities en Beta
 

@@ -1,6 +1,7 @@
 use platform_core::DomainError;
 
-#[derive(Debug, thiserror::Error)]
+/// `PartialEq` soporta aserciones directas en las pruebas de dominio.
+#[derive(Debug, thiserror::Error, PartialEq)]
 pub enum AppError {
     #[error(transparent)]
     Domain(#[from] DomainError),
@@ -22,6 +23,15 @@ pub enum AppError {
 
     #[error("acceso denegado")]
     Unauthorized,
+
+    #[error("la organización no tiene derechos comerciales vigentes para emitir")]
+    NotEntitled,
+
+    #[error("el plan contratado no es representable en el contrato de licencia v1")]
+    UnsupportedPlan,
+
+    #[error("una capacidad del plan no es representable en el contrato de licencia v1")]
+    UnsupportedFeature,
 }
 
 impl AppError {
@@ -39,6 +49,9 @@ impl AppError {
             AppError::LicensingDisabled => "licensing_disabled",
             AppError::AdminDisabled => "admin_disabled",
             AppError::Unauthorized => "unauthorized",
+            AppError::NotEntitled => "not_entitled",
+            AppError::UnsupportedPlan => "unsupported_plan",
+            AppError::UnsupportedFeature => "unsupported_feature",
         }
     }
 }

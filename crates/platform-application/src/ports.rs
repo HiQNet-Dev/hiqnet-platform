@@ -1,5 +1,5 @@
 use async_trait::async_trait;
-use platform_core::ids::{InstallationId, OrganizationId};
+use platform_core::ids::{InstallationId, OrganizationId, StaffAccountId};
 use platform_core::installation::Installation;
 use platform_core::license::IssuedLicense;
 use platform_core::plan::PlanDefinition;
@@ -15,6 +15,24 @@ pub trait PlatformRepository: Send + Sync {
     async fn start_trial(&self, id: InstallationId, now: OffsetDateTime)
     -> AppResult<Installation>;
     async fn record_license(&self, license: &IssuedLicense) -> AppResult<()>;
+    /// Registra la licencia y su evento de auditoría en una sola transacción.
+    async fn record_license_with_audit(
+        &self,
+        license: &IssuedLicense,
+        actor: StaffAccountId,
+        product_id: Uuid,
+        subscription_id: Uuid,
+    ) -> AppResult<()>;
+    /// Registra el rechazo de una solicitud de emisión (sin materiales del grant).
+    async fn record_license_denial(
+        &self,
+        installation_id: InstallationId,
+        organization_id: OrganizationId,
+        product_id: Uuid,
+        actor: StaffAccountId,
+        reason: &str,
+        now: OffsetDateTime,
+    ) -> AppResult<()>;
     async fn list_licenses(&self, installation_id: InstallationId)
     -> AppResult<Vec<IssuedLicense>>;
 }
