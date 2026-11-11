@@ -375,6 +375,15 @@ code {
   line-height: 1.12;
 }
 
+/* Secciones dentro de una organización: la cabecera de la organización sigue
+   siendo el título principal (h1) y estas se leen como subsecciones. */
+.page-header h2 {
+  font-size: clamp(20px, 2.2vw, 24px);
+  font-weight: 680;
+  letter-spacing: -0.025em;
+  line-height: 1.15;
+}
+
 .page-header__description {
   max-width: 680px;
   margin-top: 8px;
@@ -394,9 +403,14 @@ code {
   align-items: center;
   justify-content: center;
   gap: 8px;
+  /* Métricas por defecto: los enlaces con .button (sin modificador de tamaño)
+     mantienen el mismo alto y padding que los botones del componente. */
+  min-height: 38px;
+  padding: 0 14px;
   border: 1px solid transparent;
   border-radius: var(--radius-sm);
   cursor: pointer;
+  font-size: 13.5px;
   font-weight: 620;
   line-height: 1;
   transition:
@@ -523,7 +537,7 @@ code {
 }
 
 .panel--danger-zone {
-  border-color: #f2c6c2;
+  border-color: color-mix(in srgb, var(--danger) 45%, var(--border));
 }
 
 .panel__heading {
@@ -1193,12 +1207,12 @@ code {
 /* Empty, errors, loading */
 .empty-state {
   display: flex;
-  min-height: 260px;
+  min-height: 220px;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 34px;
-  border: 1px dashed var(--border-strong);
+  padding: 32px;
+  border: 1px solid var(--border);
   border-radius: var(--radius-md);
   background: var(--surface);
   text-align: center;
@@ -1257,6 +1271,10 @@ code {
 .full-page-state .spinner {
   margin-top: 8px;
   color: var(--accent);
+}
+
+.full-page-state .button {
+  margin-top: 8px;
 }
 
 .error-banner {
@@ -1574,6 +1592,10 @@ code {
 
   .section-tabs {
     overflow-x: auto;
+    scrollbar-width: none;
+    /* Indica que quedan secciones a la derecha en pantallas estrechas. */
+    padding-right: 20px;
+    mask-image: linear-gradient(to right, #000 0, #000 calc(100% - 20px), transparent 100%);
   }
 
   .section-tabs__link {
@@ -1823,10 +1845,6 @@ body {
 .badge--neutral {
   background: var(--surface-raised);
   color: var(--text-secondary);
-}
-
-.panel--danger-zone {
-  border-color: var(--danger);
 }
 
 .section-tabs__soon {

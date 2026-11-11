@@ -98,6 +98,7 @@ export function MembersPage() {
   return (
     <div className="page-stack">
       <PageHeader
+        level={2}
         eyebrow="Acceso"
         title="Miembros"
         description={

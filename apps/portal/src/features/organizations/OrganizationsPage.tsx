@@ -116,9 +116,10 @@ export function OrganizationsPage() {
         }
       />
 
-      {organizations.isError && <ErrorBanner error={organizations.error} />}
-
-      {organizations.isPending ? (
+      {/* Un fallo de API no debe presentarse además como "no hay organizaciones". */}
+      {organizations.isError ? (
+        <ErrorBanner error={organizations.error} />
+      ) : organizations.isPending ? (
         <div className="panel">
           <Skeleton className="skeleton--row" />
           <Skeleton className="skeleton--row" />

@@ -90,6 +90,7 @@ export function ProductsPage() {
   return (
     <div className="page-stack">
       <PageHeader
+        level={2}
         eyebrow="Comercial"
         title="Productos contratados"
         description="Productos habilitados para esta organización, su plan, estado de suscripción y derechos efectivos."
@@ -134,6 +135,7 @@ export function ProductDetailPage() {
   return (
     <div className="page-stack">
       <PageHeader
+        level={2}
         eyebrow="Producto contratado"
         title={value.product.name}
         description={`${value.product.key} · ${value.organization_product_status}`}
