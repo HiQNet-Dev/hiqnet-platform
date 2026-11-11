@@ -92,6 +92,11 @@ jobs:
           cache: pnpm
       - name: Instalar dependencias del workspace
         run: pnpm install --frozen-lockfile
+      - name: Cache de navegadores Playwright
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-${{ hashFiles('pnpm-lock.yaml') }}
       - name: Lint, typecheck, tests, build y contrato OpenAPI
         run: |
           pnpm control:lint
@@ -100,7 +105,17 @@ jobs:
           pnpm control:build
           pnpm control:api:check
       - name: Instalar Chromium para E2E
-        run: pnpm --filter @hiqnet/control-center exec playwright install --with-deps chromium
+        run: |
+          set -euo pipefail
+          for intento in 1 2 3 4; do
+            echo "Intento $intento de instalar Chromium con dependencias"
+            if timeout 900 pnpm --filter @hiqnet/control-center exec playwright install --with-deps chromium; then
+              exit 0
+            fi
+            sleep $((intento * 30))
+          done
+          echo "::error::no fue posible instalar Chromium tras 4 intentos (dependencias del sistema)"
+          exit 1
       - name: E2E crítico del Control Center
         run: pnpm --filter @hiqnet/control-center e2e
 
@@ -174,6 +189,11 @@ jobs:
           cache: pnpm
       - name: Instalar dependencias
         run: pnpm install --frozen-lockfile
+      - name: Cache de navegadores Playwright
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-${{ hashFiles('pnpm-lock.yaml') }}
       - name: Compilar API y bootstraps
         run: cargo build -p hiqnet-platform-api --bin hiqnet-platform-api --bin dev-bootstrap-account --bin dev-bootstrap-staff
       - name: Crear base E2E
@@ -223,7 +243,17 @@ jobs:
           FROM product WHERE key='pos';
           SQL
       - name: Instalar Chromium
-        run: pnpm --filter @hiqnet/platform-portal exec playwright install --with-deps chromium
+        run: |
+          set -euo pipefail
+          for intento in 1 2 3 4; do
+            echo "Intento $intento de instalar Chromium con dependencias"
+            if timeout 900 pnpm --filter @hiqnet/platform-portal exec playwright install --with-deps chromium; then
+              exit 0
+            fi
+            sleep $((intento * 30))
+          done
+          echo "::error::no fue posible instalar Chromium tras 4 intentos (dependencias del sistema)"
+          exit 1
       - name: Arrancar Portal
         run: |
           nohup pnpm --filter @hiqnet/platform-portal dev > /tmp/portal.log 2>&1 &
@@ -241,7 +271,17 @@ jobs:
           PLATFORM_STAFF_PASSWORD: StaffE2E-2026!
         run: pnpm --filter @hiqnet/platform-portal e2e --reporter=line
       - name: Instalar Chromium para el Control Center
-        run: pnpm --filter @hiqnet/control-center exec playwright install --with-deps chromium
+        run: |
+          set -euo pipefail
+          for intento in 1 2 3 4; do
+            echo "Intento $intento de instalar Chromium con dependencias"
+            if timeout 900 pnpm --filter @hiqnet/control-center exec playwright install --with-deps chromium; then
+              exit 0
+            fi
+            sleep $((intento * 30))
+          done
+          echo "::error::no fue posible instalar Chromium tras 4 intentos (dependencias del sistema)"
+          exit 1
       - name: E2E full-stack del Control Center (5 viewports)
         env:
           PLATFORM_STAFF_EMAIL: staff-e2e@hiqnet.test
