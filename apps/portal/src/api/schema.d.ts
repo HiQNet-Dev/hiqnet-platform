@@ -242,6 +242,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/control/installations/{installation_id}/licenses": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Emite una licencia firmada desde el derecho comercial vigente */
+        post: operations["issueControlLicense"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/control/installations/{installation_id}/reactivate": {
         parameters: {
             query?: never;
@@ -1441,6 +1458,10 @@ export interface components {
             items: components["schemas"]["InstallationListItemResponse"][];
             next_cursor?: string | null;
         };
+        IssueControlLicenseRequest: {
+            /** Format: uuid */
+            product_id: string;
+        };
         IssueLicenseBody: {
             /** @example trial */
             plan: string;
@@ -2581,6 +2602,106 @@ export interface operations {
                 };
             };
             /** @description Almacenamiento no disponible */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    issueControlLicense: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description UUID de la instalación */
+                installation_id: string;
+            };
+            cookie?: never;
+        };
+        /** @description product_id: UUID del producto contratado; plan, features y vigencia se resuelven en Platform */
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IssueControlLicenseRequest"];
+            };
+        };
+        responses: {
+            /** @description Licencia firmada y auditada */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IssuedLicenseResponse"];
+                };
+            };
+            /** @description UUID o JSON malformado */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Sesión staff requerida */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Capability insuficiente u origen no permitido */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Instalación u organización inexistentes; una instalación ajena no se revela */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Ya existe una licencia para la misma suscripción */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Content-Type distinto de application/json */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Plan o capacidad del plan no representables en el contrato v1 */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Emisión deshabilitada o PostgreSQL no disponible */
             503: {
                 headers: {
                     [name: string]: unknown;
