@@ -1271,6 +1271,10 @@ dependencies = [
  "base64 0.22.1",
  "ed25519-dalek",
  "platform-application",
+ "platform-core",
+ "serde_json",
+ "time",
+ "uuid",
 ]
 
 [[package]]

@@ -21,6 +21,7 @@ mod control;
 mod control_audit;
 mod control_directory;
 mod control_installations;
+mod control_licensing;
 mod control_organization_products;
 mod enrollment;
 mod licensing;

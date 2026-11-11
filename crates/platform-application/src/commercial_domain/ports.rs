@@ -99,6 +99,16 @@ impl CommercialActor {
         }
     }
 
+    /// Cuenta de personal que ejecuta la operación (para auditoría).
+    pub fn staff_account_id(&self) -> StaffAccountId {
+        self.account_id
+    }
+
+    /// Consulta de capacidad para servicios fuera del módulo comercial.
+    pub fn has_capability(&self, capability: Capability) -> bool {
+        self.capabilities.contains(&capability)
+    }
+
     pub(super) fn require(&self, capability: Capability) -> CommercialResult<()> {
         if self.capabilities.contains(&capability) {
             Ok(())

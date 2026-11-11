@@ -88,9 +88,10 @@ Para POS, la consecuencia práctica es: **los derechos efectivos se piden a Plat
 ### 3.6 Licenciamiento técnico
 
 - `GET /api/v1/installations/{id}/licenses`, `POST /api/v1/installations/{id}/licenses`.
+- Emisión comercial controlada: `POST /api/v1/control/installations/{id}/licenses` (sesión staff, capability `InstallationsManage`). El cuerpo sólo lleva `product_id`; plan, features y vigencia se resuelven con `entitlements` antes de firmar y no se aceptan del cliente HTTP.
 - Contrato `LicenseGrant` v1: `version`, `grant_id`, `installation_id`, `organization_id`, `plan`, `features`, `issued_at`, `valid_until`, serializado en JSON canónico y firmado con **Ed25519**.
 - La clave privada nunca sale del backend. El verificador de POS sólo necesita la clave pública.
-- La emisión productiva está **deshabilitada** (`ALLOW_DEV_ISSUANCE=false`). Las rutas DEV no son un mecanismo comercial.
+- La emisión productiva está **deshabilitada** (`ALLOW_DEV_ISSUANCE=false` y `HIQNET_PLATFORM_ALLOW_LICENSE_ISSUANCE` desactivada por defecto). Las rutas DEV no son un mecanismo comercial.
 
 ## 4. Operación offline
 
@@ -108,9 +109,10 @@ Requisitos que Platform impone, no implementa:
 
 | Contrato | Motivo | Bloqueante para |
 |---|---|---|
-| Custodia y rotación de la clave Ed25519 | Hoy la clave viene de configuración y sólo se usa en DEV | Emisión productiva de licencias |
-| Elegibilidad de emisión | Debe validar suscripción activa y entitlements, no sólo la instalación | Emisión productiva |
-| Auditoría de emisión | Cada licencia emitida debe dejar evento | Emisión productiva |
+| Custodia y rotación de la clave Ed25519 | Hoy la clave viene de configuración; la emisión comercial exige firmante y habilitación explícita de pruebas | Emisión productiva de licencias |
+| Elegibilidad de emisión | **Resuelta**: suscripción activa, producto habilitado, organización activa, instalación perteneciente y capability del actor se verifican antes de firmar | — |
+| Auditoría de emisión | **Resuelta**: `license.issued` y `license.issuance_denied` en `staff_audit_event`, transaccional con el registro del grant | — |
+| Duplicados y reintentos | **Resuelto**: unicidad (instalación, suscripción); la repetición **recupera el grant original** (200, `recovered=true`) sin re-firmar ni duplicar, auditada como `license.recovered`; emisiones concurrentes convergen al mismo documento; reemisión sólo tras renovación (suscripción nueva) | — |
 | Política de renovación offline | Ventana de gracia, reintentos y conflicto | Operación offline en campo |
 | Revocación de licencia | POS debe detectar una licencia revocada al reconectar | Soporte y abuso |
 | Contrato de errores de integración | Códigos estables para POS | UX de POS |

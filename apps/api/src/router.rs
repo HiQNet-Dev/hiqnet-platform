@@ -64,6 +64,7 @@ pub(crate) fn api_routes() -> (Router<AppState>, OpenApiDocument) {
             control_installations::reactivate_control_installation
         ))
         .routes(routes!(control_installations::rehost_control_installation))
+        .routes(routes!(control_licensing::issue_control_license))
         .routes(routes!(control_audit::list_control_audit))
         .routes(routes!(control_audit::get_control_audit))
         .routes(routes!(control_audit::list_control_security_events))

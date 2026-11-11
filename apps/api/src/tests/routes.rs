@@ -113,6 +113,10 @@ fn generated_contract_matches_versioned_snapshot_and_expected_routes() {
             "/api/v1/control/organizations/{organization_id}/entitlements",
             "get",
         ),
+        (
+            "/api/v1/control/installations/{installation_id}/licenses",
+            "post",
+        ),
         ("/api/v1/organizations/{organization_id}/products", "get"),
         (
             "/api/v1/organizations/{organization_id}/products/{product_id}",

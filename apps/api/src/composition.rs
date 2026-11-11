@@ -16,6 +16,7 @@ pub(crate) fn assemble(settings: &Settings, pool: PgPool) -> anyhow::Result<(App
         .map_err(|error| anyhow::anyhow!(error))?
         .map(|signer| Arc::new(signer) as SharedSigner);
     let licensing_enabled = signer.is_some() && settings.allow_dev_issuance;
+    let license_issuance_enabled = signer.is_some() && settings.allow_license_issuance;
 
     let repository: SharedRepository = Arc::new(pool_repository(pool.clone()));
     let service = Arc::new(PlatformService::new(repository, signer));
@@ -55,6 +56,7 @@ pub(crate) fn assemble(settings: &Settings, pool: PgPool) -> anyhow::Result<(App
         )),
         admin_token: settings.admin_token.clone(),
         licensing_enabled,
+        license_issuance_enabled,
         db_pool: pool.clone(),
     };
 

@@ -20,6 +20,7 @@ Rutas existentes (sin query parameters):
 | POST | `/api/v1/installations/{id}/trial` | Bearer DEV | 200 | 404 no existe; 409 ya activado; 503 BD |
 | GET | `/api/v1/installations/{id}/licenses` | Bearer DEV | 200 | UUID inexistente: `[]`; 400 UUID inválido; 503 BD |
 | POST | `/api/v1/installations/{id}/licenses` | Bearer DEV | 201 | 400 plan/vigencia inválidos; 404 no existe; 503 emisión DEV deshabilitada o BD |
+| POST | `/api/v1/control/installations/{id}/licenses` | Cookie staff | 201 | 401 sesión; 403 capability/origen o sin derechos; 404 instalación u organización; 409 duplicado para la misma suscripción; 422 plan/capacidad no representable en v1; 503 emisión deshabilitada o BD |
 
 Rutas de identidad comercial (P02.2-A), independientes del token DEV anterior:
 
@@ -71,6 +72,15 @@ curl -i http://127.0.0.1:8080/api/v1/installations/123e4567-e89b-42d3-a456-42661
 ```
 
 No repitas el mismo UUID de ejemplo si ya lo registraste: la creación con ID existente en **la misma organización** es idempotente y puede devolver la instalación previa; si el UUID pertenece a otra organización responde 409. Trial sólo puede activarse una vez. Para emitir licencias DEV, además del token se requieren `HIQNET_PLATFORM_ALLOW_DEV_ISSUANCE=true` y una semilla Ed25519 local válida (`HIQNET_PLATFORM_SIGNING_KEY_B64`); por defecto está deshabilitado. Nunca uses una semilla de ejemplo para emitir fuera de pruebas.
+
+La emisión comercial controlada (`POST /api/v1/control/installations/{id}/licenses`) exige además `HIQNET_PLATFORM_ALLOW_LICENSE_ISSUANCE=true` (desactivada por defecto, sólo pruebas controladas). La solicitud sólo lleva `product_id`: plan, features y vigencia provienen del derecho comercial vigente (`entitlements`); el plan y las capacidades deben ser representables en el contrato v1 del POS (trial/local/pro/enterprise y el catálogo de features canónico) o la emisión se rechaza con 422, sin conversiones silenciosas.
+
+**Recuperación e idempotencia.** Existe una única licencia por par (instalación, suscripción), garantizada por índice parcial único en `issued_license`:
+
+- **Primera emisión** → `201` con `recovered=false`.
+- **Recuperación** (el cliente perdió el documento o la respuesta): la misma solicitud devuelve `200` con `recovered=true` y **exactamente el `grant_json` y `signature_b64` originales** —sin re-firmar ni crear otro grant—, tras revalidar identidad, capability y contexto comercial (suscripción vigente). Se audita como `license.recovered`, no como emisión; no se elimina ningún registro.
+- **Emisiones concurrentes**: la unicidad garantiza un único grant; la solicitud perdedora recupera el documento ganador.
+- **Renovación**: crea una **suscripción nueva** (historial inmutable del dominio comercial). La emisión posterior es una primera emisión para esa suscripción (grant nuevo con la vigencia de la ventana renovada); los grants anteriores quedan preservados como historial. No se reutilizan ni se eliminan grants.
 
 ## Cuenta sintética y sesión comercial DEV
 

@@ -48,6 +48,7 @@ pub(crate) fn state(pool: PgPool) -> AppState {
         )),
         admin_token: None,
         licensing_enabled: false,
+        license_issuance_enabled: false,
         db_pool: pool,
     }
 }
@@ -153,6 +154,60 @@ pub(crate) fn dev_state(pool: PgPool, licensing_enabled: bool) -> AppState {
         )),
         admin_token: Some("token-sintetico-p01".into()),
         licensing_enabled,
+        license_issuance_enabled: false,
+        db_pool: pool,
+    }
+}
+
+/// Estado con firmante sintético para la emisión comercial controlada.
+pub(crate) fn issuance_state(pool: PgPool, enabled: bool) -> AppState {
+    // Semilla efímera de pruebas: nunca se almacena ni se publica.
+    let mut seed = [0_u8; 32];
+    seed[..16].copy_from_slice(Uuid::new_v4().as_bytes());
+    seed[16..].copy_from_slice(Uuid::new_v4().as_bytes());
+    let signer: SharedSigner = Arc::new(
+        platform_licensing::Ed25519Signer::from_seed_base64(
+            &base64::engine::general_purpose::STANDARD.encode(seed),
+        )
+        .unwrap(),
+    );
+    AppState {
+        service: Arc::new(PlatformService::new(
+            Arc::new(pool_repository(pool.clone())),
+            Some(signer),
+        )),
+        commercial: Arc::new(CommercialService::new(PgCommercialRepository::new(
+            pool.clone(),
+        ))),
+        commercial_domain: Arc::new(
+            platform_application::commercial_domain::CommercialService::new(
+                platform_storage_postgres::PgCommercialDomainRepository::new(pool.clone()),
+            ),
+        ),
+        enrollment: Arc::new(EnrollmentService::new(
+            PgEnrollmentRepository::new(pool.clone()),
+            platform_core::enrollment::DEFAULT_CHALLENGE_TTL_SECONDS,
+            "http://127.0.0.1:8080/device".into(),
+        )),
+        organization_limiter: Arc::new(auth::LoginLimiter::new(
+            5,
+            std::time::Duration::from_secs(60),
+        )),
+        enrollment_begin_limiter: Arc::new(auth::LoginLimiter::new(
+            1000,
+            std::time::Duration::from_secs(60),
+        )),
+        enrollment_proof_limiter: Arc::new(auth::LoginLimiter::new(
+            1000,
+            std::time::Duration::from_secs(60),
+        )),
+        enrollment_approve_limiter: Arc::new(auth::LoginLimiter::new(
+            1000,
+            std::time::Duration::from_secs(60),
+        )),
+        admin_token: Some("token-sintetico-p01".into()),
+        licensing_enabled: false,
+        license_issuance_enabled: enabled,
         db_pool: pool,
     }
 }

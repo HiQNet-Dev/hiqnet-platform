@@ -1,0 +1,5 @@
+{
+  "grant_json": "{\"version\":1,\"grant_id\":\"c0ffee00-0000-4000-8000-000000000001\",\"installation_id\":\"0f9e8d7c-0000-4000-8000-0000000000bb\",\"organization_id\":\"0f9e8d7c-0000-4000-8000-0000000000aa\",\"plan\":\"pro\",\"features\":[\"catalog\",\"sales\",\"backups.local\"],\"issued_at\":[2026,1,0,0,0,0,0,0,0],\"valid_until\":[2099,1,0,0,0,0,0,0,0]}",
+  "public_key_b64": "6kpsY+KcUgq+9VB7Ey7F+ZVHdq6+vnuSQh7qaRRG0iw=",
+  "signature_b64": "fIvpOBFOSTGvDhjxJrmcw3Er9FD5E6jvu48LUac8FtB6/tZ/ZPq05qaYSaU4diiZwfwChOgh5RPoB9nz5h+hCw=="
+}
