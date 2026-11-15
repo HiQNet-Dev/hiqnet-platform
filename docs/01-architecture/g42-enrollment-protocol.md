@@ -56,6 +56,7 @@ Público, sin sesión, rate-limited, `Content-Type: application/json`.
 ```json
 {
   "installation_id": "6f1c0f0e-6a55-4d1e-9a2b-7a3f9f2a1c10",
+  "product_key": "pos",
   "public_key": "ed25519:v1:AbCd...",
   "device_label": "Caja mostrador",
   "app_version": "0.1.0",
@@ -66,6 +67,7 @@ Público, sin sesión, rate-limited, `Content-Type: application/json`.
 | Campo | Tipo | Requerido | Notas |
 |---|---|---|---|
 | `installation_id` | UUID | Sí | Handle local; **no** autoriza. |
+| `product_key` | string | Sí | Clave que el cliente envía; Platform la valida y resuelve contra su catálogo. |
 | `public_key` | string | Sí | `ed25519:v1:<base64url>`; 32 bytes. |
 | `device_label` | string | Sí | 1–120 caracteres; no es identidad. |
 | `app_version` | string | Sí | Para compatibilidad y diagnóstico. |
