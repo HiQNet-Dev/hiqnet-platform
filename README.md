@@ -31,7 +31,7 @@ crates/
   platform-application/ Casos de uso
   platform-storage-postgres/ Adaptador SQLx
   platform-licensing/  Firma Ed25519 de licencias
-migrations/            Migraciones SQLx incrementales (0001–0011)
+migrations/            Migraciones SQLx incrementales (0001–0012)
 openapi/               Contrato OpenAPI 3.1
 scripts/               Validaciones de repositorio y release
 docs/                  Arquitectura, desarrollo y operaciones
