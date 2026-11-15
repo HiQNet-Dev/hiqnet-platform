@@ -218,7 +218,7 @@ Prueba real en local (sustituye los valores por los sintéticos de tu ejecución
 curl -sS -X POST http://127.0.0.1:8080/api/v1/enrollment-requests \
   -H 'Content-Type: application/json' \
   -H 'Idempotency-Key: prueba-local-1' \
-  -d '{"installation_id":"<UUID>","public_key":"ed25519:v1:<BASE64URL>","device_label":"Caja local","app_version":"0.1.0","platform":"linux"}'
+  -d '{"installation_id":"<UUID>","product_key":"pos","public_key":"ed25519:v1:<BASE64URL>","device_label":"Caja local","app_version":"0.1.0","platform":"linux"}'
 ```
 
 El mensaje canónico se firma con la clave privada local; Platform sólo almacena la clave pública, el fingerprint SHA-256 y hashes de los códigos/nonce. Los secretos no aparecen en Swagger, auditoría ni logs.
