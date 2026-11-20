@@ -121,7 +121,7 @@ El escenario se ejecuta con API Axum + PostgreSQL reales. Los mocks no son evide
 
 ## 5. Criterios de cierre de Beta
 
-> **Estado al cerrar B10:** todos los criterios funcionales y técnicos fueron verificados; el detalle y la evidencia están en [Ejecución Beta](platform-beta-execution.md) §B9 y en [Notas de Beta](platform-beta-notes.md) §8. La publicación del tag `platform-v0.1.0-beta.1` sigue requiriendo autorización explícita.
+> **Estado al cerrar B10:** todos los criterios funcionales y técnicos fueron verificados; el detalle y la evidencia están en [Ejecución Beta](platform-beta-execution.md) §B9 y en [Notas de Beta](platform-beta-notes.md) §8. El plan de publicar `platform-v0.1.0-beta.1` quedó sustituido por la [política operativa post-R2.1](../03-operations/release-train.md).
 
 ### Funcional
 
@@ -258,7 +258,7 @@ Al cerrar Beta:
 
 ## 11. Versionado y release Beta
 
-El esquema vigente es `scripts/validate_release.py` + `.github/workflows/release-platform.yml`:
+> **HISTORICAL / SUPERSEDED.** Esquema del plan beta anterior: `scripts/validate_release.py` + `.github/workflows/release-platform.yml`. Se conserva la evidencia; no crear tag ni release. Ver [política vigente](../03-operations/release-train.md).
 
 - `Cargo.toml` workspace version: `0.1.0`.
 - Tag válido: `platform-v<SemVer>`; el prefijo del tag debe coincidir con la versión del workspace.

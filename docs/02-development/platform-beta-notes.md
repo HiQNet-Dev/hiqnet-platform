@@ -1,8 +1,8 @@
 # HiQNet Platform — Notas de la Beta 0.1.0
 
-**Estado:** Beta cerrada, pendiente de publicación de la etiqueta.
+**Estado:** cierre documental de la beta; estas notas no acreditan un despliegue.
 **Versión:** `0.1.0-beta.1`
-**Etiqueta prevista:** `platform-v0.1.0-beta.1`
+**Etiqueta del plan anterior (HISTORICAL / SUPERSEDED):** `platform-v0.1.0-beta.1`; no es un hito vigente.
 **Fecha:** 2026-11-09
 **Relacionado:** [Arquitectura](../01-architecture/platform.md) · [Backlog Beta](platform-beta-backlog.md) · [Seguridad Beta](platform-beta-security.md) · [Despliegue](../03-operations/deployment.md) · [Transición a POS](platform-transition-pos.md)
 
@@ -81,7 +81,9 @@ Se documentan para que no se descubran en producción:
 
 ## 6. Identificación y publicación de la versión
 
-Esquema vigente (`Cargo.toml` + `scripts/validate_release.py` + `.github/workflows/release-platform.yml`):
+> **HISTORICAL / SUPERSEDED.** Evidencia del plan anterior y del gating R2.1 (`5f06cf6`); no es una guía para publicar. Platform se opera por SHA y revisión de despliegue. Ver [política vigente](../03-operations/release-train.md). No crear el tag: mientras exista el workflow legacy, puede disparar la publicación.
+
+Esquema anterior (`Cargo.toml` + `scripts/validate_release.py` + `.github/workflows/release-platform.yml`):
 
 - Versión del workspace: `0.1.0`.
 - Tag válido: `platform-v<SemVer>` cuyo núcleo coincida con la versión del workspace.

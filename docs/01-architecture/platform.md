@@ -152,7 +152,7 @@ El contrato detallado está en [ADR-0011](adr-0011-commercial-domain.md).
 - Si negocio exige el dominio comercial antes que C6, la migración de C6 se renumera y se actualiza ADR-0010 **antes** de implementar. No se ejecutan ambas numeraciones en paralelo.
 - No se crean tablas antes de ratificar el contrato de dominio.
 - No se eliminan índices ni columnas existentes en Beta.
-- Versionado Beta: `platform-v0.1.0-beta.N` (prerelease SemVer). Ver [Backlog Beta](../02-development/platform-beta-backlog.md) §11. No se crea tag ni release en Fase 1.
+- Platform es una aplicación web interna, no un producto descargable. El SHA, el set de migraciones, CI, los artefactos inmutables y la revisión de despliegue identifican cada promoción. Ver [política operativa vigente](../03-operations/release-train.md); el esquema de tags del backlog beta es histórico.
 
 ## 11. Estado actual
 
@@ -169,7 +169,7 @@ El contrato detallado está en [ADR-0011](adr-0011-commercial-domain.md).
 
 - Pagos automáticos, checkout, cobros, reintentos, conciliación, facturación fiscal, CFDI.
 - Suscripciones con prorrateo, cupones o trials automáticos.
-- Environments, releases, deployments y administración de repositorios (C7).
+- Funciones de gestión de environments, releases, deployments y repositorios dentro del producto (C7). Esto no excluye operar Platform en sus propios entornos.
 - Sincronización cloud.
 - Terminal remoto, SQL remoto, filesystem, impersonación de clientes o comandos arbitrarios.
 - SIEM, risk score, severity engine, geolocation, device reputation.

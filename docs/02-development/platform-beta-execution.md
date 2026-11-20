@@ -36,7 +36,7 @@ c466f06  feat(commercial): núcleo comercial Beta (#26)
 | B9 — Validación Beta | **COMPLETADA** | PR #29 → `ec46015`; PR #30 → `697870a` |
 | B10 — Cierre documental | **COMPLETADO** | README, notas de Beta, runbook, backup/restore y transición POS |
 | B10.1 — Product Registry administrable | **COMPLETADO** | Alta y edición en Control Center; E2E real en 5 viewports; `read_only` sin mutaciones |
-| Publicación de `platform-v0.1.0-beta.1` | **PENDIENTE DE AUTORIZACIÓN** | Requiere push de tag; ver [Notas de Beta](platform-beta-notes.md) §6 |
+| Publicación prevista de `platform-v0.1.0-beta.1` | **HISTORICAL / SUPERSEDED** | Ver [política operativa post-R2.1](../03-operations/release-train.md)                 |
 
 ## B3 — alcance implementado
 
@@ -158,6 +158,8 @@ No se inicia: facturación avanzada, pagos automáticos, gestión de tareas, con
 
 ### Release
 
+> **HISTORICAL / SUPERSEDED.** El registro siguiente refleja el plan anterior, no una acción pendiente.
+
 - Versión `0.1.0-beta.1`; etiqueta prevista `platform-v0.1.0-beta.1` con `prerelease=true`.
 - Simulación de `validate_release.py` verificada; **sin tags locales ni remotos**.
 - Perfil recomendado: **Beta interna restringida**, sin despliegue público automático.
@@ -165,7 +167,7 @@ No se inicia: facturación avanzada, pagos automáticos, gestión de tareas, con
 
 ## Pendiente
 
-1. **Publicar `platform-v0.1.0-beta.1`** cuando se autorice explícitamente. La simulación está validada; no se ha creado tag ni release.
+1. **Preparar despliegue interno** según el [release train vigente](../03-operations/release-train.md). La simulación de publicación queda como evidencia histórica, no como gate.
 2. **MFA/step-up** antes de ampliar la audiencia.
 3. **`sqlx 0.9`** para cerrar los dos advisories medios.
 4. **Retención de auditoría y hardening de `TRUNCATE`.**

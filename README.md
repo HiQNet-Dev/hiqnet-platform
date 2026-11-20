@@ -1,8 +1,8 @@
 # HiQNet Platform
 
-Infraestructura administrativa y comercial de HiQNet: **aplicación 100 % web** con Control Center, Customer Portal y servicios de núcleo sobre una API única.
+Infraestructura administrativa y comercial de HiQNet: **aplicación web interna operada por HiQNet**, con Control Center, Customer Portal y servicios de núcleo sobre una API única. No se distribuye como producto descargable ni requiere un GitHub Release.
 
-**Estado:** Beta `0.1.0-beta.1` cerrada (pendiente de publicación de etiqueta).
+**Estado:** `0.1.0-beta.1` es un hito documental opcional del corte beta, no una etiqueta pendiente de publicación. La autoridad operativa es el SHA de Git con CI, migraciones, identidad de artefactos y revisión de despliegue.
 **Primer producto consumidor:** HiQNet POS.
 
 ## Qué incluye
@@ -33,7 +33,7 @@ crates/
   platform-licensing/  Firma Ed25519 de licencias
 migrations/            Migraciones SQLx incrementales (0001–0012)
 openapi/               Contrato OpenAPI 3.1
-scripts/               Validaciones de repositorio y release
+scripts/               Validaciones de repositorio (incluye el flujo legacy de release)
 docs/                  Arquitectura, desarrollo y operaciones
 ```
 
@@ -80,7 +80,8 @@ CI ejecuta además E2E reales con API Axum y PostgreSQL: el recorrido comercial 
 - [Backlog cerrado de Beta](docs/02-development/platform-beta-backlog.md)
 - [Seguridad de Beta](docs/02-development/platform-beta-security.md)
 - [Notas de la Beta 0.1.0](docs/02-development/platform-beta-notes.md)
-- [Despliegue](docs/03-operations/deployment.md) · [Backup y restauración](docs/03-operations/backup-restore.md)
+- [Release train de Platform y POS](docs/03-operations/release-train.md) · [Plan de validación nativa POS](docs/03-operations/pos-native-validation-plan.md)
+- [Despliegue interno](docs/03-operations/deployment.md) · [Backup y restauración](docs/03-operations/backup-restore.md)
 - [Transición a HiQNet POS](docs/02-development/platform-transition-pos.md)
 
 ## Reglas del proyecto

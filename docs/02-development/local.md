@@ -50,10 +50,11 @@ Crea `.dev-data` manualmente antes de `docker cp` (`New-Item -ItemType Directory
 
 `docker compose stop api postgres` detiene sin borrar datos. Reinicia con `docker compose up -d postgres` y espera `healthy` antes de `docker compose up -d api`. `docker compose ps` y `docker compose logs --tail=50 postgres api` diagnostican fallos. Si falla conexión, comprueba Docker Desktop/Engine, puertos, URL y contraseña (volumen previo no acepta contraseña nueva de `.env` sin rotación). Si falla migración, consulta `_sqlx_migrations` y logs sin modificar `0001_init.sql`. Si `/health` funciona pero `/ready` devuelve 503, revisa el servicio PostgreSQL; si la API termina al iniciar, revisa `DATABASE_URL`/migraciones. No uses `down -v` para resolver fallos.
 
-## Release y gobierno
+## Validación y gobierno
 
-El workflow `release-platform.yml` sólo publica tras un **push de tag válido** `platform-v<SemVer>` correspondiente a versión del workspace (sin metadata `+build`, incompatible con tags de imagen Docker). `workflow_dispatch` valida/build sin publicar (dry-run); ejecutar manualmente en `main` no crea release. Protección de `main`/tags y GitHub secret scanning requieren autorización administrativa; CI sola no impide push directo ni creación de tags maliciosos por quien tenga permisos. No se publicó tag ni release en P00.
+Usar el workflow `CI` para validar PRs. La política operativa y el contrato de despliegue están en el [release train vigente](../03-operations/release-train.md).
 
+> **HISTORICAL / SUPERSEDED — plan P00:** no se publicó tag ni release en P00. El workflow legacy `release-platform.yml` todavía puede publicar si se crea un tag `platform-v*` válido; `workflow_dispatch` valida y construye sin publicar. No crear un tag para validar ni desplegar.
 
 ## Levantar Platform local (G4.2-B)
 
