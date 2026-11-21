@@ -114,13 +114,13 @@ portal.ejemplo.com {
 Notas:
 
 - Los dos frontends no usan estilos ni scripts en línea, por lo que la CSP propuesta no necesita `'unsafe-inline'`. **Verifica en el navegador antes de exponer**: si una dependencia inyecta estilos en línea, el ajuste mínimo es `style-src 'self' 'unsafe-inline'` y debe quedar documentado.
-- La CSP de la Beta **no se ha validado contra un proxy real**. Forma parte del checklist de despliegue.
+- La CSP del perfil interno **no se ha validado contra un proxy real**. Forma parte del checklist de despliegue.
 - No reescribas `Origin` en el proxy: la API compara el valor exacto y un `Origin` reescrito invalida la política CSRF.
 
 ## 5. Procedimiento de despliegue
 
 1. Confirma el commit a desplegar y que CI está verde en ese commit.
-2. Construye imagen y estáticos del mismo commit.
+2. Reutiliza los artefactos construidos una sola vez desde ese SHA. Si aún no existen, constrúyelos ahora, registra sus hashes y no los reconstruyas en reintentos ni promociones posteriores.
 3. Tras autorizar la promoción, entrega los estáticos a sus hosts y promueve la imagen por digest por el canal privado autorizado.
 4. Arranca la API con la configuración de §3.
 5. Espera `GET /ready` → `{"status":"ok","database":"up"}`. `/health` sólo prueba que el proceso responde; no demuestra base de datos disponible.

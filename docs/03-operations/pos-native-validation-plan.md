@@ -1,6 +1,6 @@
 # Plan de validación nativa de HiQNet POS
 
-**Estado: plan pendiente de ejecución.** Objetivo de corte: POS `0.2.0-beta.1`. Este documento vive en Platform para coordinar la validación; no modifica POS ni aprueba una entrega. No se han instalado herramientas, generado paquetes, iniciado entornos ni ejecutado pruebas. Las comprobaciones de repositorio citadas son de solo lectura. El inventario del anfitrión se toma como línea base informada y se deberá reconfirmar al ejecutar.
+**Estado: R3 iniciado y parcial.** Objetivo de corte: POS `0.2.0-beta.1`. Este documento vive en Platform para coordinar la validación; no modifica POS ni aprueba una entrega. No se ha generado un paquete de POS ni se ha ejecutado producto alguno; el laboratorio nativo sí está en preparación, con la VM Windows creada y herramientas Android parcialmente instaladas. El inventario del anfitrión es una instantánea fechada y se debe reconfirmar antes de cada ensayo.
 
 ## 1. Identidad del corte y fuentes
 
@@ -39,7 +39,7 @@ En cada ensayo registrar las versiones efectivas de SO, kernel o compilación in
 | ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | Anfitrión                     | Ryzen 5 5600G, 6 núcleos/12 hilos; 31 GiB de RAM total, 24 GiB disponibles, 11 GiB libres; 777 GiB de disco libres                                                                               |
 | Virtualización y contenedores | AMD-V, KVM API 12, Docker `29.9.2`; reconfirmar acceso a `/dev/kvm` y estado del motor antes de provisionar                                                                                      |
-| Estado inicial                | `~/.windows` y `~/Windows` ausentes; comprobar de nuevo antes de usar la ruta oficial                                                                                                            |
+| Estado inicial                | VM Windows creada a partir de la ruta oficial; `~/Windows` actúa como carpeta compartida. Comprobar el estado real antes de reutilizarla o recrearla                                                                                                            |
 | Invitado propuesto            | Windows 11 oficial por el integrador de Omarchy, con GUI: **8 GB de RAM, 4 vCPU, disco de 128 GB**                                                                                               |
 | Selección en la GUI           | `Super+Space` → `Install` → `Windows`; RAM: 2/4/8/16 GB; disco: 32/64/128 GB, entre otras opciones. Verificar los valores en el menú de la versión instalada y en la VM resultante               |
 | Presupuesto                   | 128 GB virtuales + 10 GB de sobrecarga estimada + espacio adicional para respaldos y snapshots; no confundir la capacidad lógica del disco con el espacio que terminará ocupando en el anfitrión |

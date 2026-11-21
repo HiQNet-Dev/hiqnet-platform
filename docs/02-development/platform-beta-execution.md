@@ -1,4 +1,4 @@
-# Ejecución Beta — estado operativo
+# Ejecución Beta — registro histórico
 
 Última actualización: 2026-11-09
 
@@ -120,7 +120,7 @@ Métricas finales: **0 archivos de más de 1 000 líneas** (antes 6), archivo m�
 
 ## Cierre formal y congelamiento funcional
 
-**Fecha:** 2026-11-10 · **Commit de referencia:** `3399278` · **Estado:** Beta cerrada, publicación pendiente.
+**Fecha:** 2026-11-10 · **Commit de referencia:** `3399278` · **Estado:** cierre documental de la Beta; no hay publicación pendiente (ver [release train](../03-operations/release-train.md)).
 
 ### Verificación de cierre
 

@@ -2,7 +2,7 @@
 
 Infraestructura administrativa y comercial de HiQNet: **aplicación web interna operada por HiQNet**, con Control Center, Customer Portal y servicios de núcleo sobre una API única. No se distribuye como producto descargable ni requiere un GitHub Release.
 
-**Estado:** `0.1.0-beta.1` es un hito documental opcional del corte beta, no una etiqueta pendiente de publicación. La autoridad operativa es el SHA de Git con CI, migraciones, identidad de artefactos y revisión de despliegue.
+**Estado:** `0.1.0-beta.1` es el nombre documental del corte beta; no crea tag ni release. La autoridad operativa es el SHA de Git con CI, migraciones, identidad de artefactos y revisión de despliegue.
 **Primer producto consumidor:** HiQNet POS.
 
 ## Qué incluye
@@ -90,4 +90,4 @@ CI ejecuta además E2E reales con API Axum y PostgreSQL: el recorrido comercial 
 - La autorización se decide en el backend; la UI sólo refleja permisos.
 - Nunca se versionan `.env`, dumps, tokens ni claves.
 - Los PR requieren CI verde antes de fusionar.
-- No se publican tags ni releases sin validación y autorización.
+- Platform no crea tags `platform-v*` ni GitHub Release; la promoción se autoriza por entorno y revisión.
