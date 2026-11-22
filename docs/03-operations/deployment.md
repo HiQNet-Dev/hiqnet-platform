@@ -1,8 +1,8 @@
 # Runbook de despliegue interno de HiQNet Platform
 
-**Estado:** propuesta operativa; no se ha ejecutado ni validado un despliegue de staging o producción en este incremento.
+**Estado:** staging desplegado y verificado en Railway (ver [Staging en Railway](railway-staging.md)); producción no desplegada.
 **Alcance:** API Axum, Control Center y Customer Portal como aplicaciones 100 % web.
-**Relacionado:** [Seguridad Beta](../02-development/platform-beta-security.md) · [Desarrollo local](../02-development/local.md) · [Backup y restauración](backup-restore.md) · [Notas de Beta](../02-development/platform-beta-notes.md)
+**Relacionado:** [Staging en Railway](railway-staging.md) · [Seguridad Beta](../02-development/platform-beta-security.md) · [Desarrollo local](../02-development/local.md) · [Backup y restauración](backup-restore.md) · [Notas de Beta](../02-development/platform-beta-notes.md)
 
 > Ver [contrato de trazabilidad, entornos y hoja de ruta](release-train.md). Este procedimiento requiere autorización del entorno, no un tag Git ni un GitHub Release. Un build verde, un despliegue interno y un piloto comercial son decisiones distintas.
 
