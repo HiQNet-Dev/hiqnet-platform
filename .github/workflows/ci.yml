@@ -163,6 +163,19 @@ jobs:
       - name: Verificar política de tamaño y deuda estructural
         run: python3 scripts/check_size_policy.py
 
+  images:
+    name: Container image builds (no publish)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - name: Imagen de la API
+        run: docker build -t hiqnet-platform-api:ci .
+      - name: Imagen del Control Center
+        run: docker build -f deploy/railway/control-center/Dockerfile -t hiqnet-control-center:ci .
+      - name: Imagen del Customer Portal
+        run: docker build -f deploy/railway/portal/Dockerfile -t hiqnet-portal:ci .
+
   portal-e2e:
     name: Portal E2E full-stack
     runs-on: ubuntu-latest

@@ -8,6 +8,10 @@
 .zed
 .worktrees
 target
+node_modules
+apps/*/dist
+apps/*/test-results
+apps/*/playwright-report
 __pycache__
 postgres-data
 secrets
