@@ -81,16 +81,16 @@ Se documentan para que no se descubran en producción:
 
 ## 6. Identificación y publicación de la versión
 
-> **HISTORICAL / SUPERSEDED.** Evidencia del plan anterior y del gating R2.1 (`5f06cf6`); no es una guía para publicar. Platform se opera por SHA y revisión de despliegue. Ver [política vigente](../03-operations/release-train.md). No crear el tag: mientras exista el workflow legacy, puede disparar la publicación.
+> **HISTORICAL / SUPERSEDED.** Evidencia del plan anterior y del gating R2.1 (`5f06cf6`); no es una guía para publicar. Platform se opera por SHA y revisión de despliegue. Ver [política vigente](../03-operations/release-train.md). El workflow de publicación y su script de validación se retiran en la rama candidata.
 
-Esquema anterior (`Cargo.toml` + `scripts/validate_release.py` + `.github/workflows/release-platform.yml`):
+Esquema anterior, retirado en la rama candidata (`Cargo.toml` + `scripts/validate_release.py` + `.github/workflows/release-platform.yml`):
 
 - Versión del workspace: `0.1.0`.
 - Tag válido: `platform-v<SemVer>` cuyo núcleo coincida con la versión del workspace.
 - Prerelease SemVer obligatorio para la Beta: `0.1.0-beta.1`.
 - Sin metadata `+build`.
 
-Simulación verificada:
+Simulación histórica verificada:
 
 ```bash
 RELEASE_EVENT=workflow_dispatch \
@@ -103,7 +103,7 @@ python scripts/validate_release.py
 
 La simulación anterior con `0.1.0` (`prerelease=false`) correspondía a una versión final y **no** identifica la Beta.
 
-**La publicación no se ha ejecutado.** Crear el tag dispara `release-platform.yml`, que construye la imagen y abre un GitHub Release con `prerelease: true`. Publicar la etiqueta es un paso que requiere autorización explícita y un commit validado. Mientras no exista un despliegue autorizado, la Beta no es "públicamente disponible".
+**La publicación nunca se ejecutó.** El flujo anterior habría construido la imagen y abierto un GitHub Release al crear el tag. Ese workflow desaparecerá de `main` al fusionar el retiro; hasta entonces, un tag válido sigue publicando. La Beta no es "públicamente disponible".
 
 ## 7. Cómo validar la Beta
 

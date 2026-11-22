@@ -161,9 +161,9 @@ No se inicia: facturación avanzada, pagos automáticos, gestión de tareas, con
 > **HISTORICAL / SUPERSEDED.** El registro siguiente refleja el plan anterior, no una acción pendiente.
 
 - Versión `0.1.0-beta.1`; etiqueta prevista `platform-v0.1.0-beta.1` con `prerelease=true`.
-- Simulación de `validate_release.py` verificada; **sin tags locales ni remotos**.
+- Simulación de `validate_release.py` verificada; **sin tags locales ni remotos**. El script y el workflow se retiran en la rama candidata.
 - Perfil recomendado: **Beta interna restringida**, sin despliegue público automático.
-- La creación del tag y del GitHub Release queda pendiente de autorización explícita.
+- La vía de tag y GitHub Release queda retirada con esta rama; el estado vigente es el despliegue interno por entorno y revisión.
 
 ## Pendiente
 

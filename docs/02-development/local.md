@@ -54,7 +54,7 @@ Crea `.dev-data` manualmente antes de `docker cp` (`New-Item -ItemType Directory
 
 Usar el workflow `CI` para validar PRs. La política operativa y el contrato de despliegue están en el [release train vigente](../03-operations/release-train.md).
 
-> **HISTORICAL / SUPERSEDED — plan P00:** no se publicó tag ni release en P00. El workflow legacy `release-platform.yml` todavía puede publicar si se crea un tag `platform-v*` válido; `workflow_dispatch` valida y construye sin publicar. No crear un tag para validar ni desplegar.
+> **HISTORICAL / SUPERSEDED — plan P00:** no se publicó tag ni release en P00. El workflow `release-platform.yml` y su validación SemVer se retiran en la rama candidata. Hasta que se fusione, `main` todavía los contiene y un tag `platform-v*` válido seguiría publicando. No crear tags `platform-v*`.
 
 ## Levantar Platform local (G4.2-B)
 

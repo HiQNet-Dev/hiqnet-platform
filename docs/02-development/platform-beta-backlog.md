@@ -258,11 +258,11 @@ Al cerrar Beta:
 
 ## 11. Versionado y release Beta
 
-> **HISTORICAL / SUPERSEDED.** Esquema del plan beta anterior: `scripts/validate_release.py` + `.github/workflows/release-platform.yml`. Se conserva la evidencia; no crear tag ni release. Ver [política vigente](../03-operations/release-train.md).
+> **HISTORICAL / SUPERSEDED.** Esquema del plan beta anterior: `scripts/validate_release.py` + `.github/workflows/release-platform.yml`, ambos retirados en la rama candidata. Se conserva la evidencia; no crear tag ni release. Ver [política vigente](../03-operations/release-train.md).
 
 - `Cargo.toml` workspace version: `0.1.0`.
-- Tag válido: `platform-v<SemVer>`; el prefijo del tag debe coincidir con la versión del workspace.
-- `workflow_dispatch` sólo simula (valida Rust y construye imagen local sin publicar); un tag `platform-v*` dispara la validación, el build de imagen y un GitHub Release. El workflow **no** hace push de la imagen Docker.
+- Tag válido: `platform-v<SemVer>`; el prefijo del tag debía coincidir con la versión del workspace.
+- `workflow_dispatch` sólo simulaba (validaba Rust y construía imagen local sin publicar); un tag `platform-v*` disparaba la validación, el build de imagen y un GitHub Release. El workflow **no** hacía push de la imagen Docker.
 - No se admite metadata `+build`.
 
 **Identificación Beta:** usar un prerelease SemVer:
@@ -273,8 +273,8 @@ Tag:     platform-v0.1.0-beta.1
 prerelease: true
 ```
 
-- Mientras el workspace siga en `0.1.0`, el tag `0.1.0-beta.N` es válido porque el prefijo coincide.
-- La simulación correcta es:
+- Mientras el workspace siguiera en `0.1.0`, el tag `0.1.0-beta.N` era válido porque el prefijo coincidía.
+- La simulación histórica era:
 
 ```bash
 RELEASE_EVENT=workflow_dispatch \
@@ -287,4 +287,4 @@ python scripts/validate_release.py
 
 - La simulación con `0.1.0` (`prerelease=false`) corresponde a una versión final, no a la Beta.
 - La promoción a final (`0.1.0`, `prerelease=false`) requiere validación y autorización separadas.
-- No se crea tag ni release en Fase 1 ni en los PRs de implementación. El tag Beta se crea sólo en B10, tras B9 y autorización explícita.
+- No se crea tag ni release en Fase 1 ni en los PRs de implementación. El plan preveía crear el tag Beta en B10; quedó sustituido por el modelo de despliegue interno.

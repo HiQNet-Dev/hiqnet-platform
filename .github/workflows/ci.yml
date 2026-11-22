@@ -75,7 +75,7 @@ jobs:
           /tmp/hiqnet-openapi-venv/bin/python -m openapi_spec_validator --schema 3.1 openapi/openapi.json
           cargo run --quiet -p hiqnet-platform-api --bin generate-openapi > /tmp/hiqnet-openapi.json
           cmp openapi/openapi.json /tmp/hiqnet-openapi.json
-      - name: Validar SemVer sin publicar
+      - name: Política de tamaño de archivos
         run: python3 -m unittest discover -s scripts -p 'test_*.py'
 
   control-center:
