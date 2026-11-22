@@ -14,3 +14,5 @@ FROM caddy:2.10-alpine
 COPY deploy/railway/Caddyfile /etc/caddy/Caddyfile
 COPY --from=build /app/apps/portal/dist /srv
 EXPOSE 8080
+HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
+  CMD wget -qO- http://127.0.0.1:8080/healthz >/dev/null 2>&1 || exit 1

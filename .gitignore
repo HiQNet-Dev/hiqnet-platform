@@ -33,3 +33,6 @@ postgres-data/
 # Contexto ag�ntico local (privado)
 .devkit/
 .gael-devkit/
+*.dump
+*.db
+*.sqlite*

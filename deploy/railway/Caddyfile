@@ -18,8 +18,17 @@
 		-Server
 	}
 
+	handle /healthz {
+		rewrite /healthz /ready
+		reverse_proxy {$PLATFORM_API_UPSTREAM} {
+			header_up Host {upstream_hostport}
+		}
+	}
+
 	handle /api/* {
-		reverse_proxy {$PLATFORM_API_UPSTREAM}
+		reverse_proxy {$PLATFORM_API_UPSTREAM} {
+			header_up Host {upstream_hostport}
+		}
 	}
 
 	handle {

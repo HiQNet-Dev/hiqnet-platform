@@ -45,7 +45,7 @@ No hay `HIQNET_PLATFORM_SIGNING_KEY_B64` ni `HIQNET_PLATFORM_ADMIN_TOKEN`.
 
 ## Procedimiento de despliegue
 
-El servicio no está conectado a GitHub: el despliegue sube el contexto local del commit exacto.
+El servicio no está conectado a GitHub: `railway up` sube el árbol de trabajo. Sólo equivale al commit exacto si el worktree está limpio; verificar antes de desplegar. No hay promoción por digest.
 
 ```bash
 railway link -p 3c9a72e5-5bf8-4265-8e65-079f9b0887d5 -e 644f4aa3-ae1a-4d11-aa7c-7e91a4ed3c81
@@ -66,6 +66,7 @@ railway up . -s customer-portal -d -y --path-as-root
 | Frontends `/control/login` y `/login` | 200, SPA fallback |
 | `/api/*` en cada frontend | responde la API del mismo origen |
 | Cookies | `HttpOnly`, `Secure`; staff `SameSite=Strict`, comercial `SameSite=Lax` |
+| `/healthz` en cada frontend | 200 sólo si la API responde `/ready` |
 
 ## Migraciones
 
@@ -86,6 +87,8 @@ Railway no expone aún backup automático utilizable desde CLI para este plan. P
 - Entorno temporal: dominios `*.up.railway.app`, sin dominio corporativo.
 - Sin clave de firma Ed25519 ni emisión de licencias; P3 lo aborda.
 - Cuentas QA creadas con las CLI `dev-bootstrap-*` ejecutadas localmente contra la base de staging; el servicio mantiene el bootstrap desactivado.
-- El login staff aceptó un `Origin` distinto del allowlist (devuelve 204). Es login CSRF potencial, mitigado por `SameSite=Strict`; requiere revisión.
+- El allowlist de `Origin` es global y contiene ambos frontends: el origen del portal supera el chequeo de `/api/v1/control/*`. No es un bypass de autenticación ni un CSRF explotable (sin CORS, el preflight bloquea `application/json` cross-origin), pero rompe el aislamiento entre superficies. Separar allowlists antes de ampliar el piloto.
 - Sin backup automático; sólo respaldo manual verificado.
 - Un solo entorno; producción no existe todavía.
+- La API se conecta como `hiqnet_platform`, que es **superusuario** (`rolsuper=true`). Aceptable con datos sintéticos; antes de producción se requiere un rol de ejecución sin superusuario y otro rol para migraciones.
+- PostgreSQL conserva un TCP proxy público de Railway (contraseña y TLS). Deshabilitarlo y pasar los respaldos a la red privada antes de producción.
