@@ -1,8 +1,8 @@
 # HiQNet Platform — Notas de la Beta 0.1.0
 
-**Estado:** Beta cerrada, pendiente de publicación de la etiqueta.
+**Estado:** cierre documental de la beta; estas notas no acreditan un despliegue.
 **Versión:** `0.1.0-beta.1`
-**Etiqueta prevista:** `platform-v0.1.0-beta.1`
+**Etiqueta del plan anterior (HISTORICAL / SUPERSEDED):** `platform-v0.1.0-beta.1`; no es un hito vigente.
 **Fecha:** 2026-11-09
 **Relacionado:** [Arquitectura](../01-architecture/platform.md) · [Backlog Beta](platform-beta-backlog.md) · [Seguridad Beta](platform-beta-security.md) · [Despliegue](../03-operations/deployment.md) · [Transición a POS](platform-transition-pos.md)
 
@@ -81,14 +81,16 @@ Se documentan para que no se descubran en producción:
 
 ## 6. Identificación y publicación de la versión
 
-Esquema vigente (`Cargo.toml` + `scripts/validate_release.py` + `.github/workflows/release-platform.yml`):
+> **HISTORICAL / SUPERSEDED.** Evidencia del plan anterior y del gating R2.1 (`5f06cf6`); no es una guía para publicar. Platform se opera por SHA y revisión de despliegue. Ver [política vigente](../03-operations/release-train.md). El workflow de publicación y su script de validación se retiran en la rama candidata.
+
+Esquema anterior, retirado en la rama candidata (`Cargo.toml` + `scripts/validate_release.py` + `.github/workflows/release-platform.yml`):
 
 - Versión del workspace: `0.1.0`.
 - Tag válido: `platform-v<SemVer>` cuyo núcleo coincida con la versión del workspace.
 - Prerelease SemVer obligatorio para la Beta: `0.1.0-beta.1`.
 - Sin metadata `+build`.
 
-Simulación verificada:
+Simulación histórica verificada:
 
 ```bash
 RELEASE_EVENT=workflow_dispatch \
@@ -101,7 +103,7 @@ python scripts/validate_release.py
 
 La simulación anterior con `0.1.0` (`prerelease=false`) correspondía a una versión final y **no** identifica la Beta.
 
-**La publicación no se ha ejecutado.** Crear el tag dispara `release-platform.yml`, que construye la imagen y abre un GitHub Release con `prerelease: true`. Publicar la etiqueta es un paso que requiere autorización explícita y un commit validado. Mientras no exista un despliegue autorizado, la Beta no es "públicamente disponible".
+**La publicación nunca se ejecutó.** El flujo anterior habría construido la imagen y abierto un GitHub Release al crear el tag. Ese workflow desaparecerá de `main` al fusionar el retiro; hasta entonces, un tag válido sigue publicando. La Beta no es "públicamente disponible".
 
 ## 7. Cómo validar la Beta
 
